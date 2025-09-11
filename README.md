@@ -1,5 +1,5 @@
 <div align="center">
-<h1>Deep Research</h1>
+<h1>Deep Gene Research</h1>
 
 ![GitHub deployments](https://img.shields.io/github/deployments/u14app/gemini-next-chat/Production)
 ![GitHub Release](https://img.shields.io/github/v/release/u14app/deep-research)
@@ -20,13 +20,13 @@
 
 </div>
 
-**Lightning-Fast Deep Research Report**
+**Lightning-Fast Deep Gene Research Report**
 
-Deep Research uses a variety of powerful AI models to generate in-depth research reports in just a few minutes. It leverages advanced "Thinking" and "Task" models, combined with an internet connection, to provide fast and insightful analysis on a variety of topics. **Your privacy is paramount - all data is processed and stored locally.**
+Deep Gene Research uses a variety of powerful AI models to generate in-depth gene research reports in just a few minutes. It leverages advanced "Thinking" and "Task" models, combined with an internet connection, to provide fast and insightful analysis on genetic topics. **Your privacy is paramount - all data is processed and stored locally.**
 
 ## ✨ Features
 
-- **Rapid Deep Research:** Generates comprehensive research reports in about 2 minutes, significantly accelerating your research process.
+- **Rapid Deep Gene Research:** Generates comprehensive gene research reports in about 2 minutes, significantly accelerating your research process.
 - **Multi-platform Support:** Supports rapid deployment to Vercel, Cloudflare and other platforms.
 - **Powered by AI:** Utilizes the advanced AI models for accurate and insightful analysis.
 - **Privacy-Focused:** Your data remains private and secure, as all data is stored locally on your browser.
@@ -76,7 +76,7 @@ Deep Research uses a variety of powerful AI models to generate in-depth research
 
 ## ⌨️ Development
 
-Follow these steps to get Deep Research up and running on your local browser.
+Follow these steps to get Deep Gene Research up and running on your local browser.
 
 ### Prerequisites
 
@@ -115,7 +115,7 @@ Follow these steps to get Deep Research up and running on your local browser.
    pnpm dev  # or npm run dev or yarn dev
    ```
 
-   Open your browser and visit [http://localhost:3000](http://localhost:3000) to access Deep Research.
+   Open your browser and visit [http://localhost:3000](http://localhost:3000) to access Deep Gene Research.
 
 ### Custom Model List
 
@@ -194,7 +194,7 @@ pnpm build:export
 
 ## ⚙️ Configuration
 
-As mentioned in the "Getting Started" section, Deep Research utilizes the following environment variables for server-side API configurations:
+As mentioned in the "Getting Started" section, Deep Gene Research utilizes the following environment variables for server-side API configurations:
 
 Please refer to the file [env.tpl](./env.tpl) for all available environment variables.
 
@@ -214,7 +214,7 @@ Currently the project supports two forms of API: Server-Sent Events (SSE) and Mo
 
 ### Server-Sent Events API
 
-The Deep Research API provides a real-time interface for initiating and monitoring complex research tasks.
+The Deep Gene Research API provides a real-time interface for initiating and monitoring complex gene research tasks.
 
 Recommended to use the API via `@microsoft/fetch-event-source`, to get the final report, you need to listen to the `message` event, the data will be returned in the form of a text stream.
 
@@ -428,18 +428,18 @@ If your request generates `CORS` due to browser security restrictions, you need 
 
 ## 🛡️ Privacy
 
-Deep Research is designed with your privacy in mind. **All research data and generated reports are stored locally on your machine.** We do not collect or transmit any of your research data to external servers (unless you are explicitly using server-side API calls, in which case data is sent to API through your configured proxy if any). Your privacy is our priority.
+Deep Gene Research is designed with your privacy in mind. **All research data and generated reports are stored locally on your machine.** We do not collect or transmit any of your research data to external servers (unless you are explicitly using server-side API calls, in which case data is sent to API through your configured proxy if any). Your privacy is our priority.
 
 ## 🙏 Acknowledgements
 
 - [Next.js](https://nextjs.org/) - The React framework for building performant web applications.
 - [Shadcn UI](https://ui.shadcn.com/) - Beautifully designed components that helped streamline the UI development.
-- [AI SDKs](https://sdk.vercel.ai) - Powering the intelligent research capabilities of Deep Research.
+- [AI SDKs](https://sdk.vercel.ai) - Powering the intelligent research capabilities of Deep Gene Research.
 - [Deep Research](https://github.com/dzhng/deep-research) - Thanks to the project `dzhng/deep-research` for inspiration.
 
 ## 🤝 Contributing
 
-We welcome contributions to Deep Research! If you have ideas for improvements, bug fixes, or new features, please feel free to:
+We welcome contributions to Deep Gene Research! If you have ideas for improvements, bug fixes, or new features, please feel free to:
 
 1. Fork the repository.
 2. Create a new branch for your feature or bug fix.
@@ -454,7 +454,7 @@ If you have any questions, suggestions, or feedback, please create a new [issue]
 
 ## 📝 License
 
-Deep Research is released under the [MIT License](LICENSE). This license allows for free use, modification, and distribution for both commercial and non-commercial purposes.
+Deep Gene Research is released under the [MIT License](LICENSE). This license allows for free use, modification, and distribution for both commercial and non-commercial purposes.
 
 ## 🌟 Star History
 

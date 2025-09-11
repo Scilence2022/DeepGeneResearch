@@ -8,11 +8,11 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const HEAD_SCRIPTS = process.env.HEAD_SCRIPTS as string;
-const APP_NAME = "Deep Research";
-const APP_DEFAULT_TITLE = "Deep Research";
+const APP_NAME = "Deep Gene Research";
+const APP_DEFAULT_TITLE = "Deep Gene Research";
 const APP_TITLE_TEMPLATE = "%s - PWA App";
 const APP_DESCRIPTION =
-  "Use any LLMs (Large Language Models) for Deep Research.";
+  "Use any LLMs (Large Language Models) for Deep Gene Research.";
 
 export const metadata: Metadata = {
   applicationName: APP_NAME,
@@ -71,7 +71,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" dir="auto" suppressHydrationWarning>
+    <html lang="en-US" dir="auto" suppressHydrationWarning>
       <head>
         {HEAD_SCRIPTS ? <Script id="headscript">{HEAD_SCRIPTS}</Script> : null}
         <Debugger />

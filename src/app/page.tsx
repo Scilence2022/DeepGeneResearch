@@ -47,7 +47,7 @@ function Home() {
       <footer className="my-4 text-center text-sm text-gray-600 print:hidden">
         <a href="https://github.com/u14app/" target="_blank">
           {t("copyright", {
-            name: "U14App",
+            name: "Genome AI Studio",
           })}
         </a>
       </footer>

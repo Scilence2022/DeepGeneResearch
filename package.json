@@ -1,6 +1,6 @@
 {
-  "name": "deep-research",
-  "description": "Use any LLMs (Large Language Models) for Deep Research. Support SSE API and MCP server.",
+  "name": "deep-gene-research",
+  "description": "Use any LLMs (Large Language Models) for Deep Gene Research. Support SSE API and MCP server.",
   "version": "0.9.22",
   "license": "MIT",
   "repository": {

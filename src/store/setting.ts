@@ -157,7 +157,7 @@ export const defaultValues: SettingStore = {
   parallelSearch: 1,
   searchMaxResult: 5,
   crawler: "jina",
-  language: "",
+  language: "en-US",
   theme: "system",
   debug: "disable",
   references: "enable",
