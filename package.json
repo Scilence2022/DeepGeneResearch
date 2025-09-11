@@ -4,9 +4,9 @@
   "version": "0.9.22",
   "license": "MIT",
   "repository": {
-    "url": "https://github.com/u14app/deep-research"
+    "url": "https://github.com/Scilence2022/DeepGeneResearch"
   },
-  "bugs": "https://github.com/u14app/deep-research/issues",
+  "bugs": "https://github.com/Scilence2022/DeepGeneResearch/issues",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

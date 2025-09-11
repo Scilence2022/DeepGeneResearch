@@ -12,7 +12,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![shadcn/ui](https://img.shields.io/badge/shadcn/ui-111111?style=flat&logo=shadcnui&logoColor=white)](https://ui.shadcn.com/)
 
-[![Vercel](https://img.shields.io/badge/Vercel-111111?style=flat&logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fu14app%2Fdeep-research&project-name=deep-research&repository-name=deep-research)
+[![Vercel](https://img.shields.io/badge/Vercel-111111?style=flat&logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FScilence2022%2FDeepGeneResearch&project-name=DeepGeneResearch&repository-name=DeepGeneResearch)
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-F69652?style=flat&logo=cloudflare&logoColor=white)](./docs/How-to-deploy-to-Cloudflare-Pages.md)
 [![PWA](https://img.shields.io/badge/PWA-blue?style=flat&logo=pwa&logoColor=white)](https://research.u14.app/)
 
@@ -61,7 +61,7 @@ Deep Gene Research uses a variety of powerful AI models to generate in-depth gen
 1. Get [Gemini API Key](https://aistudio.google.com/app/apikey)
 2. One-click deployment of the project, you can choose to deploy to Vercel or Cloudflare
 
-   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fu14app%2Fdeep-research&project-name=deep-research&repository-name=deep-research)
+   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FScilence2022%2FDeepGeneResearch&project-name=DeepGeneResearch&repository-name=DeepGeneResearch)
 
    Currently the project supports deployment to Cloudflare, but you need to follow [How to deploy to Cloudflare Pages](./docs/How-to-deploy-to-Cloudflare-Pages.md) to do it.
 
@@ -88,8 +88,8 @@ Follow these steps to get Deep Gene Research up and running on your local browse
 1. **Clone the repository:**
 
    ```bash
-   git clone git@github.com:Scilence2022/deep-research.git
-   cd deep-research
+   git clone git@github.com:Scilence2022/DeepGeneResearch.git
+   cd DeepGeneResearch
    ```
 
 2. **Install dependencies:**
@@ -127,7 +127,7 @@ Custom model lists use `,` to separate multiple models. If you want to disable a
 
 ### Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fu14app%2Fdeep-research&project-name=deep-research&repository-name=deep-research)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FScilence2022%2FDeepGeneResearch&project-name=DeepGeneResearch&repository-name=DeepGeneResearch)
 
 ### Cloudflare
 
@@ -432,6 +432,7 @@ Deep Gene Research is designed with your privacy in mind. **All research data an
 
 ## 🙏 Acknowledgements
 
+- [Deep Research u14](https://github.com/u14app/deep-research) - U14 Deep Research Project with MCP Serer mode supports.
 - [Next.js](https://nextjs.org/) - The React framework for building performant web applications.
 - [Shadcn UI](https://ui.shadcn.com/) - Beautifully designed components that helped streamline the UI development.
 - [AI SDKs](https://sdk.vercel.ai) - Powering the intelligent research capabilities of Deep Gene Research.
@@ -450,7 +451,7 @@ For major changes, please open an issue first to discuss your proposed changes.
 
 ## ✉️ Contact
 
-If you have any questions, suggestions, or feedback, please create a new [issue](https://github.com/u14app/deep-research/issues).
+If you have any questions, suggestions, or feedback, please create a new [issue](https://github.com/Scilence2022/DeepGeneResearch/issues).
 
 ## 📝 License
 
@@ -458,4 +459,4 @@ Deep Gene Research is released under the [MIT License](LICENSE). This license al
 
 ## 🌟 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=u14app/deep-research&type=Date)](https://www.star-history.com/#u14app/deep-research&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Scilence2022/DeepGeneResearch&type=Date)](https://www.star-history.com/#Scilence2022/DeepGeneResearch&Date)
