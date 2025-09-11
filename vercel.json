@@ -2,6 +2,14 @@
   "github": {
     "silent": true
   },
+  "functions": {
+    "src/app/api/mcp/route.ts": {
+      "maxDuration": 600
+    },
+    "src/app/api/sse/route.ts": {
+      "maxDuration": 600
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

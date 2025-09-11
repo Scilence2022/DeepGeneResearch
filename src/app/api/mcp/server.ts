@@ -13,6 +13,7 @@ const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
 const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
 const THINKING_MODEL = process.env.MCP_THINKING_MODEL || "";
 const TASK_MODEL = process.env.MCP_TASK_MODEL || "";
+const MCP_TIMEOUT = parseInt(process.env.MCP_SERVER_TIMEOUT || "600") * 1000; // 转换为毫秒
 
 function initDeepResearchServer({
   language,
@@ -136,11 +137,20 @@ export function initMcpServer() {
           language,
           maxResult,
         });
-        const result = await deepResearch.start(
-          query,
-          enableCitationImage,
-          enableReferences
-        );
+        
+        // 创建超时 Promise
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`Deep research timeout after ${MCP_TIMEOUT / 1000} seconds`));
+          }, MCP_TIMEOUT);
+        });
+
+        // 使用 Promise.race 实现超时控制
+        const result = await Promise.race([
+          deepResearch.start(query, enableCitationImage, enableReferences),
+          timeoutPromise
+        ]);
+
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],
         };

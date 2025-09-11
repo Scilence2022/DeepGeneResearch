@@ -2,8 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { StreamableHTTPServerTransport } from "@/libs/mcp-server/streamableHttp";
 import { initMcpServer } from "./server";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 600; // 10 分钟超时
 export const preferredRegion = [
   "cle1",
   "iad1",

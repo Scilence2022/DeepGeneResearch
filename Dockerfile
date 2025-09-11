@@ -30,6 +30,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_PUBLIC_BUILD_MODE=standalone
+# 设置超时配置
+ENV MCP_SERVER_TIMEOUT=600
+ENV SSE_API_TIMEOUT=600
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing

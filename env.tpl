@@ -113,3 +113,8 @@ NEXT_PUBLIC_MODEL_LIST=
 
 # (Optional) Injected script code can be used for statistics or error tracking.
 HEAD_SCRIPTS=
+
+# (Optional) MCP Server timeout configuration (in seconds)
+MCP_SERVER_TIMEOUT=600
+# (Optional) SSE API timeout configuration (in seconds)
+SSE_API_TIMEOUT=600
