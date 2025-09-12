@@ -79,7 +79,6 @@ function Topic() {
     const { update } = useHistoryStore.getState();
     if (id) update(id, backup());
     reset();
-    form.reset();
   }
 
   function openKnowledgeList() {
