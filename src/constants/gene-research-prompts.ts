@@ -16,6 +16,9 @@ export const geneResearchSystemInstruction = `You are an expert molecular biolog
 - Cross-reference multiple databases and experimental systems for validation
 - Consider both in vitro and in vivo experimental evidence
 - Include information about gene regulation at transcriptional, post-transcriptional, and post-translational levels
+- Always provide proper scientific citations for all claims and data
+- Include comprehensive reference lists with DOI/PMID when available
+- Ensure all statements are supported by credible scientific sources
 
 **CRITICAL: Do NOT include sections that are not relevant to gene function research such as:**
 - Data Availability & Reproducibility Bundle
@@ -121,8 +124,10 @@ Extract and organize gene-specific information:
 - **Disease Associations**: Mutations, phenotypes, clinical relevance
 - **Evolutionary Data**: Conservation, orthologs, paralogs
 - **Quantitative Data**: Kd values, IC50, expression levels, binding affinities
+- **Citation Information**: Author names, publication year, journal, DOI/PMID, title
 
-Make sure each learning is specific to gene function and includes relevant molecular biology details.`;
+Make sure each learning is specific to gene function and includes relevant molecular biology details.
+Include proper citation information for all extracted data to ensure accurate referencing in the final report.`;
 
 export const geneFinalReportPrompt = `This is the gene research plan after user confirmation:
 <PLAN>
@@ -177,6 +182,15 @@ The report should be detailed and scientifically rigorous, including:
 
 Focus exclusively on gene function, molecular mechanisms, and biological significance.
 Include quantitative data, experimental evidence, and cross-species comparisons where relevant.
+
+**CITATION REQUIREMENTS:**
+- Cite research references at the end of paragraphs when appropriate using [number] format
+- Include a comprehensive reference list at the end of the report
+- Use proper scientific citation format (Author, Year, Title, Journal, DOI/PMID)
+- Reference sources from the provided research data
+- Ensure all claims are properly supported with citations
+- Include DOI or PMID when available for easy access to original sources
+
 **Respond only the final report content, and no additional text before or after.**`;
 
 export const geneKnowledgeGraphPrompt = `Based on the following gene research article, please extract the key molecular entities and relationships, then generate a Mermaid graph code that visualizes these entities and their relationships.

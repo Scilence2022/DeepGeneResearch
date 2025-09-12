@@ -201,7 +201,14 @@ export const finalReportReferencesPrompt = `Citation Rules:
 - Please use the reference format [number], to reference the learnings link in corresponding parts of your answer.
 - If a paragraphs comes from multiple learnings reference link, please list all relevant citation numbers, e.g., [1][2]. Remember not to group citations at the end but list them in the corresponding parts of your answer. Control the number of footnotes.
 - Do not have more than 3 reference link in a paragraph, and keep only the most relevant ones.
-- **Do not ignore numbered reference list at the end of the report.**`;
+- **Do not ignore numbered reference list at the end of the report.**
+
+**Reference List Format:**
+- Use proper scientific citation format: Author(s), Year, Title, Journal, Volume(Issue), Pages, DOI/PMID
+- Example: Smith, J.A., Johnson, B.C. (2023). "Gene Function Analysis in E. coli". Nature Genetics, 55(3), 123-135. https://doi.org/10.1038/ng.2023.001
+- Include DOI or PMID when available for easy access to original sources
+- List references in numerical order [1], [2], [3], etc.
+- Ensure all cited sources are properly formatted and accessible`;
 
 export const finalReportPrompt = `This is the report plan after user confirmation:
 <PLAN>
@@ -243,6 +250,15 @@ Make it as detailed as possible, aim for 5 pages or more, the more the better, i
 - Ethics Statements
 
 Focus exclusively on the research content and findings.
+
+**CITATION REQUIREMENTS:**
+- Cite research references at the end of paragraphs when appropriate using [number] format
+- Include a comprehensive reference list at the end of the report
+- Use proper scientific citation format (Author, Year, Title, Journal, DOI/PMID)
+- Reference sources from the provided research data
+- Ensure all claims are properly supported with citations
+- Include DOI or PMID when available for easy access to original sources
+
 **Respond only the final report content, and no additional text before or after.**`;
 
 export const rewritingPrompt = `You are tasked with re-writing the following text to markdown. Ensure you do not change the meaning or story behind the text. 
