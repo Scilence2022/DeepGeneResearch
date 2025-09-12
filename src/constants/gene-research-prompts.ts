@@ -15,7 +15,20 @@ export const geneResearchSystemInstruction = `You are an expert molecular biolog
 - Use precise molecular biology terminology and gene nomenclature
 - Cross-reference multiple databases and experimental systems for validation
 - Consider both in vitro and in vivo experimental evidence
-- Include information about gene regulation at transcriptional, post-transcriptional, and post-translational levels`;
+- Include information about gene regulation at transcriptional, post-transcriptional, and post-translational levels
+
+**CRITICAL: Do NOT include sections that are not relevant to gene function research such as:**
+- Data Availability & Reproducibility Bundle
+- Code & Protocols
+- Strain & Plasmid Requests
+- Materials and Methods (unless specifically about gene function experiments)
+- Supplementary Information
+- Author Contributions
+- Funding Information
+- Competing Interests
+- Ethics Statements
+
+Focus exclusively on the biological function, molecular mechanisms, and scientific significance of genes and proteins.`;
 
 export const geneResearchQuestionPrompt = `Given the following gene research query from the user, ask at least 5 follow-up questions to clarify the research direction:
 
@@ -51,7 +64,18 @@ Generate a comprehensive research plan for gene function analysis. Your plan sho
 9. **Therapeutic Implications** - Drug targets, therapeutic strategies, and clinical relevance
 10. **Research Gaps** - Current limitations and future research directions
 
-Each section should have a clear research goal and specific questions to investigate.`;
+**IMPORTANT: Do NOT include the following sections in your research plan:**
+- Data Availability & Reproducibility Bundle
+- Code & Protocols
+- Strain & Plasmid Requests
+- Materials and Methods
+- Supplementary Information
+- Author Contributions
+- Funding Information
+- Competing Interests
+- Ethics Statements
+
+Each section should have a clear research goal and specific questions to investigate, focusing exclusively on gene function and molecular mechanisms.`;
 
 export const geneSerpQueriesPrompt = `This is the gene research plan after user confirmation:
 <PLAN>
@@ -140,6 +164,18 @@ The report should be detailed and scientifically rigorous, including:
 - **Therapeutic Implications** with drug development insights
 - **Research Gaps** with future directions
 
+**IMPORTANT: Do NOT include the following sections that are not relevant to gene function research:**
+- Data Availability & Reproducibility Bundle
+- Code & Protocols
+- Strain & Plasmid Requests
+- Materials and Methods (unless specifically about gene function experiments)
+- Supplementary Information
+- Author Contributions
+- Funding Information
+- Competing Interests
+- Ethics Statements
+
+Focus exclusively on gene function, molecular mechanisms, and biological significance.
 Include quantitative data, experimental evidence, and cross-species comparisons where relevant.
 **Respond only the final report content, and no additional text before or after.**`;
 
