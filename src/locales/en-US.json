@@ -2,7 +2,7 @@
   "title": "Deep Gene Research",
   "theme": "Theme",
   "openSource": "Open Source",
-  "copyright": "Powered By {{name}} Team",
+  "copyright": "Powered by {{name}} Team",
   "searchPlaceholder": "Please enter keywords",
   "research": {
     "common": {
