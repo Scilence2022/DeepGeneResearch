@@ -13,14 +13,14 @@ function Header() {
   return (
     <>
       <header className="flex justify-between items-center my-6 max-sm:my-4 print:hidden">
-        <a href="https://github.com/u14app/deep-research" target="_blank">
+        <a href="https://github.com/Scilence2022/DeepGeneResearch" target="_blank">
           <h1 className="text-left text-xl font-semibold">
             {t("title")}
-            <small className="ml-2 font-normal text-base">v{VERSION}</small>
+            <small className="ml-2 font-normal text-base">v0.22.0</small>
           </h1>
         </a>
         <div className="flex">
-          <a href="https://github.com/u14app/deep-research" target="_blank">
+          <a href="https://github.com/Scilence2022/DeepGeneResearch" target="_blank">
             <Button
               className="h-8 w-8"
               title={t("openSource")}
