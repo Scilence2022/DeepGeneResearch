@@ -1,7 +1,7 @@
 {
   "name": "deep-gene-research",
   "description": "Use any LLMs (Large Language Models) for Deep Gene Research. Support SSE API and MCP server.",
-  "version": "0.9.22",
+  "version": "0.22.0",
   "license": "MIT",
   "repository": {
     "url": "https://github.com/Scilence2022/DeepGeneResearch"

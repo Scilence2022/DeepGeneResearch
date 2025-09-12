@@ -590,10 +590,10 @@ class DeepResearch {
   } {
     // Simple extraction - in production, use more sophisticated NLP
     const geneMatch = query.match(/([A-Z][A-Za-z0-9]+)/);
-    const organismMatch = query.match(/(Homo sapiens|Mus musculus|Rattus norvegicus|Drosophila melanogaster|Caenorhabditis elegans|Saccharomyces cerevisiae|Escherichia coli|Arabidopsis thaliana|Danio rerio|Xenopus laevis)/i);
+    const organismMatch = query.match(/(Escherichia coli|Corynebacterium glutamicum|Bacillus subtilis|Homo sapiens|Mus musculus|Rattus norvegicus|Drosophila melanogaster|Caenorhabditis elegans|Saccharomyces cerevisiae|Arabidopsis thaliana|Danio rerio|Xenopus laevis)/i);
     
     const geneSymbol = geneMatch ? geneMatch[1] : 'Unknown';
-    const organism = organismMatch ? organismMatch[1] : 'Homo sapiens';
+    const organism = organismMatch ? organismMatch[1] : 'Escherichia coli';
     
     // Extract research focus
     let researchFocus = 'general';

@@ -40,13 +40,15 @@ const formSchema = z.object({
 });
 
 const ORGANISMS = [
+  { value: "Escherichia coli", label: "E. coli (Escherichia coli)" },
+  { value: "Corynebacterium glutamicum", label: "C. glutamicum (Corynebacterium glutamicum)" },
+  { value: "Bacillus subtilis", label: "B. subtilis (Bacillus subtilis)" },
   { value: "Homo sapiens", label: "Human (Homo sapiens)" },
   { value: "Mus musculus", label: "Mouse (Mus musculus)" },
   { value: "Rattus norvegicus", label: "Rat (Rattus norvegicus)" },
   { value: "Drosophila melanogaster", label: "Fruit fly (Drosophila melanogaster)" },
   { value: "Caenorhabditis elegans", label: "Nematode (Caenorhabditis elegans)" },
   { value: "Saccharomyces cerevisiae", label: "Yeast (Saccharomyces cerevisiae)" },
-  { value: "Escherichia coli", label: "E. coli (Escherichia coli)" },
   { value: "Arabidopsis thaliana", label: "Thale cress (Arabidopsis thaliana)" },
   { value: "Danio rerio", label: "Zebrafish (Danio rerio)" },
   { value: "Xenopus laevis", label: "African clawed frog (Xenopus laevis)" }
@@ -80,7 +82,7 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
     resolver: zodResolver(formSchema),
     defaultValues: {
       geneSymbol: "",
-      organism: "Homo sapiens",
+      organism: "Escherichia coli",
       researchFocus: "general",
       specificAspects: [],
       diseaseContext: "",
