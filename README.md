@@ -21,7 +21,7 @@
 
 ---
 
-## 🎯 **Revolutionizing Gene Research with AI**
+## 🎯 **Deep Gene Research with AI**
 
 **Deep Gene Research** is an AI-powered platform specifically designed for comprehensive gene function analysis and molecular biology research. Built by **Genome AI Studio**, this platform combines advanced artificial intelligence with specialized biological databases to deliver rapid, accurate, and comprehensive gene research reports in minutes rather than days.
 
@@ -71,7 +71,7 @@ Traditional gene research requires extensive manual literature review, database 
 - **Specialized Search Integration**:
   - PubMed, UniProt, NCBI Gene
   - GEO, PDB, KEGG, STRING
-  - OMIM, Ensembl, Reactome
+  - OMIM, Ensembl, Reactome, KEGG
   - Tavily, Firecrawl, Exa, Bocha
 
 ### 🔬 **Research Tools & Features**
