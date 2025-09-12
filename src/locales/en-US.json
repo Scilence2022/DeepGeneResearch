@@ -32,7 +32,7 @@
       "delete": "Delete"
     },
     "topic": {
-      "title": "1. Research Topics",
+      "title": "1. Research Configuration",
       "topicLabel": "1.1 Research topics",
       "topicPlaceholder": "Any questions you want to know..."
     },

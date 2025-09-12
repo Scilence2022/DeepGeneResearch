@@ -23,7 +23,7 @@
 
 ## 🎯 **Revolutionizing Gene Research with AI**
 
-**Deep Gene Research** is a cutting-edge, AI-powered platform specifically designed for comprehensive gene function analysis and molecular biology research. Built by **Genome AI Studio**, this platform combines advanced artificial intelligence with specialized biological databases to deliver rapid, accurate, and comprehensive gene research reports in minutes rather than days.
+**Deep Gene Research** is an AI-powered platform specifically designed for comprehensive gene function analysis and molecular biology research. Built by **Genome AI Studio**, this platform combines advanced artificial intelligence with specialized biological databases to deliver rapid, accurate, and comprehensive gene research reports in minutes rather than days.
 
 ### **Why Deep Gene Research?**
 
@@ -100,14 +100,6 @@ Traditional gene research requires extensive manual literature review, database 
 - **No Data Collection**: We don't store your research data
 - **Secure API Calls**: Optional server-side processing with encryption
 - **Multi-Key Support**: Load balancing across multiple API keys
-
-## 🎯 Roadmap
-
-- [x] Support preservation of research history
-- [x] Support editing final report and search results
-- [x] Support for other LLM models
-- [x] Support file upload and local knowledge base
-- [x] Support SSE API and MCP server
 
 ## 🚀 **Quick Start**
 
