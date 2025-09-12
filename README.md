@@ -31,10 +31,12 @@ Traditional gene research requires extensive manual literature review, database 
 
 - **⚡ 10x Faster Research**: Generate comprehensive gene reports in 2-3 minutes
 - **🎯 Specialized Focus**: Purpose-built for gene function research, not generic AI
-- **🔬 Scientific Accuracy**: Leverages curated biological databases and AI models
+- **🔬 Scientific Accuracy**: Leverages 10+ curated biological databases and AI models
+- **🗄️ Comprehensive Coverage**: Literature, protein data, structures, pathways, interactions, diseases
 - **🔒 Privacy-First**: All data processed locally, ensuring complete privacy
 - **🌐 Multi-Organism Support**: From E. coli to human genes
-- **📊 Interactive Visualizations**: Knowledge graphs and pathway diagrams
+- **📊 Interactive Visualizations**: Knowledge graphs, pathway diagrams, and interaction networks
+- **🏆 Quality Assurance**: Database-specific quality scoring and cross-validation
 
 ## ✨ **Core Features**
 
@@ -57,6 +59,34 @@ Traditional gene research requires extensive manual literature review, database 
   - Disease association mapping
   - Evolutionary conservation analysis
 
+### 🗄️ **Biological Database Integration**
+
+- **Literature Research**: 
+  - **PubMed**: 35+ million biomedical literature citations
+  - **Google Scholar**: Academic papers and research articles
+
+- **Protein & Gene Data**:
+  - **UniProt**: 200+ million protein sequences with annotations
+  - **NCBI Gene**: Comprehensive gene information and genomic coordinates
+  - **Ensembl**: Gene annotations, variants, and regulatory features
+
+- **Expression & Omics**:
+  - **GEO**: 4+ million gene expression experiments
+  - **GEO Datasets**: Curated expression datasets across species
+
+- **Structural Biology**:
+  - **PDB**: 200,000+ protein and nucleic acid structures
+  - **3D Structure Analysis**: Atomic-level structural insights
+
+- **Pathways & Networks**:
+  - **KEGG**: 500+ metabolic and signaling pathways
+  - **Reactome**: 2,500+ curated biological pathways
+  - **STRING**: 24+ million protein-protein interactions
+
+- **Disease & Clinical**:
+  - **OMIM**: 25,000+ gene-disease associations
+  - **Clinical Phenotypes**: Disease inheritance patterns and symptoms
+
 ### 🤖 **AI-Powered Intelligence**
 
 - **Multi-LLM Support**: Integration with 15+ leading AI models
@@ -69,10 +99,14 @@ Traditional gene research requires extensive manual literature review, database 
   - And more...
 
 - **Specialized Search Integration**:
-  - PubMed, UniProt, NCBI Gene
-  - GEO, PDB, KEGG, STRING
-  - OMIM, Ensembl, Reactome, KEGG
-  - Tavily, Firecrawl, Exa, Bocha
+  - **Literature**: PubMed, Google Scholar
+  - **Protein Data**: UniProt, NCBI Gene, Ensembl
+  - **Expression**: GEO (Gene Expression Omnibus)
+  - **Structure**: PDB (Protein Data Bank)
+  - **Pathways**: KEGG, Reactome
+  - **Interactions**: STRING (Protein-Protein Interactions)
+  - **Diseases**: OMIM (Online Mendelian Inheritance in Man)
+  - **Web Search**: Tavily, Firecrawl, Exa, Bocha
 
 ### 🔬 **Research Tools & Features**
 
@@ -203,13 +237,21 @@ flowchart TB
 ### **Research Process**
 
 1. **Input**: Gene symbol, organism, research focus
-2. **Analysis**: AI analyzes research requirements
-3. **Planning**: Generates comprehensive research plan
-4. **Search**: Queries biological databases and literature
-5. **Integration**: Combines data from multiple sources
-6. **Synthesis**: AI synthesizes findings into coherent report
-7. **Visualization**: Generates knowledge graphs and diagrams
-8. **Output**: Delivers comprehensive research report
+2. **Analysis**: AI analyzes research requirements and selects optimal databases
+3. **Planning**: Generates comprehensive research plan across 10+ databases
+4. **Multi-Database Search**: Simultaneously queries:
+   - Literature databases (PubMed, Google Scholar)
+   - Protein databases (UniProt, NCBI Gene, Ensembl)
+   - Expression databases (GEO)
+   - Structure databases (PDB)
+   - Pathway databases (KEGG, Reactome)
+   - Interaction databases (STRING)
+   - Disease databases (OMIM)
+5. **Data Integration**: Combines and cross-references data from all sources
+6. **Quality Assessment**: Applies database-specific quality scoring
+7. **Synthesis**: AI synthesizes findings into coherent, evidence-based report
+8. **Visualization**: Generates knowledge graphs, pathway diagrams, and interaction networks
+9. **Output**: Delivers comprehensive research report with full citations
 
 ## 🚢 **Deployment Options**
 
@@ -317,9 +359,10 @@ NEXT_PUBLIC_MODEL_LIST=-all,+gemini-2.0-flash-thinking-exp,+gemini-2.0-flash-exp
 - **Rate Limiting**: API usage optimization
 
 ### **Data Sources**
-- **Biological Databases**: NCBI, UniProt, PDB, KEGG
+- **Biological Databases**: NCBI Gene, UniProt, PDB, KEGG, STRING, OMIM, Ensembl, Reactome
 - **Literature**: PubMed, Google Scholar
-- **Web Search**: Tavily, Exa, Firecrawl
+- **Expression Data**: GEO (Gene Expression Omnibus)
+- **Web Search**: Tavily, Exa, Firecrawl, Bocha
 - **Local Knowledge**: File upload and processing
 
 ## 🌍 **Multi-Language Support**
@@ -341,6 +384,33 @@ NEXT_PUBLIC_MODEL_LIST=-all,+gemini-2.0-flash-thinking-exp,+gemini-2.0-flash-exp
 - **Local Mode**: Complete privacy, no external calls
 - **Hybrid Mode**: Local processing with external search
 - **Server Mode**: Full API integration with encryption
+
+## 🏆 **Database Quality & Reliability**
+
+### **Quality Scoring System**
+Each database is assigned a quality score based on:
+- **Data Reliability**: Curated vs. computational predictions
+- **Evidence Strength**: Experimental vs. theoretical data
+- **Coverage**: Comprehensive vs. limited scope
+- **Update Frequency**: Real-time vs. periodic updates
+
+### **Database Quality Rankings**
+- **UniProt**: 0.15 (Highest - Curated protein data)
+- **OMIM**: 0.12 (High - Clinical disease associations)
+- **NCBI Gene**: 0.10 (High - Authoritative gene data)
+- **Ensembl**: 0.10 (High - Comprehensive annotations)
+- **PDB**: 0.10 (High - Experimental structures)
+- **PubMed**: 0.10 (High - Peer-reviewed literature)
+- **Reactome**: 0.09 (High - Curated pathways)
+- **KEGG**: 0.08 (Good - Pathway databases)
+- **STRING**: 0.08 (Good - Interaction predictions)
+- **GEO**: 0.07 (Good - Expression data)
+
+### **Data Validation**
+- **Cross-Reference Validation**: Data cross-checked across multiple databases
+- **Confidence Scoring**: Each result includes confidence metrics
+- **Evidence Tracking**: Full traceability to original sources
+- **Quality Control**: Automated validation of data integrity
 
 ## 📈 **Performance & Scalability**
 
@@ -432,9 +502,15 @@ We welcome contributions! Here's how you can help:
 
 ### **Biological Databases**
 - [NCBI](https://www.ncbi.nlm.nih.gov/) - Gene and protein data
-- [UniProt](https://www.uniprot.org/) - Protein information
-- [PubMed](https://pubmed.ncbi.nlm.nih.gov/) - Scientific literature
-- [KEGG](https://www.genome.jp/kegg/) - Pathway databases
+- [UniProt](https://www.uniprot.org/) - Protein information and annotations
+- [PubMed](https://pubmed.ncbi.nlm.nih.gov/) - Scientific literature database
+- [GEO](https://www.ncbi.nlm.nih.gov/geo/) - Gene expression omnibus
+- [PDB](https://www.rcsb.org/) - Protein data bank structures
+- [KEGG](https://www.genome.jp/kegg/) - Pathway and genome databases
+- [STRING](https://string-db.org/) - Protein-protein interaction networks
+- [OMIM](https://omim.org/) - Online Mendelian inheritance in man
+- [Ensembl](https://www.ensembl.org/) - Genome browser and annotations
+- [Reactome](https://reactome.org/) - Pathway database and analysis
 
 ### **Inspiration**
 - [Deep Research](https://github.com/dzhng/deep-research) - Original concept
