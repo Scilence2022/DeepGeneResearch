@@ -2,7 +2,7 @@
 // Specialized interface for gene function research
 
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -14,7 +14,17 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { LoaderCircle, Dna, Microscope, Activity } from "lucide-react";
+import { LoaderCircle, Dna, Microscope, Activity, FilePlus, BookText, Paperclip, Link } from "lucide-react";
+import ResourceList from "@/components/Knowledge/ResourceList";
+import Crawler from "@/components/Knowledge/Crawler";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import useKnowledge from "@/hooks/useKnowledge";
+import { useTaskStore } from "@/store/task";
 
 interface GeneResearchProps {
   onStartResearch: (config: GeneResearchConfig) => void;
@@ -77,6 +87,10 @@ const SPECIFIC_ASPECTS = [
 
 export default function GeneResearch({ onStartResearch, isResearching }: GeneResearchProps) {
   const { t } = useTranslation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const taskStore = useTaskStore();
+  const { openKnowledgeList } = useKnowledge();
+  const [openCrawler, setOpenCrawler] = useState(false);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -99,6 +113,18 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       ? currentAspects.filter(a => a !== aspect)
       : [...currentAspects, aspect];
     setValue("specificAspects", newAspects);
+  };
+
+  const handleFileUpload = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).forEach((file) => {
+      taskStore.addResource({
+        type: "file",
+        name: file.name,
+        content: file,
+        size: file.size,
+      });
+    });
   };
 
   const handleStartResearch = (values: z.infer<typeof formSchema>) => {
@@ -247,6 +273,50 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
             />
           </div>
 
+          {/* Local Research Resources Section */}
+          <FormItem className="mt-4">
+            <FormLabel className="mb-2 text-base font-semibold">
+              {t("knowledge.localResourceTitle")}
+            </FormLabel>
+            <FormControl onSubmit={(ev) => ev.stopPropagation()}>
+              <div>
+                {taskStore.resources.length > 0 ? (
+                  <ResourceList
+                    className="pb-2 mb-2 border-b"
+                    resources={taskStore.resources}
+                    onRemove={taskStore.removeResource}
+                  />
+                ) : null}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <div className="inline-flex border p-2 rounded-md text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800">
+                      <FilePlus className="w-5 h-5" />
+                      <span className="ml-1">{t("knowledge.addResource")}</span>
+                    </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => openKnowledgeList()}>
+                      <BookText />
+                      <span>{t("knowledge.knowledge")}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Paperclip />
+                      <span>{t("knowledge.localFile")}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setOpenCrawler(true)}
+                    >
+                      <Link />
+                      <span>{t("knowledge.webCrawler")}</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </FormControl>
+          </FormItem>
+
           <Button
             type="submit"
             disabled={isResearching}
@@ -317,6 +387,19 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
           </div>
         </CardContent>
       </Card>
+
+      {/* Hidden file input and crawler */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(ev) => handleFileUpload(ev.target.files)}
+      />
+      <Crawler
+        open={openCrawler}
+        onClose={() => setOpenCrawler(false)}
+      />
     </div>
   );
 }
