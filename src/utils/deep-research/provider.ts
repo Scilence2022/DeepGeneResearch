@@ -125,6 +125,16 @@ export async function createAIProvider({
       apiKey,
     });
     return pollinations(model, settings);
+  } else if (provider === "siliconflow") {
+    const { createOpenAICompatible } = await import(
+      "@ai-sdk/openai-compatible"
+    );
+    const siliconflow = createOpenAICompatible({
+      name: "siliconflow",
+      baseURL,
+      apiKey,
+    });
+    return siliconflow(model, settings);
   } else if (provider === "ollama") {
     const { createOllama } = await import("ollama-ai-provider");
     const local = global.location || {};
