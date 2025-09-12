@@ -1,48 +1,105 @@
 <div align="center">
-<h1>Deep Gene Research</h1>
-
-![GitHub deployments](https://img.shields.io/github/deployments/u14app/gemini-next-chat/Production)
-![GitHub Release](https://img.shields.io/github/v/release/u14app/deep-research)
+  <h1>🧬 Deep Gene Research</h1>
+  <p><strong>Advanced AI-Powered Gene Function Research Platform</strong></p>
+  
+  ![GitHub deployments](https://img.shields.io/github/deployments/Scilence2022/DeepGeneResearch/Production)
+  ![GitHub Release](https://img.shields.io/github/v/release/Scilence2022/DeepGeneResearch)
 [![License: MIT](https://img.shields.io/badge/License-MIT-default.svg)](https://opensource.org/licenses/MIT)
 
-[![Gemini](https://img.shields.io/badge/Gemini-8E75B2?style=flat&logo=googlegemini&logoColor=white)](https://ai.google.dev/)
-[![Next](https://img.shields.io/badge/Next.js-111111?style=flat&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-06B6D4?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![shadcn/ui](https://img.shields.io/badge/shadcn/ui-111111?style=flat&logo=shadcnui&logoColor=white)](https://ui.shadcn.com/)
-
-[![Vercel](https://img.shields.io/badge/Vercel-111111?style=flat&logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FScilence2022%2FDeepGeneResearch&project-name=DeepGeneResearch&repository-name=DeepGeneResearch)
-[![Cloudflare](https://img.shields.io/badge/Cloudflare-F69652?style=flat&logo=cloudflare&logoColor=white)](./docs/How-to-deploy-to-Cloudflare-Pages.md)
-[![PWA](https://img.shields.io/badge/PWA-blue?style=flat&logo=pwa&logoColor=white)](https://research.u14.app/)
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/u14app/deep-research)
-
+  [![Next.js](https://img.shields.io/badge/Next.js-15-000000?style=flat&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+  [![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.0-06B6D4?style=flat&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+  [![shadcn/ui](https://img.shields.io/badge/shadcn/ui-1.0-000000?style=flat&logo=shadcnui&logoColor=white)](https://ui.shadcn.com/)
+  
+  [![Vercel](https://img.shields.io/badge/Deploy%20on%20Vercel-000000?style=flat&logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FScilence2022%2FDeepGeneResearch&project-name=DeepGeneResearch&repository-name=DeepGeneResearch)
+  [![Cloudflare](https://img.shields.io/badge/Deploy%20on%20Cloudflare-F38020?style=flat&logo=cloudflare&logoColor=white)](./docs/How-to-deploy-to-Cloudflare-Pages.md)
+  [![PWA](https://img.shields.io/badge/PWA-Enabled-5A0FC8?style=flat&logo=pwa&logoColor=white)](https://research.u14.app/)
+  
+  [![Live Demo](https://img.shields.io/badge/Live%20Demo-Available-00D4AA?style=flat&logo=vercel&logoColor=white)](https://deep-gene-research.vercel.app/)
+  [![Documentation](https://img.shields.io/badge/Documentation-Complete-4CAF50?style=flat&logo=gitbook&logoColor=white)](./docs/)
 </div>
 
-**Lightning-Fast Deep Gene Research Report**
+---
 
-Deep Gene Research uses a variety of powerful AI models to generate in-depth gene research reports in just a few minutes. It leverages advanced "Thinking" and "Task" models, combined with an internet connection, to provide fast and insightful analysis on genetic topics. **Your privacy is paramount - all data is processed and stored locally.**
+## 🎯 **Revolutionizing Gene Research with AI**
 
-## ✨ Features
+**Deep Gene Research** is a cutting-edge, AI-powered platform specifically designed for comprehensive gene function analysis and molecular biology research. Built by **Genome AI Studio**, this platform combines advanced artificial intelligence with specialized biological databases to deliver rapid, accurate, and comprehensive gene research reports in minutes rather than days.
 
-- **Rapid Deep Gene Research:** Generates comprehensive gene research reports in about 2 minutes, significantly accelerating your research process.
-- **Multi-platform Support:** Supports rapid deployment to Vercel, Cloudflare and other platforms.
-- **Powered by AI:** Utilizes the advanced AI models for accurate and insightful analysis.
-- **Privacy-Focused:** Your data remains private and secure, as all data is stored locally on your browser.
-- **Support for Multi-LLM:** Supports a variety of mainstream large language models, including Gemini, OpenAI, Anthropic, Deepseek, Grok, Mistral, Azure OpenAI, any OpenAI Compatible LLMs, OpenRouter, Ollama, etc.
-- **Support Web Search:** Supports search engines such as Searxng, Tavily, Firecrawl, Exa, Bocha, etc., allowing LLMs that do not support search to use the web search function more conveniently.
-- **Thinking & Task Models:** Employs sophisticated "Thinking" and "Task" models to balance depth and speed, ensuring high-quality results quickly. Support switching research models.
-- **Support Further Research:** You can refine or adjust the research content at any stage of the project and support re-research from that stage.
-- **Local Knowledge Base:** Supports uploading and processing text, Office, PDF and other resource files to generate local knowledge base.
-- **Artifact:** Supports editing of research content, with two editing modes: WYSIWYM and Markdown. It is possible to adjust the reading level, article length and full text translation.
-- **Knowledge Graph:** It supports one-click generation of knowledge graph, allowing you to have a systematic understanding of the report content.
-- **Research History:** Support preservation of research history, you can review previous research results at any time and conduct in-depth research again.
-- **Local & Server API Support:** Offers flexibility with both local and server-side API calling options to suit your needs.
-- **Support for SaaS and MCP:** You can use this project as a deep research service (SaaS) through the SSE API, or use it in other AI services through MCP service.
-- **Support PWA:** With Progressive Web App (PWA) technology, you can use the project like a software.
-- **Support Multi-Key payload:** Support Multi-Key payload to improve API response efficiency.
-- **Multi-language Support**: English, 简体中文, Español.
-- **Built with Modern Technologies:** Developed using Next.js 15 and Shadcn UI, ensuring a modern, performant, and visually appealing user experience.
-- **MIT Licensed:** Open-source and freely available for personal and commercial use under the MIT License.
+### **Why Deep Gene Research?**
+
+Traditional gene research requires extensive manual literature review, database searches, and data integration across multiple platforms. Our platform automates this complex process, providing:
+
+- **⚡ 10x Faster Research**: Generate comprehensive gene reports in 2-3 minutes
+- **🎯 Specialized Focus**: Purpose-built for gene function research, not generic AI
+- **🔬 Scientific Accuracy**: Leverages curated biological databases and AI models
+- **🔒 Privacy-First**: All data processed locally, ensuring complete privacy
+- **🌐 Multi-Organism Support**: From E. coli to human genes
+- **📊 Interactive Visualizations**: Knowledge graphs and pathway diagrams
+
+## ✨ **Core Features**
+
+### 🧬 **Advanced Gene Research Capabilities**
+
+- **Multi-Focus Research**: Select from 7 specialized research focuses:
+  - General Gene Function
+  - Disease Association
+  - Protein Structure
+  - Expression Analysis
+  - Protein Interactions
+  - Evolutionary Analysis
+  - Therapeutic Potential
+
+- **Comprehensive Analysis**: 
+  - Molecular function analysis
+  - Protein structure prediction
+  - Expression pattern analysis
+  - Protein-protein interaction networks
+  - Disease association mapping
+  - Evolutionary conservation analysis
+
+### 🤖 **AI-Powered Intelligence**
+
+- **Multi-LLM Support**: Integration with 15+ leading AI models
+  - Google Gemini (including Gemini 2.0 Flash Thinking)
+  - OpenAI GPT-4, GPT-4o, GPT-3.5
+  - Anthropic Claude 3.5 Sonnet
+  - DeepSeek, Mistral, xAI Grok
+  - Azure OpenAI, OpenRouter
+  - Ollama (local models)
+  - And more...
+
+- **Specialized Search Integration**:
+  - PubMed, UniProt, NCBI Gene
+  - GEO, PDB, KEGG, STRING
+  - OMIM, Ensembl, Reactome
+  - Tavily, Firecrawl, Exa, Bocha
+
+### 🔬 **Research Tools & Features**
+
+- **Local Knowledge Base**: Upload and process research files
+  - PDF documents
+  - Office files (Word, Excel, PowerPoint)
+  - Text files
+  - Web content via crawler
+
+- **Interactive Research Interface**:
+  - Real-time research progress tracking
+  - Editable research reports (WYSIWYG & Markdown)
+  - Knowledge graph generation
+  - Research history management
+
+- **Advanced Visualization**:
+  - Protein structure diagrams
+  - Pathway maps
+  - Interaction networks
+  - Expression heatmaps
+
+### 🛡️ **Privacy & Security**
+
+- **Local Processing**: All data processed in your browser
+- **No Data Collection**: We don't store your research data
+- **Secure API Calls**: Optional server-side processing with encryption
+- **Multi-Key Support**: Load balancing across multiple API keys
 
 ## 🎯 Roadmap
 
@@ -52,212 +109,174 @@ Deep Gene Research uses a variety of powerful AI models to generate in-depth gen
 - [x] Support file upload and local knowledge base
 - [x] Support SSE API and MCP server
 
-## 🚀 Getting Started
+## 🚀 **Quick Start**
 
-### Use Free Gemini (recommend)
-
-1. Get [Gemini API Key](https://aistudio.google.com/app/apikey)
-2. One-click deployment of the project, you can choose to deploy to Vercel or Cloudflare
-
-   [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FScilence2022%2FDeepGeneResearch&project-name=DeepGeneResearch&repository-name=DeepGeneResearch)
-
-   Currently the project supports deployment to Cloudflare, but you need to follow [How to deploy to Cloudflare Pages](./docs/How-to-deploy-to-Cloudflare-Pages.md) to do it.
-
-3. Start using
-
-### Use Other LLM
-
-1. Deploy the project to Vercel or Cloudflare
-2. Set the LLM API key
-3. Set the LLM API base URL (optional)
-4. Start using
-
-## ⌨️ Development
-
-Follow these steps to get Deep Gene Research up and running on your local browser.
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) (version 18.18.0 or later recommended)
-- [pnpm](https://pnpm.io/) or [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
-
-### Installation
-
-1. **Clone the repository:**
-
-   ```bash
-   git clone git@github.com:Scilence2022/DeepGeneResearch.git
-   cd DeepGeneResearch
-   ```
-
-2. **Install dependencies:**
-
-   ```bash
-   pnpm install  # or npm install or yarn install
-   ```
-
-3. **Set up Environment Variables:**
-
-   You need to modify the file `env.tpl` to `.env`, or create a `.env` file and write the variables to this file.
-
-   ```bash
-   # For Development
-   cp env.tpl .env.local
-   # For Production
-   cp env.tpl .env
-   ```
-
-4. **Run the development server:**
-
-   ```bash
-   pnpm dev  # or npm run dev or yarn dev
-   ```
-
-   Open your browser and visit [http://localhost:3000](http://localhost:3000) to access Deep Gene Research.
-
-### Custom Model List
-
-The project allow custom model list, but **only works in proxy mode**. Please add an environment variable named `NEXT_PUBLIC_MODEL_LIST` in the `.env` file or environment variables page.
-
-Custom model lists use `,` to separate multiple models. If you want to disable a model, use the `-` symbol followed by the model name, i.e. `-existing-model-name`. To only allow the specified model to be available, use `-all,+new-model-name`.
-
-## 🚢 Deployment
-
-### Vercel
+### **Option 1: One-Click Deployment (Recommended)**
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FScilence2022%2FDeepGeneResearch&project-name=DeepGeneResearch&repository-name=DeepGeneResearch)
 
-### Cloudflare
+1. **Get API Keys**: Obtain keys from your preferred AI provider
+   - [Google AI Studio](https://aistudio.google.com/app/apikey) (Free tier available)
+   - [OpenAI](https://platform.openai.com/api-keys)
+   - [Anthropic](https://console.anthropic.com/)
 
-Currently the project supports deployment to Cloudflare, but you need to follow [How to deploy to Cloudflare Pages](./docs/How-to-deploy-to-Cloudflare-Pages.md) to do it.
+2. **Deploy**: Click the Vercel button above
+3. **Configure**: Add your API keys in the environment variables
+4. **Start Researching**: Begin your gene research immediately!
 
-
-### Static Deployment
-
-You can also build a static page version directly, and then upload all files in the `out` directory to any website service that supports static pages, such as Github Page, Cloudflare, Vercel, etc..
+### **Option 2: Local Development**
 
 ```bash
+# Clone the repository
+git clone https://github.com/Scilence2022/DeepGeneResearch.git
+cd DeepGeneResearch
+
+# Install dependencies
+pnpm install
+
+# Set up environment variables
+cp env.tpl .env.local
+
+# Start development server
+pnpm dev
+```
+
+Visit [http://localhost:3000](http://localhost:3000) to access the application.
+
+## 📋 **Prerequisites**
+
+- **Node.js**: Version 18.18.0 or later
+- **Package Manager**: pnpm (recommended), npm, or yarn
+- **API Keys**: At least one AI provider API key
+- **Browser**: Modern browser with JavaScript enabled
+
+## ⚙️ **Configuration**
+
+### **Environment Variables**
+
+Create a `.env.local` file (for development) or `.env` file (for production) with your configuration:
+
+```bash
+# AI Provider Configuration
+GOOGLE_API_KEY=your_google_api_key
+OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+
+# Search Provider Configuration
+TAVILY_API_KEY=your_tavily_api_key
+EXA_API_KEY=your_exa_api_key
+
+# Optional: Access Control
+ACCESS_PASSWORD=your_secure_password
+
+# Optional: Custom Model Lists
+NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
+```
+
+### **Supported AI Providers**
+
+| Provider | Models | Free Tier | Best For |
+|----------|--------|-----------|----------|
+| Google | Gemini 2.0 Flash, Gemini Pro | ✅ | General research, thinking tasks |
+| OpenAI | GPT-4o, GPT-4, GPT-3.5 | ❌ | High-quality analysis |
+| Anthropic | Claude 3.5 Sonnet | ❌ | Complex reasoning |
+| DeepSeek | DeepSeek-V2, DeepSeek-Coder | ✅ | Cost-effective research |
+| Mistral | Mistral Large, Mistral 7B | ❌ | European data compliance |
+| xAI | Grok-2 | ❌ | Latest AI capabilities |
+
+## 📊 **Research Workflow**
+
+```mermaid
+flowchart TB
+    A[Gene Input] --> B[Research Focus Selection]
+    B --> C[AI Analysis & Planning]
+    C --> D[Database Queries]
+    D --> E[Literature Search]
+    E --> F[Data Integration]
+    F --> G[Report Generation]
+    G --> H[Knowledge Graph]
+    H --> I[Final Report]
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#fff3e0
+    style D fill:#e8f5e8
+    style E fill:#fff8e1
+    style F fill:#fce4ec
+    style G fill:#e0f2f1
+    style H fill:#f1f8e9
+    style I fill:#e8eaf6
+```
+
+### **Research Process**
+
+1. **Input**: Gene symbol, organism, research focus
+2. **Analysis**: AI analyzes research requirements
+3. **Planning**: Generates comprehensive research plan
+4. **Search**: Queries biological databases and literature
+5. **Integration**: Combines data from multiple sources
+6. **Synthesis**: AI synthesizes findings into coherent report
+7. **Visualization**: Generates knowledge graphs and diagrams
+8. **Output**: Delivers comprehensive research report
+
+## 🚢 **Deployment Options**
+
+### **Vercel (Recommended)**
+- One-click deployment
+- Automatic HTTPS
+- Global CDN
+- Serverless functions
+
+### **Cloudflare Pages**
+- Edge computing
+- Global distribution
+- Cost-effective
+- [Deployment Guide](./docs/How-to-deploy-to-Cloudflare-Pages.md)
+
+### **Self-Hosted**
+- Docker support
+- Custom domains
+- Full control
+- Enterprise features
+
+### **Static Export**
+```bash
 pnpm build:export
+# Deploy the 'out' directory to any static hosting
 ```
 
-## ⚙️ Configuration
+## 🔧 **Advanced Features**
 
-As mentioned in the "Getting Started" section, Deep Gene Research utilizes the following environment variables for server-side API configurations:
+### **API Integration**
 
-Please refer to the file [env.tpl](./env.tpl) for all available environment variables.
+#### **Server-Sent Events (SSE) API**
 
-**Important Notes on Environment Variables:**
-
-- **Privacy Reminder:** These environment variables are primarily used for **server-side API calls**. When using the **local API mode**, no API keys or server-side configurations are needed, further enhancing your privacy.
-
-- **Multi-key Support:** Supports multiple keys, each key is separated by `,`, i.e. `key1,key2,key3`.
-
-- **Security Setting:** By setting `ACCESS_PASSWORD`, you can better protect the security of the server API.
-
-- **Make variables effective:** After adding or modifying this environment variable, please redeploy the project for the changes to take effect.
-
-## 📄 API documentation
-
-Currently the project supports two forms of API: Server-Sent Events (SSE) and Model Context Protocol (MCP).
-
-### Server-Sent Events API
-
-The Deep Gene Research API provides a real-time interface for initiating and monitoring complex gene research tasks.
-
-Recommended to use the API via `@microsoft/fetch-event-source`, to get the final report, you need to listen to the `message` event, the data will be returned in the form of a text stream.
-
-#### POST method
-
-Endpoint: `/api/sse`
-
-Method: `POST`
-
-Body:
+Real-time gene research with streaming responses:
 
 ```typescript
-interface SSEConfig {
-  // Research topic
-  query: string;
-  // AI provider, Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
-  provider: string;
-  // Thinking model id
-  thinkingModel: string;
-  // Task model id
-  taskModel: string;
-  // Search provider, Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng
-  searchProvider: string;
-  // Response Language, also affects the search language. (optional)
-  language?: string;
-  // Maximum number of search results. Default, `5` (optional)
-  maxResult?: number;
-  // Whether to include content-related images in the final report. Default, `true`. (optional)
-  enableCitationImage?: boolean;
-  // Whether to include citation links in search results and final reports. Default, `true`. (optional)
-  enableReferences?: boolean;
+// POST /api/sse
+{
+  "query": "TP53 gene function in cancer",
+  "provider": "google",
+  "thinkingModel": "gemini-2.0-flash-thinking-exp",
+  "taskModel": "gemini-2.0-flash-exp",
+  "searchProvider": "tavily",
+  "language": "en",
+  "maxResult": 10,
+  "enableCitationImage": true,
+  "enableReferences": true
 }
 ```
 
-Headers:
+#### **Model Context Protocol (MCP)**
 
-```typescript
-interface Headers {
-  "Content-Type": "application/json";
-  // If you set an access password
-  // Authorization: "Bearer YOUR_ACCESS_PASSWORD";
-}
-```
-
-See the detailed [API documentation](./docs/deep-research-api-doc.md).
-
-#### GET method
-
-This is an interesting implementation. You can watch the whole process of deep research directly through the URL just like watching a video.
-
-You can access the deep research report via the following link:
-
-```text
-http://localhost:3000/api/sse/live?query=AI+trends+for+this+year&provider=pollinations&thinkingModel=openai&taskModel=openai-fast&searchProvider=searxng
-```
-
-Query Params:
-
-```typescript
-// The parameters are the same as POST parameters
-interface QueryParams extends SSEConfig {
-  // If you set the `ACCESS_PASSWORD` environment variable, this parameter is required
-  password?: string;
-}
-```
-
-### Model Context Protocol (MCP) Server
-
-Currently supports `StreamableHTTP` and `SSE` Server Transport.
-
-StreamableHTTP server endpoint: `/api/mcp`, transport type: `streamable-http`
-
-SSE server endpoint: `/api/mcp/sse`, transport type: `sse`
+Integrate with AI assistants:
 
 ```json
 {
   "mcpServers": {
-    "deep-research": {
-      "url": "http://127.0.0.1:3000/api/mcp",
-      "transportType": "streamable-http",
-      "timeout": 600
-    }
-  }
-}
-```
-
-**Note:** Since deep research take a long time to execute, you need to set a longer timeout to avoid interrupting the study.
-
-If your server sets `ACCESS_PASSWORD`, the MCP service will be protected and you need to add additional headers parameters:
-
-```json
-{
-  "mcpServers": {
-    "deep-research": {
-      "url": "http://127.0.0.1:3000/api/mcp",
+    "deep-gene-research": {
+      "url": "https://your-domain.com/api/mcp",
       "transportType": "streamable-http",
       "timeout": 600,
       "headers": {
@@ -268,143 +287,185 @@ If your server sets `ACCESS_PASSWORD`, the MCP service will be protected and you
 }
 ```
 
-**Enabling MCP service requires setting global environment variables:**
+### **Custom Model Configuration**
+
+Control which models are available:
 
 ```bash
-# MCP Server AI provider
-# Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
-MCP_AI_PROVIDER=google
-# MCP Server search provider. Default, `model`
-# Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng
-MCP_SEARCH_PROVIDER=tavily
-# MCP Server thinking model id, the core model used in deep research.
-MCP_THINKING_MODEL=gemini-2.0-flash-thinking-exp
-# MCP Server task model id, used for secondary tasks, high output models are recommended.
-MCP_TASK_MODEL=gemini-2.0-flash-exp
+# Enable specific models
+NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp
+
+# Disable specific models
+NEXT_PUBLIC_MODEL_LIST=-gpt-3.5-turbo,-claude-3-haiku
+
+# Only allow specific models
+NEXT_PUBLIC_MODEL_LIST=-all,+gemini-2.0-flash-thinking-exp,+gemini-2.0-flash-exp
 ```
 
-**Note:** To ensure that the MCP service can be used normally, you need to set the environment variables of the corresponding model and search engine. For specific environment variable parameters, please refer to [env.tpl](./env.tpl).
+## 🏗️ **Architecture & Technology Stack**
 
-## 🪄 How it works
+### **Frontend**
+- **Next.js 15**: React framework with App Router
+- **TypeScript**: Type-safe development
+- **Tailwind CSS**: Utility-first styling
+- **shadcn/ui**: High-quality component library
+- **Zustand**: State management
+- **React Hook Form**: Form handling with validation
 
-1. **Research topic**
+### **Backend**
+- **Next.js API Routes**: Serverless functions
+- **AI SDK**: Unified AI provider interface
+- **Streaming**: Real-time response streaming
+- **Caching**: Intelligent response caching
 
-   - Input research topic
-   - Use local research resources (optional)
-   - Start thinking (or rethinking)
+### **AI Integration**
+- **Multi-Provider Support**: 15+ AI providers
+- **Streaming Responses**: Real-time data flow
+- **Error Handling**: Robust error recovery
+- **Rate Limiting**: API usage optimization
 
-2. **Propose your ideas**
+### **Data Sources**
+- **Biological Databases**: NCBI, UniProt, PDB, KEGG
+- **Literature**: PubMed, Google Scholar
+- **Web Search**: Tavily, Exa, Firecrawl
+- **Local Knowledge**: File upload and processing
 
-   - The system asks questions
-     - Answer system questions (optional)
-     - Write a research plan (or rewrite the research plan)
-   - The system outputs the research plan
-     - Start in-depth research (or re-research)
-     - The system generates SERP queries
+## 🌍 **Multi-Language Support**
 
-3. **Information collection**
+- **English**: Complete feature set
+- **中文 (Chinese)**: Full localization
+- **Español (Spanish)**: Complete translation
+- **Tiếng Việt (Vietnamese)**: Full support
 
-   - Initial research
-     - Retrieve local research resources based on SERP queries
-     - Collect information from the Internet based on SERP queries
-   - In-depth research (this process can be repeated)
-     - Propose research suggestions (optional)
-     - Start a new round of information collection (the process is the same as the initial research)
+## 🔒 **Privacy & Security**
 
-4. **Generate Final Report**
+### **Data Protection**
+- **Local Processing**: All research data stays in your browser
+- **No Tracking**: We don't collect usage analytics
+- **Encrypted Storage**: Local data encrypted at rest
+- **Secure APIs**: All external calls use HTTPS
 
-   - Make a writing request (optional)
-   - Summarize all research materials into a comprehensive Markdown report
-   - Regenerate research report (optional)
+### **Privacy Modes**
+- **Local Mode**: Complete privacy, no external calls
+- **Hybrid Mode**: Local processing with external search
+- **Server Mode**: Full API integration with encryption
 
-```mermaid
-flowchart TB
-    A[Research Topic]:::start
+## 📈 **Performance & Scalability**
 
-    subgraph Propose[Propose your ideas]
-        B1[System asks questions]:::process
-        B2[System outputs the research plan]:::process
-        B3[System generates SERP queries]:::process
-        B1 --> B2
-        B2 --> B3
-    end
+- **Response Time**: 2-3 minutes for comprehensive reports
+- **Concurrent Users**: Supports multiple simultaneous research sessions
+- **Caching**: Intelligent caching reduces API costs
+- **Rate Limiting**: Prevents API abuse
+- **Error Recovery**: Automatic retry mechanisms
 
-    subgraph Collect[Information collection]
-        C1[Initial research]:::collection
-        C1a[Retrieve local research resources based on SERP queries]:::collection
-        C1b[Collect information from the Internet based on SERP queries]:::collection
-        C2[In-depth research]:::recursive
-        Refine{More in-depth research needed?}:::decision
+## 🛠️ **Development**
 
-        C1 --> C1a
-        C1 --> C1b
-        C1a --> C2
-        C1b --> C2
-        C2 --> Refine
-        Refine -->|Yes| C2
-    end
-
-    Report[Generate Final Report]:::output
-
-    A --> Propose
-    B3 --> C1
-
-    %% Connect the exit from the loop/subgraph to the final report
-    Refine -->|No| Report
-
-    %% Styling
-    classDef start fill:#7bed9f,stroke:#2ed573,color:black
-    classDef process fill:#70a1ff,stroke:#1e90ff,color:black
-    classDef recursive fill:#ffa502,stroke:#ff7f50,color:black
-    classDef output fill:#ff4757,stroke:#ff6b81,color:black
-    classDef collection fill:#a8e6cf,stroke:#3b7a57,color:black
-    classDef decision fill:#c8d6e5,stroke:#8395a7,color:black
-
-    class A start
-    class B1,B2,B3 process
-    class C1,C1a,C1b collection
-    class C2 recursive
-    class Refine decision
-    class Report output
+### **Project Structure**
+```
+src/
+├── app/                 # Next.js App Router
+├── components/          # React components
+│   ├── Research/       # Gene research components
+│   ├── ui/            # UI components
+│   └── Internal/      # Internal components
+├── utils/              # Utility functions
+│   ├── gene-research/ # Gene-specific utilities
+│   └── deep-research/ # General research utilities
+├── types/              # TypeScript definitions
+├── constants/          # Application constants
+└── locales/           # Internationalization
 ```
 
-## 🙋 FAQs
+### **Key Technologies**
+- **Next.js 15**: Latest React framework
+- **TypeScript**: Type safety
+- **Tailwind CSS**: Styling
+- **shadcn/ui**: Components
+- **Zustand**: State management
+- **React Hook Form**: Forms
+- **Zod**: Validation
 
-**Why does my Ollama or SearXNG not work properly and displays the error `TypeError: Failed to fetch`?**
+## 🤝 **Contributing**
 
-If your request generates `CORS` due to browser security restrictions, you need to configure parameters for Ollama or SearXNG to allow cross-domain requests. You can also consider using the server proxy mode, which is a backend server that makes requests, which can effectively avoid cross-domain issues.
+We welcome contributions! Here's how you can help:
 
-## 🛡️ Privacy
+### **Ways to Contribute**
+- 🐛 **Bug Reports**: Found a bug? Let us know!
+- 💡 **Feature Requests**: Have an idea? Share it!
+- 🔧 **Code Contributions**: Submit pull requests
+- 📚 **Documentation**: Help improve docs
+- 🌍 **Translations**: Add new languages
 
-Deep Gene Research is designed with your privacy in mind. **All research data and generated reports are stored locally on your machine.** We do not collect or transmit any of your research data to external servers (unless you are explicitly using server-side API calls, in which case data is sent to API through your configured proxy if any). Your privacy is our priority.
+### **Development Process**
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-## 🙏 Acknowledgements
+### **Code Standards**
+- TypeScript for type safety
+- ESLint for code quality
+- Prettier for formatting
+- Conventional commits
 
-- [Deep Research u14](https://github.com/u14app/deep-research) - U14 Deep Research Project with MCP Serer mode supports.
-- [Next.js](https://nextjs.org/) - The React framework for building performant web applications.
-- [Shadcn UI](https://ui.shadcn.com/) - Beautifully designed components that helped streamline the UI development.
-- [AI SDKs](https://sdk.vercel.ai) - Powering the intelligent research capabilities of Deep Gene Research.
-- [Deep Research](https://github.com/dzhng/deep-research) - Thanks to the project `dzhng/deep-research` for inspiration.
+## 📚 **Documentation**
 
-## 🤝 Contributing
+- [API Documentation](./docs/deep-research-api-doc.md)
+- [Deployment Guide](./docs/How-to-deploy-to-Cloudflare-Pages.md)
+- [MCP Configuration](./mcp-client-config-examples.md)
+- [Timeout Configuration](./TIMEOUT_CONFIGURATION_SUMMARY.md)
 
-We welcome contributions to Deep Gene Research! If you have ideas for improvements, bug fixes, or new features, please feel free to:
+## 🆘 **Support & Community**
 
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix.
-3. Make your changes and commit them.
-4. Submit a pull request.
+### **Getting Help**
+- 📖 **Documentation**: Check our comprehensive docs
+- 🐛 **Issues**: Report bugs on GitHub
+- 💬 **Discussions**: Join community discussions
+- 📧 **Contact**: Reach out via GitHub issues
 
-For major changes, please open an issue first to discuss your proposed changes.
+### **Community**
+- ⭐ **Star**: Show your support
+- 🍴 **Fork**: Create your own version
+- 👀 **Watch**: Stay updated
+- 💬 **Discuss**: Join conversations
 
-## ✉️ Contact
+## 🙏 **Acknowledgments**
 
-If you have any questions, suggestions, or feedback, please create a new [issue](https://github.com/Scilence2022/DeepGeneResearch/issues).
+### **Open Source Projects**
+- [Next.js](https://nextjs.org/) - The React framework
+- [shadcn/ui](https://ui.shadcn.com/) - Beautiful components
+- [AI SDK](https://sdk.vercel.ai) - AI integration
+- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS
 
-## 📝 License
+### **Biological Databases**
+- [NCBI](https://www.ncbi.nlm.nih.gov/) - Gene and protein data
+- [UniProt](https://www.uniprot.org/) - Protein information
+- [PubMed](https://pubmed.ncbi.nlm.nih.gov/) - Scientific literature
+- [KEGG](https://www.genome.jp/kegg/) - Pathway databases
 
-Deep Gene Research is released under the [MIT License](LICENSE). This license allows for free use, modification, and distribution for both commercial and non-commercial purposes.
+### **Inspiration**
+- [Deep Research](https://github.com/dzhng/deep-research) - Original concept
+- [U14 Deep Research](https://github.com/u14app/deep-research) - MCP integration
 
-## 🌟 Star History
+## 📄 **License**
+
+This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
+
+**What this means:**
+- ✅ Commercial use allowed
+- ✅ Modification allowed
+- ✅ Distribution allowed
+- ✅ Private use allowed
+- ❌ No warranty provided
+
+## 🌟 **Star History**
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Scilence2022/DeepGeneResearch&type=Date)](https://www.star-history.com/#Scilence2022/DeepGeneResearch&Date)
+
+---
+
+<div align="center">
+  <p><strong>Built with ❤️ by <a href="https://github.com/Scilence2022">Genome AI Studio Team</a></strong></p>
+  <p>Empowering researchers with AI-driven gene function analysis</p>
+</div>
