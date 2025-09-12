@@ -18,7 +18,7 @@ import {
 export interface GeneResearchConfig {
   geneSymbol: string;
   organism: string;
-  researchFocus?: string;
+  researchFocus?: string[];
   specificAspects?: string[];
   diseaseContext?: string;
   experimentalApproach?: string;

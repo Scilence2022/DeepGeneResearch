@@ -34,7 +34,7 @@ interface GeneResearchProps {
 interface GeneResearchConfig {
   geneSymbol: string;
   organism: string;
-  researchFocus: string;
+  researchFocus: string[];
   specificAspects: string[];
   diseaseContext?: string;
   experimentalApproach?: string;
@@ -43,7 +43,7 @@ interface GeneResearchConfig {
 const formSchema = z.object({
   geneSymbol: z.string().min(1, "Gene symbol is required"),
   organism: z.string().min(1, "Organism is required"),
-  researchFocus: z.string().min(1, "Research focus is required"),
+  researchFocus: z.array(z.string()).min(1, "At least one research focus is required"),
   specificAspects: z.array(z.string()).optional(),
   diseaseContext: z.string().optional(),
   experimentalApproach: z.string().optional(),
@@ -97,7 +97,7 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
     defaultValues: {
       geneSymbol: "",
       organism: "Escherichia coli",
-      researchFocus: "general",
+      researchFocus: ["general"],
       specificAspects: [],
       diseaseContext: "",
       experimentalApproach: "",
@@ -106,6 +106,7 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
 
   const { watch, setValue } = form;
   const specificAspects = watch("specificAspects") || [];
+  const researchFocus = watch("researchFocus") || [];
 
   const handleAspectToggle = (aspect: string) => {
     const currentAspects = specificAspects;
@@ -113,6 +114,14 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       ? currentAspects.filter(a => a !== aspect)
       : [...currentAspects, aspect];
     setValue("specificAspects", newAspects);
+  };
+
+  const handleResearchFocusToggle = (focus: string) => {
+    const currentFocuses = researchFocus;
+    const newFocuses = currentFocuses.includes(focus) 
+      ? currentFocuses.filter(f => f !== focus)
+      : [...currentFocuses, focus];
+    setValue("researchFocus", newFocuses);
   };
 
   const handleFileUpload = (files: FileList | null) => {
@@ -200,19 +209,19 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
             name="researchFocus"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Research Focus</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select research focus" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RESEARCH_FOCI.map((focus) => (
-                      <SelectItem key={focus.value} value={focus.value}>
-                        {focus.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormLabel>Research Focus *</FormLabel>
+                <div className="flex flex-wrap gap-2">
+                  {RESEARCH_FOCI.map((focus) => (
+                    <Badge
+                      key={focus.value}
+                      variant={researchFocus.includes(focus.value) ? "default" : "outline"}
+                      className="cursor-pointer"
+                      onClick={() => handleResearchFocusToggle(focus.value)}
+                    >
+                      {focus.label}
+                    </Badge>
+                  ))}
+                </div>
               </FormItem>
             )}
           />

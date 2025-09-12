@@ -49,8 +49,8 @@ function Topic() {
         
         // Create a gene research query
         let query = `Gene research: ${config.geneSymbol} in ${config.organism}`;
-        if (config.researchFocus !== 'general') {
-          query += ` - Focus: ${config.researchFocus}`;
+        if (config.researchFocus && config.researchFocus.length > 0 && !config.researchFocus.includes('general')) {
+          query += ` - Focus: ${config.researchFocus.join(', ')}`;
         }
         if (config.specificAspects.length > 0) {
           query += ` - Aspects: ${config.specificAspects.join(', ')}`;

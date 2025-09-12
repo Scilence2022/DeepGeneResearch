@@ -6,7 +6,7 @@ import { GeneSearchTask } from '@/types/gene-research';
 export interface GeneQueryContext {
   geneSymbol: string;
   organism: string;
-  researchFocus?: string;
+  researchFocus?: string[];
   specificAspects?: string[];
   diseaseContext?: string;
   experimentalApproach?: string;
@@ -15,7 +15,7 @@ export interface GeneQueryContext {
 export class GeneQueryGenerator {
   private geneSymbol: string;
   private organism: string;
-  private researchFocus: string;
+  private researchFocus: string[];
   private specificAspects: string[];
   private diseaseContext?: string;
   private experimentalApproach?: string;
@@ -23,7 +23,7 @@ export class GeneQueryGenerator {
   constructor(context: GeneQueryContext) {
     this.geneSymbol = context.geneSymbol;
     this.organism = context.organism;
-    this.researchFocus = context.researchFocus || 'general';
+    this.researchFocus = context.researchFocus || ['general'];
     this.specificAspects = context.specificAspects || [];
     this.diseaseContext = context.diseaseContext;
     this.experimentalApproach = context.experimentalApproach;
@@ -32,32 +32,40 @@ export class GeneQueryGenerator {
   generateComprehensiveQueries(): GeneSearchTask[] {
     const queries: GeneSearchTask[] = [];
 
-    // Basic gene information queries
+    // Always include basic gene information queries
     queries.push(...this.generateBasicInfoQueries());
     
-    // Molecular function queries
-    queries.push(...this.generateFunctionQueries());
+    // Generate queries based on selected research focuses
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('function')) {
+      queries.push(...this.generateFunctionQueries());
+    }
     
-    // Protein structure queries
-    queries.push(...this.generateStructureQueries());
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('structure')) {
+      queries.push(...this.generateStructureQueries());
+    }
     
-    // Expression pattern queries
-    queries.push(...this.generateExpressionQueries());
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('expression')) {
+      queries.push(...this.generateExpressionQueries());
+    }
     
-    // Regulatory mechanism queries
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('interaction')) {
+      queries.push(...this.generateInteractionQueries());
+    }
+    
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('disease')) {
+      queries.push(...this.generateDiseaseQueries());
+    }
+    
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('evolution')) {
+      queries.push(...this.generateEvolutionaryQueries());
+    }
+    
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('therapeutic')) {
+      queries.push(...this.generatePathwayQueries());
+    }
+    
+    // Always include regulatory mechanism queries as they're fundamental
     queries.push(...this.generateRegulatoryQueries());
-    
-    // Interaction network queries
-    queries.push(...this.generateInteractionQueries());
-    
-    // Disease association queries
-    queries.push(...this.generateDiseaseQueries());
-    
-    // Evolutionary analysis queries
-    queries.push(...this.generateEvolutionaryQueries());
-    
-    // Pathway analysis queries
-    queries.push(...this.generatePathwayQueries());
 
     return queries;
   }

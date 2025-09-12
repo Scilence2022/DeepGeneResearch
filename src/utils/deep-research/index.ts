@@ -583,7 +583,7 @@ class DeepResearch {
   extractGeneInfo(query: string): {
     geneSymbol: string;
     organism: string;
-    researchFocus?: string;
+    researchFocus?: string[];
     specificAspects?: string[];
     diseaseContext?: string;
     experimentalApproach?: string;
@@ -595,14 +595,25 @@ class DeepResearch {
     const geneSymbol = geneMatch ? geneMatch[1] : 'Unknown';
     const organism = organismMatch ? organismMatch[1] : 'Escherichia coli';
     
-    // Extract research focus
-    let researchFocus = 'general';
+    // Extract research focuses (can be multiple)
+    const researchFocus: string[] = ['general']; // Always include general
     if (query.toLowerCase().includes('disease') || query.toLowerCase().includes('clinical')) {
-      researchFocus = 'disease';
-    } else if (query.toLowerCase().includes('structure') || query.toLowerCase().includes('protein')) {
-      researchFocus = 'structure';
-    } else if (query.toLowerCase().includes('expression') || query.toLowerCase().includes('regulation')) {
-      researchFocus = 'expression';
+      researchFocus.push('disease');
+    }
+    if (query.toLowerCase().includes('structure') || query.toLowerCase().includes('protein')) {
+      researchFocus.push('structure');
+    }
+    if (query.toLowerCase().includes('expression') || query.toLowerCase().includes('regulation')) {
+      researchFocus.push('expression');
+    }
+    if (query.toLowerCase().includes('interaction') || query.toLowerCase().includes('binding')) {
+      researchFocus.push('interaction');
+    }
+    if (query.toLowerCase().includes('evolution') || query.toLowerCase().includes('phylogeny')) {
+      researchFocus.push('evolution');
+    }
+    if (query.toLowerCase().includes('therapeutic') || query.toLowerCase().includes('drug')) {
+      researchFocus.push('therapeutic');
     }
     
     // Extract specific aspects
