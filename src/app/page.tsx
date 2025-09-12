@@ -47,7 +47,7 @@ function Home() {
         <FinalReport />
       </main>
       <footer className="my-4 text-center text-sm text-gray-600 print:hidden">
-        <a href="https://github.com/u14app/" target="_blank">
+        <a href="https://github.com/Scilence2022/DeepGeneResearch" target="_blank">
           {t("copyright", {
             name: "Genome AI Studio",
           })}

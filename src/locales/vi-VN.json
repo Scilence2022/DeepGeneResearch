@@ -2,7 +2,7 @@
   "title": "Nghiên Cứu Sâu",
   "theme": "Chủ Đề",
   "openSource": "Mã Nguồn Mở",
-  "copyright": "Tạo với ❤️ bởi nhóm {{name}}",
+  "copyright": "Powered By {{name}} Team",
   "searchPlaceholder": "Vui lòng nhập từ khóa",
   "research": {
     "common": {

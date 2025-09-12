@@ -2,7 +2,7 @@
   "title": "Deep Gene Research",
   "theme": "Tema",
   "openSource": "Código Abierto",
-  "copyright": "Creado con ❤️ por el equipo de {{name}}",
+  "copyright": "Powered By {{name}} Team",
   "searchPlaceholder": "Por favor, introduce palabras clave",
   "research": {
     "common": {
