@@ -143,7 +143,7 @@ export class GeneResearchEngine {
 
   private async executeSearches(queries: GeneSearchTask[]): Promise<Map<string, any>> {
     const searchResults = new Map<string, any>();
-    const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg'];
+    const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'];
 
     for (const query of queries) {
       try {
@@ -494,7 +494,7 @@ export const GENE_RESEARCH_PRESETS = {
     enableQualityControl: true,
     enableVisualization: true,
     maxSearchResults: 20,
-    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string']
+    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome']
   },
   
   CLINICAL: {

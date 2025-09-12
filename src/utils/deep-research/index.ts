@@ -534,7 +534,7 @@ class DeepResearch {
         enableQualityControl: true,
         enableVisualization: true,
         maxSearchResults: 20,
-        searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string']
+        searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome']
       });
 
       this.onMessage("progress", { step: "gene-research", status: "processing" });

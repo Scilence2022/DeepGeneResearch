@@ -367,6 +367,182 @@ export async function searchKEGG({
   }
 }
 
+// STRING protein interaction search provider
+export async function searchSTRING({
+  query,
+  geneSymbol,
+  organism,
+  maxResult = 10,
+  apiKey
+}: GeneSearchProviderOptions): Promise<GeneSearchResult> {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  try {
+    const searchQuery = geneSymbol 
+      ? `${geneSymbol} AND ${query}`
+      : query;
+
+    const response = await fetch(
+      `${GENE_DATABASE_URLS.STRING_API}tsv/network?identifiers=${encodeURIComponent(searchQuery)}&species=${organism || '9606'}&limit=${maxResult}`,
+      { headers }
+    );
+
+    const data = await response.text();
+    const sources = parseSTRINGResults(data, geneSymbol, organism);
+
+    return {
+      sources,
+      images: [],
+      metadata: {
+        totalResults: sources.length,
+        database: 'string',
+        searchTime: Date.now(),
+        geneSymbol,
+        organism,
+        qualityScore: calculateQualityScore(sources)
+      }
+    };
+  } catch (error) {
+    console.error('STRING search error:', error);
+    return { sources: [], images: [], metadata: { totalResults: 0, database: 'string', searchTime: 0 } };
+  }
+}
+
+// OMIM disease association search provider
+export async function searchOMIM({
+  query,
+  geneSymbol,
+  organism,
+  maxResult = 10,
+  apiKey
+}: GeneSearchProviderOptions): Promise<GeneSearchResult> {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  try {
+    const searchQuery = geneSymbol 
+      ? `${geneSymbol} AND ${query}`
+      : query;
+
+    const response = await fetch(
+      `${GENE_DATABASE_URLS.OMIM_API}entry/search?search=${encodeURIComponent(searchQuery)}&limit=${maxResult}&format=json`,
+      { headers }
+    );
+
+    const data = await response.json();
+    const sources = parseOMIMResults(data, geneSymbol, organism);
+
+    return {
+      sources,
+      images: [],
+      metadata: {
+        totalResults: sources.length,
+        database: 'omim',
+        searchTime: Date.now(),
+        geneSymbol,
+        organism,
+        qualityScore: calculateQualityScore(sources)
+      }
+    };
+  } catch (error) {
+    console.error('OMIM search error:', error);
+    return { sources: [], images: [], metadata: { totalResults: 0, database: 'omim', searchTime: 0 } };
+  }
+}
+
+// Ensembl gene annotation search provider
+export async function searchEnsembl({
+  query,
+  geneSymbol,
+  organism,
+  maxResult = 10,
+  apiKey
+}: GeneSearchProviderOptions): Promise<GeneSearchResult> {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  try {
+    const searchQuery = geneSymbol 
+      ? `${geneSymbol} AND ${query}`
+      : query;
+
+    const response = await fetch(
+      `${GENE_DATABASE_URLS.ENSEMBL_API}lookup/symbol/homo_sapiens/${encodeURIComponent(searchQuery)}?expand=1`,
+      { headers }
+    );
+
+    const data = await response.json();
+    const sources = parseEnsemblResults(data, geneSymbol, organism);
+
+    return {
+      sources,
+      images: [],
+      metadata: {
+        totalResults: sources.length,
+        database: 'ensembl',
+        searchTime: Date.now(),
+        geneSymbol,
+        organism,
+        qualityScore: calculateQualityScore(sources)
+      }
+    };
+  } catch (error) {
+    console.error('Ensembl search error:', error);
+    return { sources: [], images: [], metadata: { totalResults: 0, database: 'ensembl', searchTime: 0 } };
+  }
+}
+
+// Reactome pathway search provider
+export async function searchReactome({
+  query,
+  geneSymbol,
+  organism,
+  maxResult = 10,
+  apiKey
+}: GeneSearchProviderOptions): Promise<GeneSearchResult> {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  try {
+    const searchQuery = geneSymbol 
+      ? `${geneSymbol} AND ${query}`
+      : query;
+
+    const response = await fetch(
+      `${GENE_DATABASE_URLS.REACTOME_API}search/query?query=${encodeURIComponent(searchQuery)}&species=${organism || 'Homo sapiens'}&rows=${maxResult}`,
+      { headers }
+    );
+
+    const data = await response.json();
+    const sources = parseReactomeResults(data, geneSymbol, organism);
+
+    return {
+      sources,
+      images: [],
+      metadata: {
+        totalResults: sources.length,
+        database: 'reactome',
+        searchTime: Date.now(),
+        geneSymbol,
+        organism,
+        qualityScore: calculateQualityScore(sources)
+      }
+    };
+  } catch (error) {
+    console.error('Reactome search error:', error);
+    return { sources: [], images: [], metadata: { totalResults: 0, database: 'reactome', searchTime: 0 } };
+  }
+}
+
 // Main gene search provider factory
 export async function createGeneSearchProvider({
   provider,
@@ -402,6 +578,14 @@ export async function createGeneSearchProvider({
       return searchPDB(searchOptions);
     case "kegg":
       return searchKEGG(searchOptions);
+    case "string":
+      return searchSTRING(searchOptions);
+    case "omim":
+      return searchOMIM(searchOptions);
+    case "ensembl":
+      return searchEnsembl(searchOptions);
+    case "reactome":
+      return searchReactome(searchOptions);
     default:
       throw new Error(`Unsupported gene research provider: ${provider}`);
   }
@@ -485,6 +669,113 @@ function parseKEGGResults(data: string, geneSymbol?: string, organism?: string):
   return sources;
 }
 
+function parseSTRINGResults(data: string, geneSymbol?: string, organism?: string): GeneSource[] {
+  // Parse STRING TSV results and extract protein interaction information
+  const sources: GeneSource[] = [];
+  const lines = data.split('\n').filter(line => line.trim());
+  
+  // Skip header line
+  for (let i = 1; i < lines.length; i++) {
+    const columns = lines[i].split('\t');
+    if (columns.length >= 2) {
+      sources.push({
+        title: `Protein Interaction: ${columns[0]} - ${columns[1]}`,
+        content: `Interaction between ${columns[0]} and ${columns[1]}
+Confidence: ${columns[2] || 'Unknown'}
+Database: STRING`,
+        url: `https://string-db.org/cgi/network?identifiers=${columns[0]}`,
+        database: 'string',
+        geneSymbol: geneSymbol,
+        organism: organism,
+        confidence: parseFloat(columns[2]) || 0.5,
+        evidence: ['interaction'],
+        type: 'interaction' as const
+      });
+    }
+  }
+  
+  return sources;
+}
+
+function parseOMIMResults(data: any, geneSymbol?: string, organism?: string): GeneSource[] {
+  // Parse OMIM results and extract disease association information
+  const sources: GeneSource[] = [];
+  
+  if (data.omim && data.omim.entryList) {
+    data.omim.entryList.forEach((entry: any) => {
+      sources.push({
+        title: `${entry.entry.titles.preferredTitle} (${entry.entry.mimNumber})`,
+        content: `Gene: ${entry.entry.geneMap?.geneSymbols?.geneSymbol || 'Unknown'}
+Phenotype: ${entry.entry.titles.preferredTitle}
+MIM Number: ${entry.entry.mimNumber}
+Inheritance: ${entry.entry.geneMap?.phenotypeMapList?.[0]?.phenotypeMap?.phenotypeInheritance || 'Unknown'}`,
+        url: `https://omim.org/entry/${entry.entry.mimNumber}`,
+        database: 'omim',
+        geneSymbol: geneSymbol,
+        organism: organism,
+        confidence: 0.9,
+        evidence: ['disease'],
+        type: 'disease' as const
+      });
+    });
+  }
+  
+  return sources;
+}
+
+function parseEnsemblResults(data: any, geneSymbol?: string, organism?: string): GeneSource[] {
+  // Parse Ensembl results and extract gene annotation information
+  const sources: GeneSource[] = [];
+  
+  if (data.id) {
+    sources.push({
+      title: `${data.display_name || data.id} (${data.biotype})`,
+      content: `Gene ID: ${data.id}
+Display Name: ${data.display_name || 'Unknown'}
+Biotype: ${data.biotype || 'Unknown'}
+Description: ${data.description || 'Unknown'}
+Chromosome: ${data.seq_region_name || 'Unknown'}
+Start: ${data.start || 'Unknown'}
+End: ${data.end || 'Unknown'}`,
+      url: `https://www.ensembl.org/Gene/Summary?g=${data.id}`,
+      database: 'ensembl',
+      geneSymbol: geneSymbol,
+      organism: organism,
+      confidence: 0.95,
+      evidence: ['annotation'],
+      type: 'protein' as const
+    });
+  }
+  
+  return sources;
+}
+
+function parseReactomeResults(data: any, geneSymbol?: string, organism?: string): GeneSource[] {
+  // Parse Reactome results and extract pathway information
+  const sources: GeneSource[] = [];
+  
+  if (data.results) {
+    data.results.forEach((result: any) => {
+      sources.push({
+        title: `${result.name} (${result.stId})`,
+        content: `Pathway: ${result.name}
+Reactome ID: ${result.stId}
+Species: ${result.species?.[0]?.displayName || 'Unknown'}
+Description: ${result.summary || 'Unknown'}`,
+        url: `https://reactome.org/content/detail/${result.stId}`,
+        database: 'reactome',
+        geneSymbol: geneSymbol,
+        organism: organism,
+        confidence: 0.85,
+        evidence: ['pathway'],
+        type: 'pathway' as const
+      });
+    });
+  }
+  
+  return sources;
+}
+
 function calculateQualityScore(sources: GeneSource[]): number {
   if (sources.length === 0) return 0;
   
@@ -507,6 +798,27 @@ function calculateQualityScore(sources: GeneSource[]): number {
         break;
       case 'pdb':
         score += 0.1; // Structural data is valuable
+        break;
+      case 'string':
+        score += 0.08; // Protein interactions are valuable
+        break;
+      case 'omim':
+        score += 0.12; // Disease associations are highly reliable
+        break;
+      case 'ensembl':
+        score += 0.1; // Gene annotations are reliable
+        break;
+      case 'reactome':
+        score += 0.09; // Pathway data is valuable
+        break;
+      case 'kegg':
+        score += 0.08; // Pathway data is valuable
+        break;
+      case 'geo':
+        score += 0.07; // Expression data is valuable
+        break;
+      case 'ncbi_gene':
+        score += 0.1; // Gene information is reliable
         break;
     }
     
