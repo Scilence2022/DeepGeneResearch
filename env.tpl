@@ -68,6 +68,11 @@ POLLINATIONS_API_BASE_URL=
 # (Optional) Server-side Ollama API Proxy URL. Default, `http://0.0.0.0:11434`
 OLLAMA_API_BASE_URL=
 
+# (Optional) Server-side SiliconFlow API Key (Required for server API calls)
+SILICONFLOW_API_KEY=
+# (Optional) Server-side SiliconFlow API Proxy URL. Default, `https://api.siliconflow.cn/v1`
+SILICONFLOW_API_BASE_URL=
+
 # (Optional) Server-side Tavily API Key (Required for server API calls)
 TAVILY_API_KEY=
 # (Optional) Server-side Tavily API Proxy URL. Default, `https://api.tavily.com`
@@ -92,7 +97,7 @@ BOCHA_API_BASE_URL=
 SEARXNG_API_BASE_URL=
 
 # (Optional) MCP Server AI provider
-# Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
+# Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama, siliconflow
 MCP_AI_PROVIDER=
 # (Optional) MCP Server search provider. Default, `model`
 # Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng
@@ -103,7 +108,7 @@ MCP_THINKING_MODEL=
 MCP_TASK_MODEL=
 
 # (Optional) Disable server-side AI provider usage permissions
-# Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama
+# Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama, siliconflow
 NEXT_PUBLIC_DISABLED_AI_PROVIDER=
 # (Optional) Disable server-side search provider usage permissions
 # Possible values ​​include: model, tavily, firecrawl, exa, bocha, searxng

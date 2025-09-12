@@ -69,7 +69,11 @@ export class GeneResearchEngine {
     this.apiIntegrations = createGeneAPIIntegrations(config.geneSymbol, config.organism);
   }
 
-  async conductResearch(): Promise<GeneResearchResult> {
+  async conductResearch(aiProvider?: any, searchProvider?: any, options?: {
+    language?: string;
+    enableCitationImage?: boolean;
+    enableReferences?: boolean;
+  }): Promise<GeneResearchResult> {
     const startTime = Date.now();
     
     try {
@@ -529,6 +533,21 @@ export const GENE_RESEARCH_PRESETS = {
     searchProviders: ['pubmed', 'uniprot']
   }
 };
+
+// Main gene research function for MCP Server
+export async function conductGeneResearch(
+  config: GeneResearchConfig,
+  aiProvider: any,
+  searchProvider: any,
+  options: {
+    language?: string;
+    enableCitationImage?: boolean;
+    enableReferences?: boolean;
+  } = {}
+): Promise<GeneResearchResult> {
+  const engine = new GeneResearchEngine(config);
+  return await engine.conductResearch(aiProvider, searchProvider, options);
+}
 
 // Export all gene research utilities
 export * from './query-generator';

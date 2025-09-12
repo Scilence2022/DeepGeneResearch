@@ -57,8 +57,6 @@ function initDeepResearchServer({
 }
 
 export function initMcpServer() {
-  const deepResearchToolDescription =
-    "Start deep research on any question, obtain and organize information through search engines, and generate research report.";
   const geneResearchToolDescription =
     "Conduct specialized gene function research with custom user prompts and research guidelines.";
   const writeResearchPlanDescription =
@@ -78,9 +76,6 @@ export function initMcpServer() {
     {
       capabilities: {
         tools: {
-          "deep-research": {
-            description: deepResearchToolDescription,
-          },
           "gene-research": {
             description: geneResearchToolDescription,
           },
@@ -101,80 +96,6 @@ export function initMcpServer() {
     }
   );
 
-  server.tool(
-    "deep-research",
-    deepResearchToolDescription,
-    {
-      query: z.string().describe("The topic for deep research."),
-      language: z
-        .string()
-        .optional()
-        .describe("The final report text language."),
-      maxResult: z
-        .number()
-        .optional()
-        .default(5)
-        .describe("Maximum number of search results."),
-      enableCitationImage: z
-        .boolean()
-        .default(true)
-        .optional()
-        .describe(
-          "Whether to include content-related images in the final report."
-        ),
-      enableReferences: z
-        .boolean()
-        .default(true)
-        .optional()
-        .describe(
-          "Whether to include citation links in search results and final reports."
-        ),
-    },
-    async (
-      { query, language, maxResult, enableCitationImage, enableReferences },
-      { signal }
-    ) => {
-      signal.addEventListener("abort", () => {
-        throw new Error("The client closed unexpectedly!");
-      });
-
-      try {
-        const deepResearch = initDeepResearchServer({
-          language,
-          maxResult,
-        });
-        
-        // 创建超时 Promise
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`Deep research timeout after ${MCP_TIMEOUT / 1000} seconds`));
-          }, MCP_TIMEOUT);
-        });
-
-        // 使用 Promise.race 实现超时控制
-        const result = await Promise.race([
-          deepResearch.start(query, enableCitationImage, enableReferences),
-          timeoutPromise
-        ]);
-
-        return {
-          content: [{ type: "text", text: JSON.stringify(result) }],
-        };
-      } catch (error) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error: ${
-                error instanceof Error ? error.message : "Unknown error"
-              }`,
-            },
-          ],
-        };
-      }
-    }
-  );
 
   server.tool(
     "gene-research",

@@ -23,6 +23,8 @@ const POLLINATIONS_API_BASE_URL =
   "https://text.pollinations.ai/openai";
 const OLLAMA_API_BASE_URL =
   process.env.OLLAMA_API_BASE_URL || "http://0.0.0.0:11434";
+const SILICONFLOW_API_BASE_URL =
+  process.env.SILICONFLOW_API_BASE_URL || "https://api.siliconflow.cn/v1";
 // Search provider API base url
 const TAVILY_API_BASE_URL =
   process.env.TAVILY_API_BASE_URL || "https://api.tavily.com";
@@ -44,6 +46,7 @@ const XAI_API_KEY = process.env.XAI_API_KEY || "";
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || "";
 const AZURE_API_KEY = process.env.AZURE_API_KEY || "";
 const OPENAI_COMPATIBLE_API_KEY = process.env.OPENAI_COMPATIBLE_API_KEY || "";
+const SILICONFLOW_API_KEY = process.env.SILICONFLOW_API_KEY || "";
 const GOOGLE_VERTEX_API_BASE_URL = `https://${process.env.GOOGLE_VERTEX_LOCATION}-aiplatform.googleapis.com/v1/projects/${process.env.GOOGLE_VERTEX_PROJECT}/locations/${process.env.GOOGLE_VERTEX_LOCATION}/publishers/google`;
 // Search provider API key
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY || "";
@@ -75,6 +78,8 @@ export function getAIProviderBaseURL(provider: string) {
       return completePath(POLLINATIONS_API_BASE_URL, "/v1");
     case "ollama":
       return completePath(OLLAMA_API_BASE_URL, "/api");
+    case "siliconflow":
+      return completePath(SILICONFLOW_API_BASE_URL);
     case "google-vertex":
       return completePath(GOOGLE_VERTEX_API_BASE_URL);
     default:
@@ -102,6 +107,8 @@ export function getAIProviderApiKey(provider: string) {
       return OPENROUTER_API_KEY;
     case "openaicompatible":
       return OPENAI_COMPATIBLE_API_KEY;
+    case "siliconflow":
+      return SILICONFLOW_API_KEY;
     case "google-vertex":
     case "pollinations":
     case "ollama":
