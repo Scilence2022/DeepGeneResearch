@@ -14,6 +14,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import ResourceList from "@/components/Knowledge/ResourceList";
 import Crawler from "@/components/Knowledge/Crawler";
+import GeneResearch from "@/components/Research/GeneResearch";
 import { Button } from "@/components/Internal/Button";
 import {
   Form,
@@ -56,6 +57,7 @@ function Topic() {
   } = useAccurateTimer();
   const [isThinking, setIsThinking] = useState<boolean>(false);
   const [openCrawler, setOpenCrawler] = useState<boolean>(false);
+  const [researchMode, setResearchMode] = useState<"general" | "gene">("general");
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -86,6 +88,40 @@ function Topic() {
           form.setValue("topic", values.topic);
         }
         setQuestion(values.topic);
+        await askQuestions();
+      } finally {
+        setIsThinking(false);
+        accurateTimerStop();
+      }
+    }
+  }
+
+  async function handleGeneResearch(config: any) {
+    if (handleCheck()) {
+      const { id, setQuestion } = useTaskStore.getState();
+      try {
+        setIsThinking(true);
+        accurateTimerStart();
+        
+        // Create a gene research query
+        let query = `Gene research: ${config.geneSymbol} in ${config.organism}`;
+        if (config.researchFocus !== 'general') {
+          query += ` - Focus: ${config.researchFocus}`;
+        }
+        if (config.specificAspects.length > 0) {
+          query += ` - Aspects: ${config.specificAspects.join(', ')}`;
+        }
+        if (config.diseaseContext) {
+          query += ` - Disease: ${config.diseaseContext}`;
+        }
+        if (config.experimentalApproach) {
+          query += ` - Method: ${config.experimentalApproach}`;
+        }
+        
+        if (id !== "") {
+          createNewResearch();
+        }
+        setQuestion(query);
         await askQuestions();
       } finally {
         setIsThinking(false);
@@ -140,26 +176,50 @@ function Topic() {
           </Button>
         </div>
       </div>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(handleSubmit)}>
-          <FormField
-            control={form.control}
-            name="topic"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="mb-2 text-base font-semibold">
-                  {t("research.topic.topicLabel")}
-                </FormLabel>
-                <FormControl>
-                  <Textarea
-                    rows={3}
-                    placeholder={t("research.topic.topicPlaceholder")}
-                    {...field}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
+      
+      {/* Research Mode Selector */}
+      <div className="flex gap-2 mb-4">
+        <Button
+          variant={researchMode === "general" ? "default" : "outline"}
+          onClick={() => setResearchMode("general")}
+          size="sm"
+        >
+          General Research
+        </Button>
+        <Button
+          variant={researchMode === "gene" ? "default" : "outline"}
+          onClick={() => setResearchMode("gene")}
+          size="sm"
+        >
+          Gene Research
+        </Button>
+      </div>
+      {researchMode === "gene" ? (
+        <GeneResearch
+          onStartResearch={handleGeneResearch}
+          isResearching={isThinking}
+        />
+      ) : (
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)}>
+            <FormField
+              control={form.control}
+              name="topic"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="mb-2 text-base font-semibold">
+                    {t("research.topic.topicLabel")}
+                  </FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={3}
+                      placeholder={t("research.topic.topicPlaceholder")}
+                      {...field}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
           <FormItem className="mt-2">
             <FormLabel className="mb-2 text-base font-semibold">
               {t("knowledge.localResourceTitle")}
@@ -219,6 +279,7 @@ function Topic() {
           </Button>
         </form>
       </Form>
+      )}
       <input
         ref={fileInputRef}
         type="file"

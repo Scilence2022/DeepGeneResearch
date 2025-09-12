@@ -10,11 +10,19 @@ import {
   processSearchResultPrompt,
   writeFinalReportPrompt,
   getSERPQuerySchema,
+  getGeneResearchSystemPrompt,
+  writeGeneReportPlanPrompt,
+  generateGeneSerpQueriesPrompt,
+  processGeneSearchResultPrompt,
+  writeGeneFinalReportPrompt,
+  generateGeneKnowledgeGraphPrompt,
+  isGeneResearchQuery,
 } from "./prompts";
 import { outputGuidelinesPrompt } from "@/constants/prompts";
 import { isNetworkingModel } from "@/utils/model";
 import { ThinkTagStreamProcessor, removeJsonMarkdown } from "@/utils/text";
 import { pick, unique, flat, isFunction } from "radash";
+import { createGeneResearchEngine, GENE_RESEARCH_PRESETS } from "@/utils/gene-research";
 
 export interface DeepResearchOptions {
   AIProvider: {
@@ -478,6 +486,11 @@ class DeepResearch {
     enableReferences = true
   ) {
     try {
+      // Check if this is a gene research query
+      if (isGeneResearchQuery(query)) {
+        return await this.conductGeneResearch(query, enableCitationImage, enableReferences);
+      }
+
       const reportPlan = await this.writeReportPlan(query);
       const tasks = await this.generateSERPQuery(reportPlan);
       const results = await this.runSearchTask(tasks, enableReferences);
@@ -493,6 +506,120 @@ class DeepResearch {
       this.onMessage("error", { message: errorMessage });
       throw new Error(errorMessage);
     }
+  }
+
+  // Gene research specific method
+  async conductGeneResearch(
+    query: string,
+    enableCitationImage = true,
+    enableReferences = true
+  ) {
+    try {
+      this.onMessage("progress", { step: "gene-research", status: "start" });
+      
+      // Extract gene information from query
+      const geneInfo = this.extractGeneInfo(query);
+      
+      // Create gene research engine
+      const geneEngine = createGeneResearchEngine({
+        geneSymbol: geneInfo.geneSymbol,
+        organism: geneInfo.organism,
+        researchFocus: geneInfo.researchFocus,
+        specificAspects: geneInfo.specificAspects,
+        diseaseContext: geneInfo.diseaseContext,
+        experimentalApproach: geneInfo.experimentalApproach,
+        targetAudience: 'researchers',
+        reportType: 'comprehensive',
+        enableAPIIntegration: true,
+        enableQualityControl: true,
+        enableVisualization: true,
+        maxSearchResults: 20,
+        searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string']
+      });
+
+      this.onMessage("progress", { step: "gene-research", status: "processing" });
+      
+      // Conduct gene research
+      const result = await geneEngine.conductResearch();
+
+      this.onMessage("progress", { step: "gene-research", status: "end" });
+
+      // Convert gene research result to standard format
+      const sources = result.workflow.literatureReview.map(ref => ({
+        title: ref.title,
+        url: `https://pubmed.ncbi.nlm.nih.gov/${ref.pmid}/`,
+        content: ref.abstract,
+        database: 'pubmed'
+      }));
+
+      const images = result.visualizations.map(viz => ({
+        url: `data:image/svg+xml;base64,${Buffer.from(viz.content).toString('base64')}`,
+        description: viz.title
+      }));
+
+      const finalReport = result.report.title + '\n\n' + result.report.sections.map((s: any) => s.content).join('\n\n');
+
+      return {
+        title: result.report.title,
+        finalReport,
+        learnings: result.workflow.literatureReview.map(ref => ref.abstract),
+        sources,
+        images,
+        geneResearch: {
+          qualityMetrics: result.qualityMetrics,
+          visualizations: result.visualizations,
+          workflow: result.workflow
+        }
+      };
+    } catch (err) {
+      this.onMessage("error", {
+        message: err instanceof Error ? err.message : "Gene research error",
+      });
+      throw err;
+    }
+  }
+
+  // Extract gene information from query
+  extractGeneInfo(query: string): {
+    geneSymbol: string;
+    organism: string;
+    researchFocus?: string;
+    specificAspects?: string[];
+    diseaseContext?: string;
+    experimentalApproach?: string;
+  } {
+    // Simple extraction - in production, use more sophisticated NLP
+    const geneMatch = query.match(/([A-Z][A-Za-z0-9]+)/);
+    const organismMatch = query.match(/(Homo sapiens|Mus musculus|Rattus norvegicus|Drosophila melanogaster|Caenorhabditis elegans|Saccharomyces cerevisiae|Escherichia coli|Arabidopsis thaliana|Danio rerio|Xenopus laevis)/i);
+    
+    const geneSymbol = geneMatch ? geneMatch[1] : 'Unknown';
+    const organism = organismMatch ? organismMatch[1] : 'Homo sapiens';
+    
+    // Extract research focus
+    let researchFocus = 'general';
+    if (query.toLowerCase().includes('disease') || query.toLowerCase().includes('clinical')) {
+      researchFocus = 'disease';
+    } else if (query.toLowerCase().includes('structure') || query.toLowerCase().includes('protein')) {
+      researchFocus = 'structure';
+    } else if (query.toLowerCase().includes('expression') || query.toLowerCase().includes('regulation')) {
+      researchFocus = 'expression';
+    }
+    
+    // Extract specific aspects
+    const specificAspects: string[] = [];
+    if (query.toLowerCase().includes('mutation')) specificAspects.push('mutation');
+    if (query.toLowerCase().includes('interaction')) specificAspects.push('interaction');
+    if (query.toLowerCase().includes('pathway')) specificAspects.push('pathway');
+    if (query.toLowerCase().includes('evolution')) specificAspects.push('evolution');
+    
+    return {
+      geneSymbol,
+      organism,
+      researchFocus,
+      specificAspects: specificAspects.length > 0 ? specificAspects : undefined,
+      diseaseContext: query.toLowerCase().includes('disease') ? 'general' : undefined,
+      experimentalApproach: query.toLowerCase().includes('experimental') ? 'experimental' : undefined
+    };
   }
 }
 

@@ -3,8 +3,6 @@
 
 ![GitHub deployments](https://img.shields.io/github/deployments/u14app/gemini-next-chat/Production)
 ![GitHub Release](https://img.shields.io/github/v/release/u14app/deep-research)
-![Docker Image Size](https://img.shields.io/docker/image-size/xiangfa/deep-research/latest)
-![Docker Pulls](https://img.shields.io/docker/pulls/xiangfa/deep-research)
 [![License: MIT](https://img.shields.io/badge/License-MIT-default.svg)](https://opensource.org/licenses/MIT)
 
 [![Gemini](https://img.shields.io/badge/Gemini-8E75B2?style=flat&logo=googlegemini&logoColor=white)](https://ai.google.dev/)
@@ -133,56 +131,6 @@ Custom model lists use `,` to separate multiple models. If you want to disable a
 
 Currently the project supports deployment to Cloudflare, but you need to follow [How to deploy to Cloudflare Pages](./docs/How-to-deploy-to-Cloudflare-Pages.md) to do it.
 
-### Docker
-
-> The Docker version needs to be 20 or above, otherwise it will prompt that the image cannot be found.
-
-> ⚠️ Note: Most of the time, the docker version will lag behind the latest version by 1 to 2 days, so the "update exists" prompt will continue to appear after deployment, which is normal.
-
-```bash
-docker pull xiangfa/deep-research:latest
-docker run -d --name deep-research -p 3333:3000 xiangfa/deep-research
-```
-
-You can also specify additional environment variables:
-
-```bash
-docker run -d --name deep-research \
-   -p 3333:3000 \
-   -e ACCESS_PASSWORD=your-password \
-   -e GOOGLE_GENERATIVE_AI_API_KEY=AIzaSy... \
-   xiangfa/deep-research
-```
-
-or build your own docker image:
-
-```bash
-docker build -t deep-research .
-docker run -d --name deep-research -p 3333:3000 deep-research
-```
-
-If you need to specify other environment variables, please add `-e key=value` to the above command to specify it.
-
-Deploy using `docker-compose.yml`:
-
-```bash
-version: '3.9'
-services:
-   deep-research:
-      image: xiangfa/deep-research
-      container_name: deep-research
-      environment:
-         - ACCESS_PASSWORD=your-password
-         - GOOGLE_GENERATIVE_AI_API_KEY=AIzaSy...
-      ports:
-         - 3333:3000
-```
-
-or build your own docker compose:
-
-```bash
-docker compose -f docker-compose.yml build
-```
 
 ### Static Deployment
 
