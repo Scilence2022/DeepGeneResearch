@@ -214,44 +214,163 @@ NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
 
 ```mermaid
 flowchart TB
-    A[Gene Input] --> B[Research Focus Selection]
-    B --> C[AI Analysis & Planning]
-    C --> D[Database Queries]
-    D --> E[Literature Search]
-    E --> F[Data Integration]
-    F --> G[Report Generation]
-    G --> H[Knowledge Graph]
-    H --> I[Final Report]
+    %% User Input Phase
+    A[🧬 Gene Input] --> B[🎯 Research Focus Selection]
+    B --> C[📋 Additional Parameters]
+    C --> D[📁 Local Resources Upload]
     
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-    style C fill:#fff3e0
-    style D fill:#e8f5e8
-    style E fill:#fff8e1
-    style F fill:#fce4ec
-    style G fill:#e0f2f1
-    style H fill:#f1f8e9
-    style I fill:#e8eaf6
+    %% AI Analysis Phase
+    D --> E[🤖 AI Analysis & Planning]
+    E --> F[❓ System Questions Generation]
+    F --> G[👤 User Feedback & Questions]
+    G --> H[📝 Research Plan Generation]
+    
+    %% Search Phase
+    H --> I[🔍 Multi-Database Search]
+    I --> J[📊 Search Results Analysis]
+    J --> K[👤 User Review & Refinement]
+    K --> L{🔄 More Research Needed?}
+    
+    %% Iteration Loop
+    L -->|Yes| M[💡 Research Suggestions]
+    M --> N[👤 User Feedback on Suggestions]
+    N --> O[🔍 Additional Database Queries]
+    O --> P[📊 New Results Integration]
+    P --> Q[👤 User Review & Refinement]
+    Q --> L
+    
+    %% Final Phase
+    L -->|No| R[📝 Report Writing Request]
+    R --> S[👤 User Writing Instructions]
+    S --> T[📄 Final Report Generation]
+    T --> U[🕸️ Knowledge Graph Creation]
+    U --> V[👤 User Review & Editing]
+    V --> W[📋 Final Report Output]
+    
+    %% User Interaction Styling
+    style A fill:#e1f5fe,stroke:#01579b,stroke-width:3px
+    style B fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
+    style C fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
+    style D fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
+    style G fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style K fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style M fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style N fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style Q fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style R fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style S fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style V fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    
+    %% AI Processing Styling
+    style E fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style F fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style H fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style I fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style J fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style O fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style P fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style T fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style U fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    
+    %% Decision and Output Styling
+    style L fill:#c8d6e5,stroke:#37474f,stroke-width:2px
+    style W fill:#e8eaf6,stroke:#3f51b5,stroke-width:3px
 ```
 
-### **Research Process**
+### **Interactive Research Process**
 
-1. **Input**: Gene symbol, organism, research focus
-2. **Analysis**: AI analyzes research requirements and selects optimal databases
-3. **Planning**: Generates comprehensive research plan across 10+ databases
-4. **Multi-Database Search**: Simultaneously queries:
-   - Literature databases (PubMed, Google Scholar)
-   - Protein databases (UniProt, NCBI Gene, Ensembl)
-   - Expression databases (GEO)
-   - Structure databases (PDB)
-   - Pathway databases (KEGG, Reactome)
-   - Interaction databases (STRING)
-   - Disease databases (OMIM)
-5. **Data Integration**: Combines and cross-references data from all sources
-6. **Quality Assessment**: Applies database-specific quality scoring
-7. **Synthesis**: AI synthesizes findings into coherent, evidence-based report
-8. **Visualization**: Generates knowledge graphs, pathway diagrams, and interaction networks
-9. **Output**: Delivers comprehensive research report with full citations
+#### **Phase 1: Initial Configuration & Input** 👤
+1. **Gene Input**: User enters gene symbol, organism, and research focus
+2. **Research Focus Selection**: User selects from 7 specialized research areas:
+   - General Gene Function, Disease Association, Protein Structure
+   - Expression Analysis, Protein Interactions, Evolutionary Analysis, Therapeutic Potential
+3. **Additional Parameters**: User specifies:
+   - Specific aspects (mutations, interactions, pathways, evolution, regulation, expression, structure, function)
+   - Disease context (if applicable)
+   - Experimental approach preferences
+4. **Local Resources Upload**: User can upload:
+   - PDF documents, Office files, text files
+   - Web content via crawler
+   - Previous research materials
+
+#### **Phase 2: AI Analysis & Planning** 🤖
+5. **AI Analysis**: System analyzes research requirements and selects optimal databases
+6. **System Questions Generation**: AI generates targeted questions to clarify research scope
+7. **User Feedback & Questions**: User provides:
+   - Answers to system questions
+   - Additional research requirements
+   - Specific areas of interest
+   - Research constraints or preferences
+8. **Research Plan Generation**: AI creates comprehensive research plan across 10+ databases
+
+#### **Phase 3: Multi-Database Search & Analysis** 🔍
+9. **Multi-Database Search**: Simultaneously queries:
+   - **Literature**: PubMed, Google Scholar
+   - **Protein Data**: UniProt, NCBI Gene, Ensembl
+   - **Expression**: GEO (Gene Expression Omnibus)
+   - **Structure**: PDB (Protein Data Bank)
+   - **Pathways**: KEGG, Reactome
+   - **Interactions**: STRING (Protein-Protein Interactions)
+   - **Diseases**: OMIM (Online Mendelian Inheritance in Man)
+10. **Search Results Analysis**: AI analyzes and categorizes results by relevance and quality
+11. **User Review & Refinement**: User can:
+    - Review search results and sources
+    - Add specific search queries
+    - Refine research focus based on initial findings
+    - Provide feedback on result quality
+
+#### **Phase 4: Iterative Research Refinement** 🔄
+12. **Research Assessment**: System determines if additional research is needed
+13. **Research Suggestions**: AI proposes:
+    - Additional search directions
+    - Specific database queries
+    - Research gaps to address
+    - Alternative approaches
+14. **User Feedback on Suggestions**: User can:
+    - Accept or modify suggestions
+    - Request specific additional searches
+    - Provide feedback on research direction
+    - Add new research parameters
+15. **Additional Database Queries**: System executes refined searches
+16. **New Results Integration**: AI integrates new findings with existing data
+17. **User Review & Refinement**: User reviews updated results and provides feedback
+18. **Iteration Decision**: Process repeats until user is satisfied with research depth
+
+#### **Phase 5: Report Generation & Finalization** 📄
+19. **Report Writing Request**: User can specify:
+    - Report structure preferences
+    - Target audience (researchers, clinicians, students)
+    - Specific sections to emphasize
+    - Length and detail level
+20. **User Writing Instructions**: User provides:
+    - Writing style preferences
+    - Specific requirements
+    - Additional context or constraints
+21. **Final Report Generation**: AI synthesizes all findings into comprehensive report
+22. **Knowledge Graph Creation**: System generates:
+    - Interactive knowledge graphs
+    - Pathway diagrams
+    - Protein interaction networks
+    - Expression heatmaps
+23. **User Review & Editing**: User can:
+    - Review and edit the final report
+    - Modify knowledge graphs
+    - Add or remove sections
+    - Adjust visualizations
+24. **Final Report Output**: Delivers comprehensive research report with:
+    - Full citations and references
+    - Interactive visualizations
+    - Downloadable formats (PDF, Markdown)
+    - Knowledge graph exports
+
+### **Key Interactive Features** 🎯
+
+- **Real-time Feedback**: Users can provide input at every stage
+- **Iterative Refinement**: Research can be refined based on findings
+- **Quality Control**: Users can review and validate results
+- **Customization**: Research can be tailored to specific needs
+- **Collaboration**: Multiple users can contribute to research
+- **History Tracking**: All research iterations are saved and accessible
 
 ## 🚢 **Deployment Options**
 
