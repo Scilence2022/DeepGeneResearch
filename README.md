@@ -94,6 +94,7 @@ Traditional gene research requires extensive manual literature review, database 
   - OpenAI GPT-4, GPT-4o, GPT-3.5
   - Anthropic Claude 3.5 Sonnet
   - DeepSeek, Mistral, xAI Grok
+  - SiliconFlow (Kimi-K2-Instruct, DeepSeek-V3.1)
   - Azure OpenAI, OpenRouter
   - Ollama (local models)
   - And more...
@@ -207,6 +208,7 @@ NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
 | OpenAI | GPT-4o, GPT-4, GPT-3.5 | ❌ | High-quality analysis |
 | Anthropic | Claude 3.5 Sonnet | ❌ | Complex reasoning |
 | DeepSeek | DeepSeek-V2, DeepSeek-Coder | ✅ | Cost-effective research |
+| SiliconFlow | Kimi-K2-Instruct, DeepSeek-V3.1 | ❌ | MCP Server, specialized research |
 | Mistral | Mistral Large, Mistral 7B | ❌ | European data compliance |
 | xAI | Grok-2 | ❌ | Latest AI capabilities |
 
@@ -421,9 +423,21 @@ Real-time gene research with streaming responses:
 }
 ```
 
-#### **Model Context Protocol (MCP)**
+#### **Model Context Protocol (MCP) Server**
 
-Integrate with AI assistants:
+Deep Gene Research provides a comprehensive MCP Server for integration with AI assistants and external applications. The MCP Server offers specialized gene research tools powered by SiliconFlow AI models.
+
+##### **Available Tools**
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `gene-research` | Conduct specialized gene function research | geneSymbol, organism, researchFocus, userPrompt |
+| `write-research-plan` | Generate research plan based on query | query, language |
+| `generate-SERP-query` | Generate data collection tasks | plan, language |
+| `search-task` | Execute search queries | tasks, language, maxResult |
+| `write-final-report` | Generate final research report | plan, tasks, language |
+
+##### **MCP Server Configuration**
 
 ```json
 {
@@ -438,6 +452,97 @@ Integrate with AI assistants:
     }
   }
 }
+```
+
+##### **Gene Research Tool Usage**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "gene-research",
+    "arguments": {
+      "geneSymbol": "BRCA1",
+      "organism": "Homo sapiens",
+      "researchFocus": ["general", "disease"],
+      "userPrompt": "What is the function and clinical significance of BRCA1 in breast cancer?",
+      "language": "English",
+      "maxResult": 5,
+      "enableCitationImage": true,
+      "enableReferences": true
+    }
+  }
+}
+```
+
+##### **Supported AI Models**
+
+- **Thinking Model**: `Pro/moonshotai/Kimi-K2-Instruct-0905` (for complex reasoning)
+- **Task Model**: `Pro/deepseek-ai/DeepSeek-V3.1` (for high-quality output)
+- **Provider**: SiliconFlow (https://api.siliconflow.cn/v1)
+
+##### **Response Format**
+
+The MCP Server returns comprehensive gene research data including:
+
+- **Workflow Data**: Gene identification, functional analysis, protein info
+- **Quality Metrics**: Data completeness, literature coverage, experimental evidence
+- **Visualizations**: Mermaid diagrams for pathways, interactions, structures
+- **Research Report**: Structured sections with executive summary, molecular function, etc.
+
+##### **Example Response Structure**
+
+```json
+{
+  "result": {
+    "content": [{
+      "type": "text",
+      "text": "{\"workflow\": {...}, \"qualityMetrics\": {...}, \"visualizations\": [...], \"report\": {...}}"
+    }]
+  }
+}
+```
+
+##### **Integration Examples**
+
+**Claude Desktop Integration:**
+```json
+{
+  "mcpServers": {
+    "deep-gene-research": {
+      "url": "https://deep-gene-research.vercel.app/api/mcp",
+      "transportType": "streamable-http"
+    }
+  }
+}
+```
+
+**Custom Application Integration:**
+```typescript
+// Example TypeScript integration
+const response = await fetch('https://your-domain.com/api/mcp', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_ACCESS_PASSWORD'
+  },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: {
+      name: "gene-research",
+      arguments: {
+        geneSymbol: "TP53",
+        organism: "Homo sapiens",
+        researchFocus: ["general"],
+        userPrompt: "Analyze TP53 tumor suppressor function"
+      }
+    }
+  })
+});
 ```
 
 ### **Custom Model Configuration**
@@ -538,6 +643,164 @@ Each database is assigned a quality score based on:
 - **Caching**: Intelligent caching reduces API costs
 - **Rate Limiting**: Prevents API abuse
 - **Error Recovery**: Automatic retry mechanisms
+
+## 🔌 **MCP Server Integration Guide**
+
+### **Quick Start with Claude Desktop**
+
+1. **Download Claude Desktop** from [Anthropic's website](https://claude.ai/download)
+2. **Configure MCP Server** in Claude Desktop settings:
+   ```json
+   {
+     "mcpServers": {
+       "deep-gene-research": {
+         "url": "https://deep-gene-research.vercel.app/api/mcp",
+         "transportType": "streamable-http",
+         "timeout": 600
+       }
+     }
+   }
+   ```
+3. **Start Research**: Ask Claude to research any gene using the MCP tools
+
+### **Example Claude Prompts**
+
+```
+Research the BRCA1 gene in humans and provide a comprehensive analysis of its function in breast cancer.
+
+Analyze the lysC gene in E. coli and explain its role in lysine biosynthesis.
+
+What are the therapeutic implications of the TP53 gene in cancer treatment?
+```
+
+### **Advanced MCP Usage**
+
+#### **Custom Research Parameters**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "gene-research",
+    "arguments": {
+      "geneSymbol": "EGFR",
+      "organism": "Homo sapiens",
+      "researchFocus": ["disease", "therapeutic"],
+      "specificAspects": ["mutations", "pathways", "drugs"],
+      "diseaseContext": "lung cancer",
+      "experimentalApproach": "clinical trials",
+      "userPrompt": "Analyze EGFR mutations in lung cancer and current targeted therapies",
+      "language": "English",
+      "maxResult": 10,
+      "enableCitationImage": true,
+      "enableReferences": true
+    }
+  }
+}
+```
+
+#### **Research Plan Generation**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "write-research-plan",
+    "arguments": {
+      "query": "CRISPR gene editing applications in cancer therapy",
+      "language": "English"
+    }
+  }
+}
+```
+
+#### **Search Task Execution**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "search-task",
+    "arguments": {
+      "tasks": [
+        {
+          "query": "CRISPR Cas9 cancer therapy clinical trials",
+          "researchGoal": "Find recent clinical trial data"
+        },
+        {
+          "query": "CRISPR off-target effects safety",
+          "researchGoal": "Assess safety concerns"
+        }
+      ],
+      "language": "English",
+      "maxResult": 5,
+      "enableReferences": true
+    }
+  }
+}
+```
+
+### **MCP Server Features**
+
+#### **Real-time Streaming**
+- **SSE Support**: Server-Sent Events for real-time updates
+- **Progress Tracking**: Monitor research progress in real-time
+- **Error Handling**: Robust error recovery and reporting
+
+#### **Comprehensive Output**
+- **Structured Data**: JSON-formatted research results
+- **Visualizations**: Mermaid diagrams for pathways and interactions
+- **Quality Metrics**: Data completeness and confidence scores
+- **Citations**: Full reference tracking and DOI links
+
+#### **Multi-language Support**
+- **English**: Complete feature set
+- **中文**: Full Chinese localization
+- **Español**: Spanish language support
+- **Tiếng Việt**: Vietnamese language support
+
+### **Troubleshooting MCP Integration**
+
+#### **Common Issues**
+
+1. **Connection Timeout**
+   - Increase timeout value in configuration
+   - Check network connectivity
+   - Verify server URL is correct
+
+2. **Authentication Errors**
+   - Ensure ACCESS_PASSWORD is set correctly
+   - Check Authorization header format
+   - Verify API key permissions
+
+3. **Tool Not Found**
+   - Verify tool name spelling
+   - Check MCP Server is running
+   - Ensure tool is available in capabilities
+
+#### **Debug Mode**
+
+Enable debug logging for MCP Server:
+
+```bash
+DEBUG=mcp:* npm run dev
+```
+
+#### **Health Check**
+
+Test MCP Server connectivity:
+
+```bash
+curl -X POST https://your-domain.com/api/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}'
+```
 
 ## 🛠️ **Development**
 
