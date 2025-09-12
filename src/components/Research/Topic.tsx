@@ -71,15 +71,6 @@ function Topic() {
           query += `\n\nResearch Question:\n${userPrompt}`;
         }
         
-        // Add custom guidelines if provided
-        if (config.customGuidelines && config.customGuidelines.trim()) {
-          // Replace placeholders in custom guidelines
-          const customGuidelines = config.customGuidelines
-            .replace(/{geneSymbol}/g, config.geneSymbol)
-            .replace(/{organism}/g, config.organism);
-          query += `\n\nCustom Research Guidelines:\n${customGuidelines}`;
-        }
-        
         if (id !== "") {
           createNewResearch();
         }

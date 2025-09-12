@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import useKnowledge from "@/hooks/useKnowledge";
 import { useTaskStore } from "@/store/task";
-import { defaultGeneResearchPrompt } from "@/constants/gene-research-prompts";
 
 const DEFAULT_USER_PROMPT = "What is the function, structure, and biological role of the gene {geneSymbol} in {organism}? Include information about its pathway, regulation, cofactors, substrates, products, and any recent research findings.";
 
@@ -43,7 +42,6 @@ interface GeneResearchConfig {
   diseaseContext?: string;
   experimentalApproach?: string;
   userPrompt?: string;
-  customGuidelines?: string;
 }
 
 const formSchema = z.object({
@@ -54,7 +52,6 @@ const formSchema = z.object({
   diseaseContext: z.string().optional(),
   experimentalApproach: z.string().optional(),
   userPrompt: z.string().optional(),
-  customGuidelines: z.string().optional(),
 });
 
 const ORGANISMS = [
@@ -111,7 +108,6 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       diseaseContext: "",
       experimentalApproach: "",
       userPrompt: DEFAULT_USER_PROMPT,
-      customGuidelines: defaultGeneResearchPrompt,
     },
   });
 
@@ -156,8 +152,7 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       specificAspects: values.specificAspects || [],
       diseaseContext: values.diseaseContext?.trim() || undefined,
       experimentalApproach: values.experimentalApproach?.trim() || undefined,
-      userPrompt: values.userPrompt?.trim() || undefined,
-      customGuidelines: values.customGuidelines?.trim() || undefined
+      userPrompt: values.userPrompt?.trim() || undefined
     };
 
     onStartResearch(config);
@@ -310,27 +305,7 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
                   />
                 </FormControl>
                 <div className="text-sm text-muted-foreground">
-                  Define the specific research question you want to investigate. Use {`{geneSymbol}`} and {`{organism}`} as placeholders that will be automatically replaced.
-                </div>
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="customGuidelines"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Custom Research Guidelines (Optional)</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="Enter additional research guidelines and instructions..."
-                    className="min-h-[200px]"
-                    {...field}
-                  />
-                </FormControl>
-                <div className="text-sm text-muted-foreground">
-                  Define specific research guidelines, methodology, or additional instructions for the AI. These will be combined with your research question.
+                  Define the specific research question you want to investigate. Use {`{geneSymbol}`} and {`{organism}`} as placeholders that will be automatically replaced. The system will automatically apply comprehensive gene research guidelines from the built-in prompts.
                 </div>
               </FormItem>
             )}

@@ -23,7 +23,6 @@ export interface GeneResearchConfig {
   diseaseContext?: string;
   experimentalApproach?: string;
   userPrompt?: string;
-  customGuidelines?: string;
   targetAudience?: 'researchers' | 'clinicians' | 'students' | 'general';
   reportType?: 'comprehensive' | 'focused' | 'comparative';
   enableAPIIntegration?: boolean;
