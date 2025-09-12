@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { LoaderCircle, Dna, Microscope, FilePlus, BookText, Paperclip, Link } from "lucide-react";
 import ResourceList from "@/components/Knowledge/ResourceList";
 import Crawler from "@/components/Knowledge/Crawler";
+import Knowledge from "@/components/Knowledge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,8 @@ import {
 import useKnowledge from "@/hooks/useKnowledge";
 import { useTaskStore } from "@/store/task";
 import { defaultGeneResearchPrompt } from "@/constants/gene-research-prompts";
+
+const DEFAULT_USER_PROMPT = "What is the function, structure, and biological role of the gene {geneSymbol} in {organism}? Include information about its pathway, regulation, cofactors, substrates, products, and any recent research findings.";
 
 interface GeneResearchProps {
   onStartResearch: (config: GeneResearchConfig) => void;
@@ -39,7 +42,8 @@ interface GeneResearchConfig {
   specificAspects: string[];
   diseaseContext?: string;
   experimentalApproach?: string;
-  customPrompt?: string;
+  userPrompt?: string;
+  customGuidelines?: string;
 }
 
 const formSchema = z.object({
@@ -49,7 +53,8 @@ const formSchema = z.object({
   specificAspects: z.array(z.string()).optional(),
   diseaseContext: z.string().optional(),
   experimentalApproach: z.string().optional(),
-  customPrompt: z.string().optional(),
+  userPrompt: z.string().optional(),
+  customGuidelines: z.string().optional(),
 });
 
 const ORGANISMS = [
@@ -92,8 +97,9 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taskStore = useTaskStore();
-  const { openKnowledgeList } = useKnowledge();
   const [openCrawler, setOpenCrawler] = useState(false);
+  const [openKnowledge, setOpenKnowledge] = useState(false);
+  const { generateId } = useKnowledge();
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -104,7 +110,8 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       specificAspects: [],
       diseaseContext: "",
       experimentalApproach: "",
-      customPrompt: defaultGeneResearchPrompt,
+      userPrompt: DEFAULT_USER_PROMPT,
+      customGuidelines: defaultGeneResearchPrompt,
     },
   });
 
@@ -132,10 +139,11 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
     if (!files) return;
     Array.from(files).forEach((file) => {
       taskStore.addResource({
+        id: generateId("file", { fileMeta: { name: file.name, size: file.size, type: file.type, lastModified: file.lastModified } }),
         type: "file",
         name: file.name,
-        content: file,
         size: file.size,
+        status: "unprocessed",
       });
     });
   };
@@ -148,7 +156,8 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       specificAspects: values.specificAspects || [],
       diseaseContext: values.diseaseContext?.trim() || undefined,
       experimentalApproach: values.experimentalApproach?.trim() || undefined,
-      customPrompt: values.customPrompt?.trim() || undefined
+      userPrompt: values.userPrompt?.trim() || undefined,
+      customGuidelines: values.customGuidelines?.trim() || undefined
     };
 
     onStartResearch(config);
@@ -289,19 +298,39 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
 
           <FormField
             control={form.control}
-            name="customPrompt"
+            name="userPrompt"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Custom Research Prompt (Optional)</FormLabel>
+                <FormLabel>Research Question (Required)</FormLabel>
                 <FormControl>
                   <Textarea
-                    placeholder="Enter your custom gene function research prompt..."
+                    placeholder="Enter your specific research question about the gene..."
+                    className="min-h-[120px]"
+                    {...field}
+                  />
+                </FormControl>
+                <div className="text-sm text-muted-foreground">
+                  Define the specific research question you want to investigate. Use {`{geneSymbol}`} and {`{organism}`} as placeholders that will be automatically replaced.
+                </div>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="customGuidelines"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Custom Research Guidelines (Optional)</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Enter additional research guidelines and instructions..."
                     className="min-h-[200px]"
                     {...field}
                   />
                 </FormControl>
                 <div className="text-sm text-muted-foreground">
-                  Define specific research instructions for the AI. Leave empty to use the default comprehensive gene function analysis prompt.
+                  Define specific research guidelines, methodology, or additional instructions for the AI. These will be combined with your research question.
                 </div>
               </FormItem>
             )}
@@ -329,7 +358,7 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
                     </div>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => openKnowledgeList()}>
+                    <DropdownMenuItem onClick={() => setOpenKnowledge(true)}>
                       <BookText />
                       <span>{t("knowledge.knowledge")}</span>
                     </DropdownMenuItem>
@@ -384,6 +413,10 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       <Crawler
         open={openCrawler}
         onClose={() => setOpenCrawler(false)}
+      />
+      <Knowledge
+        open={openKnowledge}
+        onClose={() => setOpenKnowledge(false)}
       />
     </div>
   );

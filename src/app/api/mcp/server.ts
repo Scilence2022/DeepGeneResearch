@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { McpServer } from "@/libs/mcp-server/mcp";
 import DeepResearch from "@/utils/deep-research";
+import { conductGeneResearch } from "@/utils/gene-research";
 import { multiApiKeyPolling } from "@/utils/model";
 import {
   getAIProviderBaseURL,
@@ -58,6 +59,8 @@ function initDeepResearchServer({
 export function initMcpServer() {
   const deepResearchToolDescription =
     "Start deep research on any question, obtain and organize information through search engines, and generate research report.";
+  const geneResearchToolDescription =
+    "Conduct specialized gene function research with custom user prompts and research guidelines.";
   const writeResearchPlanDescription =
     "Generate research plan based on user query.";
   const generateSERPQueryDescription =
@@ -77,6 +80,9 @@ export function initMcpServer() {
         tools: {
           "deep-research": {
             description: deepResearchToolDescription,
+          },
+          "gene-research": {
+            description: geneResearchToolDescription,
           },
           "write-research-plan": {
             description: writeResearchPlanDescription,
@@ -148,6 +154,116 @@ export function initMcpServer() {
         // 使用 Promise.race 实现超时控制
         const result = await Promise.race([
           deepResearch.start(query, enableCitationImage, enableReferences),
+          timeoutPromise
+        ]);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "gene-research",
+    geneResearchToolDescription,
+    {
+      geneSymbol: z.string().describe("The gene symbol to research (e.g., 'lysC', 'BRCA1')."),
+      organism: z.string().describe("The organism name (e.g., 'Escherichia coli', 'Homo sapiens')."),
+      researchFocus: z.array(z.string()).optional().describe("Specific research focus areas."),
+      specificAspects: z.array(z.string()).optional().describe("Specific aspects to investigate."),
+      diseaseContext: z.string().optional().describe("Disease context for the research."),
+      experimentalApproach: z.string().optional().describe("Experimental approach or methodology."),
+      userPrompt: z.string().optional().describe("Custom user research question with {geneSymbol} and {organism} placeholders."),
+      customGuidelines: z.string().optional().describe("Custom research guidelines and instructions."),
+      language: z.string().optional().describe("The final report text language."),
+      maxResult: z.number().optional().default(5).describe("Maximum number of search results."),
+      enableCitationImage: z.boolean().default(true).optional().describe("Whether to include content-related images in the final report."),
+      enableReferences: z.boolean().default(true).optional().describe("Whether to include citation links in search results and final reports."),
+    },
+    async (
+      { 
+        geneSymbol, 
+        organism, 
+        researchFocus = [], 
+        specificAspects = [], 
+        diseaseContext, 
+        experimentalApproach, 
+        userPrompt, 
+        customGuidelines, 
+        language, 
+        maxResult, 
+        enableCitationImage, 
+        enableReferences 
+      },
+      { signal }
+    ) => {
+      signal.addEventListener("abort", () => {
+        throw new Error("The client closed unexpectedly!");
+      });
+
+      try {
+        // Create gene research configuration
+        const config = {
+          geneSymbol,
+          organism,
+          researchFocus,
+          specificAspects,
+          diseaseContext,
+          experimentalApproach,
+          userPrompt,
+          customGuidelines,
+          targetAudience: 'researchers' as const,
+          reportType: 'comprehensive' as const,
+          enableAPIIntegration: true,
+          enableQualityControl: true,
+          enableVisualization: true,
+          maxSearchResults: maxResult,
+        };
+
+        // Create AI provider configuration
+        const aiProvider = {
+          baseURL: getAIProviderBaseURL(AI_PROVIDER),
+          apiKey: multiApiKeyPolling(getAIProviderApiKey(AI_PROVIDER)),
+          provider: AI_PROVIDER,
+          thinkingModel: THINKING_MODEL,
+          taskModel: TASK_MODEL,
+        };
+
+        // Create search provider configuration
+        const searchProvider = {
+          baseURL: getSearchProviderBaseURL(SEARCH_PROVIDER),
+          apiKey: multiApiKeyPolling(getSearchProviderApiKey(SEARCH_PROVIDER)),
+          provider: SEARCH_PROVIDER,
+          maxResult,
+        };
+
+        // Create timeout promise
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`Gene research timeout after ${MCP_TIMEOUT / 1000} seconds`));
+          }, MCP_TIMEOUT);
+        });
+
+        // Conduct gene research with timeout control
+        const result = await Promise.race([
+          conductGeneResearch(config, aiProvider, searchProvider, {
+            language,
+            enableCitationImage,
+            enableReferences,
+          }),
           timeoutPromise
         ]);
 

@@ -62,13 +62,22 @@ function Topic() {
           query += ` - Method: ${config.experimentalApproach}`;
         }
         
-        // Add custom prompt if provided
-        if (config.customPrompt && config.customPrompt.trim()) {
-          // Replace placeholders in custom prompt
-          const customPrompt = config.customPrompt
+        // Add user prompt if provided
+        if (config.userPrompt && config.userPrompt.trim()) {
+          // Replace placeholders in user prompt
+          const userPrompt = config.userPrompt
             .replace(/{geneSymbol}/g, config.geneSymbol)
             .replace(/{organism}/g, config.organism);
-          query += `\n\nCustom Research Instructions:\n${customPrompt}`;
+          query += `\n\nResearch Question:\n${userPrompt}`;
+        }
+        
+        // Add custom guidelines if provided
+        if (config.customGuidelines && config.customGuidelines.trim()) {
+          // Replace placeholders in custom guidelines
+          const customGuidelines = config.customGuidelines
+            .replace(/{geneSymbol}/g, config.geneSymbol)
+            .replace(/{organism}/g, config.organism);
+          query += `\n\nCustom Research Guidelines:\n${customGuidelines}`;
         }
         
         if (id !== "") {
