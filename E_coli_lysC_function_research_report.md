@@ -1,4 +1,4 @@
-# Deep Research Report: E.coli lysC Function
+# Deep Gene Research Report: E.coli lysC Function
 
 ## Executive Summary
 
