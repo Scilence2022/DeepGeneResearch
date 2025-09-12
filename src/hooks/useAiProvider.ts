@@ -13,6 +13,7 @@ import {
   MISTRAL_BASE_URL,
   OLLAMA_BASE_URL,
   POLLINATIONS_BASE_URL,
+  SILICONFLOW_BASE_URL,
 } from "@/constants/urls";
 import { multiApiKeyPolling } from "@/utils/model";
 import { generateSignature } from "@/utils/signature";
@@ -146,6 +147,19 @@ function useModelProvider() {
           options.baseURL = location.origin + "/api/ai/azure";
         }
         break;
+      case "siliconflow":
+        const { siliconflowApiKey = "", siliconflowApiProxy } =
+          useSettingStore.getState();
+        if (mode === "local") {
+          options.baseURL = completePath(
+            siliconflowApiProxy || SILICONFLOW_BASE_URL,
+            ""
+          );
+          options.apiKey = multiApiKeyPolling(siliconflowApiKey);
+        } else {
+          options.baseURL = location.origin + "/api/ai/siliconflow";
+        }
+        break;
       case "openrouter":
         const { openRouterApiKey = "", openRouterApiProxy } =
           useSettingStore.getState();
@@ -262,6 +276,13 @@ function useModelProvider() {
           thinkingModel: azureThinkingModel,
           networkingModel: azureNetworkingModel,
         };
+      case "siliconflow":
+        const { siliconflowThinkingModel, siliconflowNetworkingModel } =
+          useSettingStore.getState();
+        return {
+          thinkingModel: siliconflowThinkingModel,
+          networkingModel: siliconflowNetworkingModel,
+        };
       case "openrouter":
         const { openRouterThinkingModel, openRouterNetworkingModel } =
           useSettingStore.getState();
@@ -326,6 +347,9 @@ function useModelProvider() {
       case "azure":
         const { azureApiKey } = useSettingStore.getState();
         return azureApiKey.length > 0;
+      case "siliconflow":
+        const { siliconflowApiKey } = useSettingStore.getState();
+        return siliconflowApiKey.length > 0;
       case "openrouter":
         const { openRouterApiKey } = useSettingStore.getState();
         return openRouterApiKey.length > 0;

@@ -61,6 +61,7 @@ import {
   MISTRAL_BASE_URL,
   POLLINATIONS_BASE_URL,
   OLLAMA_BASE_URL,
+  SILICONFLOW_BASE_URL,
   TAVILY_BASE_URL,
   FIRECRAWL_BASE_URL,
   EXA_BASE_URL,
@@ -76,6 +77,7 @@ import {
   filterOpenAIModelList,
   filterMistralModelList,
   filterPollinationsModelList,
+  filterSiliconFlowModelList,
   getCustomModelList,
 } from "@/utils/model";
 import { researchStore } from "@/utils/storage";
@@ -137,6 +139,10 @@ const formSchema = z.object({
   azureApiVersion: z.string().optional(),
   azureThinkingModel: z.string().optional(),
   azureNetworkingModel: z.string().optional(),
+  siliconflowApiKey: z.string().optional(),
+  siliconflowApiProxy: z.string().optional(),
+  siliconflowThinkingModel: z.string().optional(),
+  siliconflowNetworkingModel: z.string().optional(),
   openAICompatibleApiKey: z.string().optional(),
   openAICompatibleApiProxy: z.string().optional(),
   openAICompatibleThinkingModel: z.string().optional(),
@@ -235,6 +241,8 @@ function Setting({ open, onClose }: SettingProps) {
       return filterMistralModelList(modelList);
     } else if (provider === "pollinations") {
       return filterPollinationsModelList(modelList);
+    } else if (provider === "siliconflow") {
+      return filterSiliconFlowModelList(modelList);
     }
     return [[], modelList];
   }, [modelList]);
@@ -250,6 +258,8 @@ function Setting({ open, onClose }: SettingProps) {
       return filterMistralModelList(modelList);
     } else if (provider === "pollinations") {
       return filterPollinationsModelList(modelList);
+    } else if (provider === "siliconflow") {
+      return filterSiliconFlowModelList(modelList);
     }
     return [[], modelList];
   }, [modelList]);
@@ -495,6 +505,11 @@ function Setting({ open, onClose }: SettingProps) {
                             {!isDisabledAIProvider("azure") ? (
                               <SelectItem value="azure">
                                 Azure OpenAI (Beta)
+                              </SelectItem>
+                            ) : null}
+                            {!isDisabledAIProvider("siliconflow") ? (
+                              <SelectItem value="siliconflow">
+                                SiliconFlow
                               </SelectItem>
                             ) : null}
                             {!isDisabledAIProvider("google-vertex") ? (
@@ -1111,6 +1126,62 @@ function Setting({ open, onClose }: SettingProps) {
                                 updateSetting(
                                   "azureApiVersion",
                                   form.getValues("azureApiVersion")
+                                )
+                              }
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div
+                    className={cn("space-y-4", {
+                      hidden: provider !== "siliconflow",
+                    })}
+                  >
+                    <FormField
+                      control={form.control}
+                      name="siliconflowApiKey"
+                      render={({ field }) => (
+                        <FormItem className="from-item">
+                          <FormLabel className="from-label">
+                            {t("setting.apiKeyLabel")}
+                            <span className="ml-1 text-red-500 max-sm:hidden">
+                              *
+                            </span>
+                          </FormLabel>
+                          <FormControl className="form-field">
+                            <Password
+                              type="text"
+                              placeholder={t("setting.apiKeyPlaceholder")}
+                              {...field}
+                              onBlur={() =>
+                                updateSetting(
+                                  "siliconflowApiKey",
+                                  form.getValues("siliconflowApiKey")
+                                )
+                              }
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="siliconflowApiProxy"
+                      render={({ field }) => (
+                        <FormItem className="from-item">
+                          <FormLabel className="from-label">
+                            {t("setting.apiUrlLabel")}
+                          </FormLabel>
+                          <FormControl className="form-field">
+                            <Input
+                              placeholder={SILICONFLOW_BASE_URL}
+                              {...field}
+                              onBlur={() =>
+                                updateSetting(
+                                  "siliconflowApiProxy",
+                                  form.getValues("siliconflowApiProxy")
                                 )
                               }
                             />
@@ -2469,12 +2540,12 @@ function Setting({ open, onClose }: SettingProps) {
                 </div>
                 <div
                   className={cn("space-y-4", {
-                    hidden: provider !== "azure",
+                    hidden: provider !== "siliconflow",
                   })}
                 >
                   <FormField
                     control={form.control}
-                    name="azureThinkingModel"
+                    name="siliconflowThinkingModel"
                     render={({ field }) => (
                       <FormItem className="from-item">
                         <FormLabel className="from-label">
@@ -2498,7 +2569,7 @@ function Setting({ open, onClose }: SettingProps) {
                   />
                   <FormField
                     control={form.control}
-                    name="azureNetworkingModel"
+                    name="siliconflowNetworkingModel"
                     render={({ field }) => (
                       <FormItem className="from-item">
                         <FormLabel className="from-label">

@@ -126,6 +126,19 @@ export function filterMistralModelList(modelList: string[]) {
   return [recommendModelList, normalModelList];
 }
 
+export function filterSiliconFlowModelList(modelList: string[]) {
+  const thinkingModelList: string[] = [];
+  const nonThinkingModelList: string[] = [];
+  modelList.forEach((model) => {
+    if (model.includes("thinking") || model.includes("reasoning")) {
+      thinkingModelList.push(model);
+    } else {
+      nonThinkingModelList.push(model);
+    }
+  });
+  return [thinkingModelList, nonThinkingModelList];
+}
+
 export function getCustomModelList(customModelList: string[]) {
   const availableModelList: string[] = [];
   const disabledModelList: string[] = [];
