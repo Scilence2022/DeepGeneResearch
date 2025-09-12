@@ -22,6 +22,7 @@ export interface GeneResearchConfig {
   specificAspects?: string[];
   diseaseContext?: string;
   experimentalApproach?: string;
+  customPrompt?: string;
   targetAudience?: 'researchers' | 'clinicians' | 'students' | 'general';
   reportType?: 'comprehensive' | 'focused' | 'comparative';
   enableAPIIntegration?: boolean;

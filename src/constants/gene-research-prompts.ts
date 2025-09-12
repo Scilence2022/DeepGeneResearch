@@ -216,3 +216,40 @@ Focus on:
 
 // Import the generic serpQuerySchemaPrompt
 import { serpQuerySchemaPrompt } from './prompts';
+
+// Default gene function research prompt for user customization
+export const defaultGeneResearchPrompt = `Please conduct a comprehensive analysis of the gene function for {geneSymbol} in {organism}. 
+
+**Research Objectives:**
+- Analyze the molecular function and biological role of {geneSymbol}
+- Investigate protein structure, domains, and functional motifs
+- Examine gene expression patterns and regulatory mechanisms
+- Explore protein-protein interactions and biological pathways
+- Assess evolutionary conservation and ortholog relationships
+- Investigate disease associations and clinical relevance
+- Evaluate therapeutic potential and drug targets
+
+**Key Areas of Focus:**
+- Molecular mechanisms and biochemical properties
+- Cellular localization and tissue-specific expression
+- Regulatory networks and signaling pathways
+- Mutations, polymorphisms, and phenotypic effects
+- Comparative genomics across species
+- Structural biology and 3D protein modeling
+- Functional validation studies and experimental evidence
+
+**Research Requirements:**
+- Use primary literature from PubMed, NCBI, UniProt, and specialized databases
+- Include quantitative data (Kd values, expression levels, binding affinities)
+- Provide proper scientific citations for all claims
+- Focus on experimental evidence over computational predictions
+- Consider both normal and pathological gene function
+- Analyze gene function across different developmental stages and conditions
+
+**Output Format:**
+- Comprehensive gene function research report
+- Detailed molecular analysis with scientific rigor
+- Proper citation format with reference list
+- Focus on biological significance and scientific insights
+
+Please ensure the analysis is thorough, scientifically accurate, and provides valuable insights into the function and significance of {geneSymbol} in {organism}.`;

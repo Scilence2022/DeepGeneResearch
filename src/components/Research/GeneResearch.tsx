@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import useKnowledge from "@/hooks/useKnowledge";
 import { useTaskStore } from "@/store/task";
+import { defaultGeneResearchPrompt } from "@/constants/gene-research-prompts";
 
 interface GeneResearchProps {
   onStartResearch: (config: GeneResearchConfig) => void;
@@ -38,6 +39,7 @@ interface GeneResearchConfig {
   specificAspects: string[];
   diseaseContext?: string;
   experimentalApproach?: string;
+  customPrompt?: string;
 }
 
 const formSchema = z.object({
@@ -47,6 +49,7 @@ const formSchema = z.object({
   specificAspects: z.array(z.string()).optional(),
   diseaseContext: z.string().optional(),
   experimentalApproach: z.string().optional(),
+  customPrompt: z.string().optional(),
 });
 
 const ORGANISMS = [
@@ -101,6 +104,7 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       specificAspects: [],
       diseaseContext: "",
       experimentalApproach: "",
+      customPrompt: defaultGeneResearchPrompt,
     },
   });
 
@@ -143,7 +147,8 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
       researchFocus: values.researchFocus,
       specificAspects: values.specificAspects || [],
       diseaseContext: values.diseaseContext?.trim() || undefined,
-      experimentalApproach: values.experimentalApproach?.trim() || undefined
+      experimentalApproach: values.experimentalApproach?.trim() || undefined,
+      customPrompt: values.customPrompt?.trim() || undefined
     };
 
     onStartResearch(config);
@@ -281,6 +286,26 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name="customPrompt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Custom Research Prompt (Optional)</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Enter your custom gene function research prompt..."
+                    className="min-h-[200px]"
+                    {...field}
+                  />
+                </FormControl>
+                <div className="text-sm text-muted-foreground">
+                  Define specific research instructions for the AI. Leave empty to use the default comprehensive gene function analysis prompt.
+                </div>
+              </FormItem>
+            )}
+          />
 
           {/* Local Research Resources Section */}
           <FormItem className="mt-4">

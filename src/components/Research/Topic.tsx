@@ -62,6 +62,15 @@ function Topic() {
           query += ` - Method: ${config.experimentalApproach}`;
         }
         
+        // Add custom prompt if provided
+        if (config.customPrompt && config.customPrompt.trim()) {
+          // Replace placeholders in custom prompt
+          const customPrompt = config.customPrompt
+            .replace(/{geneSymbol}/g, config.geneSymbol)
+            .replace(/{organism}/g, config.organism);
+          query += `\n\nCustom Research Instructions:\n${customPrompt}`;
+        }
+        
         if (id !== "") {
           createNewResearch();
         }
