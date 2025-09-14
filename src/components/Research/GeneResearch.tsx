@@ -98,6 +98,7 @@ export default function GeneResearch({ onStartResearch, isResearching, urlGeneSy
   const taskStore = useTaskStore();
   const [openCrawler, setOpenCrawler] = useState(false);
   const [openKnowledge, setOpenKnowledge] = useState(false);
+  const [isCustomOrganism, setIsCustomOrganism] = useState(false);
   const { generateId } = useKnowledge();
   
   const form = useForm<z.infer<typeof formSchema>>({
@@ -123,12 +124,15 @@ export default function GeneResearch({ onStartResearch, isResearching, urlGeneSy
       setValue("geneSymbol", urlGeneSymbol);
     }
     if (urlOrganism) {
-      // Validate that the organism is in the supported list
+      // Check if it's a predefined organism
       const isValidOrganism = ORGANISMS.some(org => org.value === urlOrganism);
       if (isValidOrganism) {
         setValue("organism", urlOrganism);
+        setIsCustomOrganism(false);
       } else {
-        console.warn(`Unsupported organism: ${urlOrganism}. Using default organism instead.`);
+        // Treat as custom organism
+        setValue("organism", urlOrganism);
+        setIsCustomOrganism(true);
       }
     }
   }, [urlGeneSymbol, urlOrganism, setValue]);
@@ -147,6 +151,16 @@ export default function GeneResearch({ onStartResearch, isResearching, urlGeneSy
       ? currentFocuses.filter(f => f !== focus)
       : [...currentFocuses, focus];
     setValue("researchFocus", newFocuses);
+  };
+
+  const handleOrganismChange = (value: string) => {
+    setIsCustomOrganism(false);
+    setValue("organism", value);
+  };
+
+  const handleCustomOrganismClick = () => {
+    setIsCustomOrganism(true);
+    setValue("organism", "");
   };
 
   const handleFileUpload = (files: FileList | null) => {
@@ -214,18 +228,53 @@ export default function GeneResearch({ onStartResearch, isResearching, urlGeneSy
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Organism *</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select organism" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ORGANISMS.map((org) => (
-                        <SelectItem key={org.value} value={org.value}>
-                          {org.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {isCustomOrganism ? (
+                    <div className="space-y-2">
+                      <FormControl>
+                        <Input
+                          placeholder="Enter custom organism name"
+                          {...field}
+                        />
+                      </FormControl>
+                      <div className="text-sm text-muted-foreground">
+                        Enter the scientific name of the organism (e.g., "Homo sapiens", "Escherichia coli")
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsCustomOrganism(false);
+                          setValue("organism", "Escherichia coli");
+                        }}
+                      >
+                        Use predefined organism
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Select onValueChange={handleOrganismChange} value={field.value}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Select organism" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ORGANISMS.map((org) => (
+                            <SelectItem key={org.value} value={org.value}>
+                              {org.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCustomOrganismClick}
+                        className="whitespace-nowrap"
+                      >
+                        Custom
+                      </Button>
+                    </div>
+                  )}
                 </FormItem>
               )}
             />
