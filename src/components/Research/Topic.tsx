@@ -15,8 +15,13 @@ import { useSettingStore } from "@/store/setting";
 import { useTaskStore } from "@/store/task";
 import { useHistoryStore } from "@/store/history";
 
+interface TopicProps {
+  urlGeneSymbol?: string;
+  urlOrganism?: string;
+}
 
-function Topic() {
+
+function Topic({ urlGeneSymbol, urlOrganism }: TopicProps) {
   const { t } = useTranslation();
   const taskStore = useTaskStore();
   const { askQuestions } = useDeepResearch();
@@ -118,6 +123,8 @@ function Topic() {
       <GeneResearch
         onStartResearch={handleGeneResearch}
         isResearching={isThinking}
+        urlGeneSymbol={urlGeneSymbol}
+        urlOrganism={urlOrganism}
       />
     </section>
   );

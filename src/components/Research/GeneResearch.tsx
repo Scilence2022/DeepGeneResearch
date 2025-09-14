@@ -2,7 +2,7 @@
 // Specialized interface for gene function research
 
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -32,6 +32,8 @@ const DEFAULT_USER_PROMPT = "What is the function, structure, and biological rol
 interface GeneResearchProps {
   onStartResearch: (config: GeneResearchConfig) => void;
   isResearching: boolean;
+  urlGeneSymbol?: string;
+  urlOrganism?: string;
 }
 
 interface GeneResearchConfig {
@@ -90,7 +92,7 @@ const SPECIFIC_ASPECTS = [
   { value: "function", label: "Molecular Function" }
 ];
 
-export default function GeneResearch({ onStartResearch, isResearching }: GeneResearchProps) {
+export default function GeneResearch({ onStartResearch, isResearching, urlGeneSymbol, urlOrganism }: GeneResearchProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taskStore = useTaskStore();
@@ -101,8 +103,8 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      geneSymbol: "",
-      organism: "Escherichia coli",
+      geneSymbol: urlGeneSymbol || "",
+      organism: urlOrganism || "Escherichia coli",
       researchFocus: ["general"],
       specificAspects: [],
       diseaseContext: "",
@@ -114,6 +116,22 @@ export default function GeneResearch({ onStartResearch, isResearching }: GeneRes
   const { watch, setValue } = form;
   const specificAspects = watch("specificAspects") || [];
   const researchFocus = watch("researchFocus") || [];
+
+  // Update form when URL parameters change
+  useEffect(() => {
+    if (urlGeneSymbol) {
+      setValue("geneSymbol", urlGeneSymbol);
+    }
+    if (urlOrganism) {
+      // Validate that the organism is in the supported list
+      const isValidOrganism = ORGANISMS.some(org => org.value === urlOrganism);
+      if (isValidOrganism) {
+        setValue("organism", urlOrganism);
+      } else {
+        console.warn(`Unsupported organism: ${urlOrganism}. Using default organism instead.`);
+      }
+    }
+  }, [urlGeneSymbol, urlOrganism, setValue]);
 
   const handleAspectToggle = (aspect: string) => {
     const currentAspects = specificAspects;

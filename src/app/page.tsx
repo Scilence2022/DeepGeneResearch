@@ -1,8 +1,9 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "next-themes";
+import { useSearchParams } from "next/navigation";
 import { useGlobalStore } from "@/store/global";
 import { useSettingStore } from "@/store/setting";
 
@@ -20,6 +21,7 @@ const Knowledge = dynamic(() => import("@/components/Knowledge"));
 
 function Home() {
   const { t } = useTranslation();
+  const searchParams = useSearchParams();
   const {
     openSetting,
     setOpenSetting,
@@ -32,6 +34,10 @@ function Home() {
   const { theme } = useSettingStore();
   const { setTheme } = useTheme();
 
+  // Extract URL parameters
+  const urlGeneSymbol = searchParams.get('gene') || searchParams.get('geneSymbol') || undefined;
+  const urlOrganism = searchParams.get('organism') || searchParams.get('organismName') || undefined;
+
   useLayoutEffect(() => {
     const settingStore = useSettingStore.getState();
     setTheme(settingStore.theme);
@@ -41,7 +47,10 @@ function Home() {
       <Header />
       <ResearchCapabilities />
       <main>
-        <Topic />
+        <Topic 
+          urlGeneSymbol={urlGeneSymbol}
+          urlOrganism={urlOrganism}
+        />
         <Feedback />
         <SearchResult />
         <FinalReport />
