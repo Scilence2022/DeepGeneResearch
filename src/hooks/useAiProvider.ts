@@ -226,69 +226,72 @@ function useModelProvider() {
     switch (provider) {
       case "google":
         const { thinkingModel, networkingModel } = useSettingStore.getState();
-        return { thinkingModel, networkingModel };
+        return { 
+          thinkingModel: thinkingModel || "", 
+          networkingModel: networkingModel || "" 
+        };
       case "google-vertex":
         const { googleVertexThinkingModel, googleVertexNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: googleVertexThinkingModel,
-          networkingModel: googleVertexNetworkingModel,
+          thinkingModel: googleVertexThinkingModel || "",
+          networkingModel: googleVertexNetworkingModel || "",
         };
       case "openai":
         const { openAIThinkingModel, openAINetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: openAIThinkingModel,
-          networkingModel: openAINetworkingModel,
+          thinkingModel: openAIThinkingModel || "",
+          networkingModel: openAINetworkingModel || "",
         };
       case "anthropic":
         const { anthropicThinkingModel, anthropicNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: anthropicThinkingModel,
-          networkingModel: anthropicNetworkingModel,
+          thinkingModel: anthropicThinkingModel || "",
+          networkingModel: anthropicNetworkingModel || "",
         };
       case "deepseek":
         const { deepseekThinkingModel, deepseekNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: deepseekThinkingModel,
-          networkingModel: deepseekNetworkingModel,
+          thinkingModel: deepseekThinkingModel || "",
+          networkingModel: deepseekNetworkingModel || "",
         };
       case "xai":
         const { xAIThinkingModel, xAINetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: xAIThinkingModel,
-          networkingModel: xAINetworkingModel,
+          thinkingModel: xAIThinkingModel || "",
+          networkingModel: xAINetworkingModel || "",
         };
       case "mistral":
         const { mistralThinkingModel, mistralNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: mistralThinkingModel,
-          networkingModel: mistralNetworkingModel,
+          thinkingModel: mistralThinkingModel || "",
+          networkingModel: mistralNetworkingModel || "",
         };
       case "azure":
         const { azureThinkingModel, azureNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: azureThinkingModel,
-          networkingModel: azureNetworkingModel,
+          thinkingModel: azureThinkingModel || "",
+          networkingModel: azureNetworkingModel || "",
         };
       case "siliconflow":
         const { siliconflowThinkingModel, siliconflowNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: siliconflowThinkingModel,
-          networkingModel: siliconflowNetworkingModel,
+          thinkingModel: siliconflowThinkingModel || "",
+          networkingModel: siliconflowNetworkingModel || "",
         };
       case "openrouter":
         const { openRouterThinkingModel, openRouterNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: openRouterThinkingModel,
-          networkingModel: openRouterNetworkingModel,
+          thinkingModel: openRouterThinkingModel || "",
+          networkingModel: openRouterNetworkingModel || "",
         };
       case "openaicompatible":
         const {
@@ -296,22 +299,22 @@ function useModelProvider() {
           openAICompatibleNetworkingModel,
         } = useSettingStore.getState();
         return {
-          thinkingModel: openAICompatibleThinkingModel,
-          networkingModel: openAICompatibleNetworkingModel,
+          thinkingModel: openAICompatibleThinkingModel || "",
+          networkingModel: openAICompatibleNetworkingModel || "",
         };
       case "pollinations":
         const { pollinationsThinkingModel, pollinationsNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: pollinationsThinkingModel,
-          networkingModel: pollinationsNetworkingModel,
+          thinkingModel: pollinationsThinkingModel || "",
+          networkingModel: pollinationsNetworkingModel || "",
         };
       case "ollama":
         const { ollamaThinkingModel, ollamaNetworkingModel } =
           useSettingStore.getState();
         return {
-          thinkingModel: ollamaThinkingModel,
-          networkingModel: ollamaNetworkingModel,
+          thinkingModel: ollamaThinkingModel || "",
+          networkingModel: ollamaNetworkingModel || "",
         };
       default:
         throw new Error("Unsupported Provider: " + provider);
@@ -324,38 +327,38 @@ function useModelProvider() {
     switch (provider) {
       case "google":
         const { apiKey } = useSettingStore.getState();
-        return apiKey.length > 0;
+        return (apiKey || "").length > 0;
       case "google-vertex":
         const { googleVertexProject, googleVertexLocation } =
           useSettingStore.getState();
-        return googleVertexProject !== "" && googleVertexLocation !== "";
+        return (googleVertexProject || "") !== "" && (googleVertexLocation || "") !== "";
       case "openai":
         const { openAIApiKey } = useSettingStore.getState();
-        return openAIApiKey.length > 0;
+        return (openAIApiKey || "").length > 0;
       case "anthropic":
         const { anthropicApiKey } = useSettingStore.getState();
-        return anthropicApiKey.length > 0;
+        return (anthropicApiKey || "").length > 0;
       case "deepseek":
         const { deepseekApiKey } = useSettingStore.getState();
-        return deepseekApiKey.length > 0;
+        return (deepseekApiKey || "").length > 0;
       case "xai":
         const { xAIApiKey } = useSettingStore.getState();
-        return xAIApiKey.length > 0;
+        return (xAIApiKey || "").length > 0;
       case "mistral":
         const { mistralApiKey } = useSettingStore.getState();
-        return mistralApiKey.length > 0;
+        return (mistralApiKey || "").length > 0;
       case "azure":
         const { azureApiKey } = useSettingStore.getState();
-        return azureApiKey.length > 0;
+        return (azureApiKey || "").length > 0;
       case "siliconflow":
         const { siliconflowApiKey } = useSettingStore.getState();
-        return siliconflowApiKey.length > 0;
+        return (siliconflowApiKey || "").length > 0;
       case "openrouter":
         const { openRouterApiKey } = useSettingStore.getState();
-        return openRouterApiKey.length > 0;
+        return (openRouterApiKey || "").length > 0;
       case "openaicompatible":
         const { openAICompatibleApiKey } = useSettingStore.getState();
-        return openAICompatibleApiKey.length > 0;
+        return (openAICompatibleApiKey || "").length > 0;
       case "pollinations":
       case "ollama":
         return true;

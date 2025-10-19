@@ -12,7 +12,7 @@ import { cn } from "@/utils/style";
 type Props = ComponentProps<"input">;
 
 function PasswordInput(
-  { className, type, ...props }: Props,
+  { className, type, value, ...props }: Props,
   forwardedRef: ForwardedRef<HTMLInputElement>
 ) {
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -21,6 +21,7 @@ function PasswordInput(
     <div className={cn("relative", className)}>
       <OriginalInput
         ref={forwardedRef}
+        value={value || ""}
         {...props}
         className="pr-9 w-full text-sm"
         type={showPassword ? type : "password"}

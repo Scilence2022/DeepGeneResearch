@@ -37,6 +37,10 @@ export interface SettingStore {
   mistralApiProxy: string;
   mistralThinkingModel: string;
   mistralNetworkingModel: string;
+  siliconflowApiKey: string;
+  siliconflowApiProxy: string;
+  siliconflowThinkingModel: string;
+  siliconflowNetworkingModel: string;
   azureApiKey: string;
   azureResourceName: string;
   azureApiVersion: string;
@@ -124,6 +128,10 @@ export const defaultValues: SettingStore = {
   mistralApiProxy: "",
   mistralThinkingModel: "mistral-large-latest",
   mistralNetworkingModel: "mistral-medium-latest",
+  siliconflowApiKey: "",
+  siliconflowApiProxy: "",
+  siliconflowThinkingModel: "",
+  siliconflowNetworkingModel: "",
   azureApiKey: "",
   azureResourceName: "",
   azureApiVersion: "",

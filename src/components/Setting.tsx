@@ -269,7 +269,15 @@ function Setting({ open, onClose }: SettingProps) {
     defaultValues: async () => {
       return new Promise((resolve) => {
         const state = useSettingStore.getState();
-        resolve({ ...omit(state, ["update"]) });
+        // 确保所有字段都有初始值，避免undefined值
+        const resolvedValues = { ...omit(state, ["update"]) };
+        // 确保所有API key字段都是字符串而不是undefined
+        Object.keys(resolvedValues).forEach(key => {
+          if (resolvedValues[key as keyof typeof resolvedValues] === undefined) {
+            resolvedValues[key as keyof typeof resolvedValues] = "";
+          }
+        });
+        resolve(resolvedValues);
       });
     },
   });
