@@ -23,7 +23,7 @@
 
 ## 🎯 **Deep Gene Research with AI**
 
-**Deep Gene Research** is an AI-powered platform specifically designed for comprehensive gene function analysis and molecular biology research. Built by **Genome AI Studio**, this platform combines advanced artificial intelligence with specialized biological databases to deliver rapid, accurate, and comprehensive gene research reports in minutes rather than days.
+**Deep Gene Research** is an AI-powered platform specifically designed for comprehensive gene function analysis and molecular biology research. Built by **CodeXomics Team**, this platform combines advanced artificial intelligence with specialized biological databases to deliver rapid, accurate, and comprehensive gene research reports in minutes rather than days.
 
 ### **Why Deep Gene Research?**
 
@@ -916,6 +916,6 @@ This project is licensed under the [MIT License](LICENSE) - see the LICENSE file
 ---
 
 <div align="center">
-  <p><strong>Built with ❤️ by <a href="https://github.com/Scilence2022">Genome AI Studio Team</a></strong></p>
+  <p><strong>Built by <a href="https://github.com/Scilence2022">CodeXomics Team</a></strong></p>
   <p>Empowering researchers with AI-driven gene function analysis</p>
 </div>
