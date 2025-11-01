@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useLayoutEffect, useEffect } from "react";
+import { useLayoutEffect, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "next-themes";
 import { useSearchParams } from "next/navigation";
@@ -19,9 +19,23 @@ const FinalReport = dynamic(() => import("@/components/Research/FinalReport"));
 const History = dynamic(() => import("@/components/History"));
 const Knowledge = dynamic(() => import("@/components/Knowledge"));
 
+function TopicWithParams() {
+  const searchParams = useSearchParams();
+  
+  // Extract URL parameters
+  const urlGeneSymbol = searchParams.get('gene') || searchParams.get('geneSymbol') || undefined;
+  const urlOrganism = searchParams.get('organism') || searchParams.get('organismName') || undefined;
+  
+  return (
+    <Topic 
+      urlGeneSymbol={urlGeneSymbol}
+      urlOrganism={urlOrganism}
+    />
+  );
+}
+
 function Home() {
   const { t } = useTranslation();
-  const searchParams = useSearchParams();
   const {
     openSetting,
     setOpenSetting,
@@ -34,10 +48,6 @@ function Home() {
   const { theme } = useSettingStore();
   const { setTheme } = useTheme();
 
-  // Extract URL parameters
-  const urlGeneSymbol = searchParams.get('gene') || searchParams.get('geneSymbol') || undefined;
-  const urlOrganism = searchParams.get('organism') || searchParams.get('organismName') || undefined;
-
   useLayoutEffect(() => {
     const settingStore = useSettingStore.getState();
     setTheme(settingStore.theme);
@@ -47,10 +57,9 @@ function Home() {
       <Header />
       <ResearchCapabilities />
       <main>
-        <Topic 
-          urlGeneSymbol={urlGeneSymbol}
-          urlOrganism={urlOrganism}
-        />
+        <Suspense fallback={<div>Loading...</div>}>
+          <TopicWithParams />
+        </Suspense>
         <Feedback />
         <SearchResult />
         <FinalReport />

@@ -122,10 +122,7 @@ export function initMcpServer() {
         diseaseContext, 
         experimentalApproach, 
         userPrompt, 
-        language, 
-        maxResult, 
-        enableCitationImage, 
-        enableReferences 
+        maxResult
       },
       { signal }
     ) => {
@@ -151,23 +148,6 @@ export function initMcpServer() {
           maxSearchResults: maxResult,
         };
 
-        // Create AI provider configuration
-        const aiProvider = {
-          baseURL: getAIProviderBaseURL(AI_PROVIDER),
-          apiKey: multiApiKeyPolling(getAIProviderApiKey(AI_PROVIDER)),
-          provider: AI_PROVIDER,
-          thinkingModel: THINKING_MODEL,
-          taskModel: TASK_MODEL,
-        };
-
-        // Create search provider configuration
-        const searchProvider = {
-          baseURL: getSearchProviderBaseURL(SEARCH_PROVIDER),
-          apiKey: multiApiKeyPolling(getSearchProviderApiKey(SEARCH_PROVIDER)),
-          provider: SEARCH_PROVIDER,
-          maxResult,
-        };
-
         // Create timeout promise
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => {
@@ -177,12 +157,8 @@ export function initMcpServer() {
 
         // Conduct gene research with timeout control
         const result = await Promise.race([
-          conductGeneResearch(config, aiProvider, searchProvider, {
-            language,
-            enableCitationImage,
-            enableReferences,
-          }),
-          timeoutPromise
+          conductGeneResearch(config),
+          timeoutPromise,
         ]);
 
         return {

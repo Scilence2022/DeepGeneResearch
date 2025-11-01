@@ -69,11 +69,7 @@ export class GeneResearchEngine {
     this.apiIntegrations = createGeneAPIIntegrations(config.geneSymbol, config.organism);
   }
 
-  async conductResearch(aiProvider?: any, searchProvider?: any, options?: {
-    language?: string;
-    enableCitationImage?: boolean;
-    enableReferences?: boolean;
-  }): Promise<GeneResearchResult> {
+  async conductResearch(): Promise<GeneResearchResult> {
     const startTime = Date.now();
     
     try {
@@ -117,7 +113,7 @@ export class GeneResearchEngine {
       const report = this.generateReport(extractedData, visualizations, qualityMetrics);
       
       // Phase 8: Compile workflow
-      const workflow = this.compileWorkflow(extractedData, apiData);
+      const workflow = this.compileWorkflow(extractedData);
       
       const researchTime = Date.now() - startTime;
       
@@ -249,7 +245,7 @@ export class GeneResearchEngine {
     };
 
     // Process each search result
-    for (const [query, result] of searchResults) {
+    for (const [, result] of searchResults) {
       if (result.sources && result.sources.length > 0) {
         for (const source of result.sources) {
           const content = `${source.title}\n${source.content}`;
@@ -418,7 +414,7 @@ export class GeneResearchEngine {
     return content;
   }
 
-  private compileWorkflow(extractedData: GeneDataExtractionResult, apiData: any): GeneResearchWorkflow {
+  private compileWorkflow(extractedData: GeneDataExtractionResult): GeneResearchWorkflow {
     return {
       geneIdentification: extractedData.geneBasicInfo,
       functionalAnalysis: extractedData.functionalData,
@@ -536,17 +532,10 @@ export const GENE_RESEARCH_PRESETS = {
 
 // Main gene research function for MCP Server
 export async function conductGeneResearch(
-  config: GeneResearchConfig,
-  aiProvider: any,
-  searchProvider: any,
-  options: {
-    language?: string;
-    enableCitationImage?: boolean;
-    enableReferences?: boolean;
-  } = {}
+  config: GeneResearchConfig
 ): Promise<GeneResearchResult> {
   const engine = new GeneResearchEngine(config);
-  return await engine.conductResearch(aiProvider, searchProvider, options);
+  return await engine.conductResearch();
 }
 
 // Export all gene research utilities

@@ -10,19 +10,13 @@ import {
   processSearchResultPrompt,
   writeFinalReportPrompt,
   getSERPQuerySchema,
-  getGeneResearchSystemPrompt,
-  writeGeneReportPlanPrompt,
-  generateGeneSerpQueriesPrompt,
-  processGeneSearchResultPrompt,
-  writeGeneFinalReportPrompt,
-  generateGeneKnowledgeGraphPrompt,
   isGeneResearchQuery,
 } from "./prompts";
 import { outputGuidelinesPrompt } from "@/constants/prompts";
 import { isNetworkingModel } from "@/utils/model";
 import { ThinkTagStreamProcessor, removeJsonMarkdown } from "@/utils/text";
 import { pick, unique, flat, isFunction } from "radash";
-import { createGeneResearchEngine, GENE_RESEARCH_PRESETS } from "@/utils/gene-research";
+import { createGeneResearchEngine } from "@/utils/gene-research";
 
 export interface DeepResearchOptions {
   AIProvider: {
@@ -488,7 +482,7 @@ class DeepResearch {
     try {
       // Check if this is a gene research query
       if (isGeneResearchQuery(query)) {
-        return await this.conductGeneResearch(query, enableCitationImage, enableReferences);
+        return await this.conductGeneResearch(query);
       }
 
       const reportPlan = await this.writeReportPlan(query);
@@ -510,9 +504,7 @@ class DeepResearch {
 
   // Gene research specific method
   async conductGeneResearch(
-    query: string,
-    enableCitationImage = true,
-    enableReferences = true
+    query: string
   ) {
     try {
       this.onMessage("progress", { step: "gene-research", status: "start" });

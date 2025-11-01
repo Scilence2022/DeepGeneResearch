@@ -1,8 +1,7 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  LoaderCircle,
   SquarePlus,
 } from "lucide-react";
 import GeneResearch from "@/components/Research/GeneResearch";
@@ -23,11 +22,9 @@ interface TopicProps {
 
 function Topic({ urlGeneSymbol, urlOrganism }: TopicProps) {
   const { t } = useTranslation();
-  const taskStore = useTaskStore();
   const { askQuestions } = useDeepResearch();
   const { hasApiKey } = useAiProvider();
   const {
-    formattedTime,
     start: accurateTimerStart,
     stop: accurateTimerStop,
   } = useAccurateTimer();
@@ -95,10 +92,6 @@ function Topic({ urlGeneSymbol, urlOrganism }: TopicProps) {
     reset();
   }
 
-  function openKnowledgeList() {
-    const { setOpenKnowledge } = useGlobalStore.getState();
-    setOpenKnowledge(true);
-  }
 
 
 

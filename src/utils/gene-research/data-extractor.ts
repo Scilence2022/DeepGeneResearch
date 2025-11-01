@@ -11,10 +11,7 @@ import {
   EvolutionaryData, 
   LiteratureReference,
   BindingSite,
-  PTM,
-  TissueExpression,
-  ProteinInteraction,
-  Mutation
+  PTM
 } from '@/types/gene-research';
 
 export interface GeneDataExtractionResult {

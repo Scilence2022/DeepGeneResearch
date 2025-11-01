@@ -273,8 +273,9 @@ function Setting({ open, onClose }: SettingProps) {
         const resolvedValues = { ...omit(state, ["update"]) };
         // 确保所有API key字段都是字符串而不是undefined
         Object.keys(resolvedValues).forEach(key => {
-          if (resolvedValues[key as keyof typeof resolvedValues] === undefined) {
-            resolvedValues[key as keyof typeof resolvedValues] = "";
+          const typedKey = key as keyof typeof resolvedValues;
+          if (resolvedValues[typedKey] === undefined) {
+            (resolvedValues as any)[typedKey] = "";
           }
         });
         resolve(resolvedValues);

@@ -237,7 +237,7 @@ export default function GeneResearch({ onStartResearch, isResearching, urlGeneSy
                         />
                       </FormControl>
                       <div className="text-sm text-muted-foreground">
-                        Enter the scientific name of the organism (e.g., "Homo sapiens", "Escherichia coli")
+                        Enter the scientific name of the organism (e.g., &quot;Homo sapiens&quot;, &quot;Escherichia coli&quot;)
                       </div>
                       <Button
                         type="button"
@@ -283,7 +283,7 @@ export default function GeneResearch({ onStartResearch, isResearching, urlGeneSy
           <FormField
             control={form.control}
             name="researchFocus"
-            render={({ field }) => (
+            render={({}) => (
               <FormItem>
                 <FormLabel>Research Focus *</FormLabel>
                 <div className="flex flex-wrap gap-2">
@@ -305,7 +305,7 @@ export default function GeneResearch({ onStartResearch, isResearching, urlGeneSy
           <FormField
             control={form.control}
             name="specificAspects"
-            render={({ field }) => (
+            render={({}) => (
               <FormItem>
                 <FormLabel>Specific Aspects (Optional)</FormLabel>
                 <div className="flex flex-wrap gap-2">

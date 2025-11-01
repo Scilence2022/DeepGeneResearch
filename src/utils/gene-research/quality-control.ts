@@ -2,7 +2,6 @@
 // Comprehensive quality assessment and validation for molecular biology data
 
 import { 
-  GeneResearchQualityMetrics,
   GeneBasicInfo,
   FunctionalData,
   ProteinInfo,
@@ -63,25 +62,25 @@ export class GeneResearchQualityControl {
     // Assess data completeness
     const dataCompleteness = this.assessDataCompleteness(
       geneInfo, functionalData, proteinInfo, expressionData, 
-      interactionData, diseaseData, evolutionaryData, literatureReferences
+      interactionData, diseaseData, evolutionaryData
     );
 
     // Assess literature coverage
-    const literatureCoverage = this.assessLiteratureCoverage(literatureReferences, issues, recommendations);
+    const literatureCoverage = this.assessLiteratureCoverage(literatureReferences, issues);
 
     // Assess experimental evidence
-    const experimentalEvidence = this.assessExperimentalEvidence(literatureReferences, issues, recommendations);
+    const experimentalEvidence = this.assessExperimentalEvidence(literatureReferences, issues);
 
     // Assess cross-species validation
-    const crossSpeciesValidation = this.assessCrossSpeciesValidation(evolutionaryData, issues, recommendations);
+    const crossSpeciesValidation = this.assessCrossSpeciesValidation(evolutionaryData, issues);
 
     // Assess database consistency
     const databaseConsistency = this.assessDatabaseConsistency(
-      geneInfo, proteinInfo, functionalData, issues, recommendations
+      geneInfo, proteinInfo, functionalData, issues
     );
 
     // Assess scientific rigor
-    const scientificRigor = this.assessScientificRigor(literatureReferences, issues, recommendations);
+    const scientificRigor = this.assessScientificRigor(literatureReferences, issues);
 
     // Calculate overall score
     const overallScore = (
@@ -115,8 +114,7 @@ export class GeneResearchQualityControl {
     expressionData: ExpressionData,
     interactionData: InteractionData,
     diseaseData: DiseaseData[],
-    evolutionaryData: EvolutionaryData,
-    literatureReferences: LiteratureReference[]
+    evolutionaryData: EvolutionaryData
   ): number {
     let score = 0;
     let maxScore = 0;
@@ -161,8 +159,7 @@ export class GeneResearchQualityControl {
 
   private assessLiteratureCoverage(
     literatureReferences: LiteratureReference[],
-    issues: QualityIssue[],
-    recommendations: string[]
+    issues: QualityIssue[]
   ): number {
     const totalRefs = literatureReferences.length;
     let score = 0;
@@ -223,8 +220,7 @@ export class GeneResearchQualityControl {
 
   private assessExperimentalEvidence(
     literatureReferences: LiteratureReference[],
-    issues: QualityIssue[],
-    recommendations: string[]
+    issues: QualityIssue[]
   ): number {
     const experimentalRefs = literatureReferences.filter(ref => 
       ref.studyType === 'experimental'
@@ -234,7 +230,7 @@ export class GeneResearchQualityControl {
     if (totalRefs === 0) return 0;
 
     const experimentalRatio = experimentalRefs / totalRefs;
-    let score = experimentalRatio;
+    const score = experimentalRatio;
 
     if (experimentalRatio < 0.3) {
       issues.push({
@@ -261,8 +257,7 @@ export class GeneResearchQualityControl {
 
   private assessCrossSpeciesValidation(
     evolutionaryData: EvolutionaryData,
-    issues: QualityIssue[],
-    recommendations: string[]
+    issues: QualityIssue[]
   ): number {
     let score = 0;
 
@@ -302,8 +297,7 @@ export class GeneResearchQualityControl {
     geneInfo: GeneBasicInfo,
     proteinInfo: ProteinInfo,
     functionalData: FunctionalData,
-    issues: QualityIssue[],
-    recommendations: string[]
+    issues: QualityIssue[]
   ): number {
     let score = 0.5; // Base score
     let inconsistencies = 0;
@@ -344,8 +338,7 @@ export class GeneResearchQualityControl {
 
   private assessScientificRigor(
     literatureReferences: LiteratureReference[],
-    issues: QualityIssue[],
-    recommendations: string[]
+    issues: QualityIssue[]
   ): number {
     let score = 0.5; // Base score
 

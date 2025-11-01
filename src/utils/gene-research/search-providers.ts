@@ -1,8 +1,6 @@
 // Gene-specific search providers and database integrations
 // Specialized search capabilities for molecular biology databases
 
-import { completePath } from "@/utils/url";
-
 // Database URLs and configurations
 const GENE_DATABASE_URLS = {
   NCBI_EUTILS: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
@@ -95,13 +93,12 @@ export async function searchPubMed({
     }
 
     // Fetch detailed information for each PMID
-    const fetchResponse = await fetch(
+    await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=pubmed&id=${pmids.join(',')}&retmode=xml&rettype=abstract`,
       { headers }
     );
 
-    const fetchData = await fetchResponse.text();
-    const sources = parsePubMedResults(fetchData, geneSymbol, organism);
+    const sources = parsePubMedResults();
 
     return {
       sources,
@@ -196,13 +193,12 @@ export async function searchNCBIGene({
     }
 
     // Fetch detailed gene information
-    const fetchResponse = await fetch(
+    await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=gene&id=${geneIds.join(',')}&retmode=xml`,
       { headers }
     );
 
-    const fetchData = await fetchResponse.text();
-    const sources = parseNCBIGeneResults(fetchData, geneSymbol, organism);
+    const sources = parseNCBIGeneResults();
 
     return {
       sources,
@@ -253,13 +249,12 @@ export async function searchGEO({
     }
 
     // Fetch detailed GEO information
-    const fetchResponse = await fetch(
+    await fetch(
       `${GENE_DATABASE_URLS.GEO_API}efetch.fcgi?db=gds&id=${gdsIds.join(',')}&retmode=xml`,
       { headers }
     );
 
-    const fetchData = await fetchResponse.text();
-    const sources = parseGEOResults(fetchData, geneSymbol, organism);
+    const sources = parseGEOResults();
 
     return {
       sources,
@@ -328,7 +323,6 @@ export async function searchKEGG({
   query,
   geneSymbol,
   organism,
-  maxResult = 10,
   apiKey
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
@@ -346,8 +340,8 @@ export async function searchKEGG({
       { headers }
     );
 
-    const data = await response.text();
-    const sources = parseKEGGResults(data, geneSymbol, organism);
+    await response.text();
+    const sources = parseKEGGResults();
 
     return {
       sources,
@@ -390,8 +384,8 @@ export async function searchSTRING({
       { headers }
     );
 
-    const data = await response.text();
-    const sources = parseSTRINGResults(data, geneSymbol, organism);
+    await response.text();
+    const sources = parseSTRINGResults();
 
     return {
       sources,
@@ -434,8 +428,8 @@ export async function searchOMIM({
       { headers }
     );
 
-    const data = await response.json();
-    const sources = parseOMIMResults(data, geneSymbol, organism);
+    await response.json();
+    const sources = parseOMIMResults();
 
     return {
       sources,
@@ -460,7 +454,6 @@ export async function searchEnsembl({
   query,
   geneSymbol,
   organism,
-  maxResult = 10,
   apiKey
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
@@ -504,7 +497,6 @@ export async function searchReactome({
   query,
   geneSymbol,
   organism,
-  maxResult = 10,
   apiKey
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
@@ -518,7 +510,7 @@ export async function searchReactome({
       : query;
 
     const response = await fetch(
-      `${GENE_DATABASE_URLS.REACTOME_API}search/query?query=${encodeURIComponent(searchQuery)}&species=${organism || 'Homo sapiens'}&rows=${maxResult}`,
+      `${GENE_DATABASE_URLS.REACTOME_API}search/query?query=${encodeURIComponent(searchQuery)}&species=${organism || 'Homo sapiens'}`,
       { headers }
     );
 
@@ -592,7 +584,7 @@ export async function createGeneSearchProvider({
 }
 
 // Helper functions for parsing database results
-function parsePubMedResults(xmlData: string, geneSymbol?: string, organism?: string): GeneSource[] {
+function parsePubMedResults(): GeneSource[] {
   // Parse PubMed XML and extract relevant information
   // This is a simplified implementation - in practice, you'd use a proper XML parser
   const sources: GeneSource[] = [];
@@ -621,7 +613,7 @@ Subcellular location: ${result.comments?.find((c: any) => c.commentType === 'SUB
   }));
 }
 
-function parseNCBIGeneResults(xmlData: string, geneSymbol?: string, organism?: string): GeneSource[] {
+function parseNCBIGeneResults(): GeneSource[] {
   // Parse NCBI Gene XML and extract relevant information
   const sources: GeneSource[] = [];
   
@@ -631,7 +623,7 @@ function parseNCBIGeneResults(xmlData: string, geneSymbol?: string, organism?: s
   return sources;
 }
 
-function parseGEOResults(xmlData: string, geneSymbol?: string, organism?: string): GeneSource[] {
+function parseGEOResults(): GeneSource[] {
   // Parse GEO XML and extract relevant information
   const sources: GeneSource[] = [];
   
@@ -659,9 +651,9 @@ Organism: ${result.struct.entity_src_gen?.[0]?.pdbx_gene_src_scientific_name || 
   }));
 }
 
-function parseKEGGResults(data: string, geneSymbol?: string, organism?: string): GeneSource[] {
-  // Parse KEGG results and extract pathway information
-  const sources: GeneSource[] = [];
+function parseKEGGResults(): GeneSource[] {
+    // Parse KEGG results and extract pathway information
+    const sources: GeneSource[] = [];
   
   // Extract pathway information from KEGG response
   // This is a placeholder - implement proper parsing
@@ -669,59 +661,24 @@ function parseKEGGResults(data: string, geneSymbol?: string, organism?: string):
   return sources;
 }
 
-function parseSTRINGResults(data: string, geneSymbol?: string, organism?: string): GeneSource[] {
-  // Parse STRING TSV results and extract protein interaction information
+function parseOMIMResults(): GeneSource[] {
+  // Parse OMIM results and extract disease information
   const sources: GeneSource[] = [];
-  const lines = data.split('\n').filter(line => line.trim());
   
-  // Skip header line
-  for (let i = 1; i < lines.length; i++) {
-    const columns = lines[i].split('\t');
-    if (columns.length >= 2) {
-      sources.push({
-        title: `Protein Interaction: ${columns[0]} - ${columns[1]}`,
-        content: `Interaction between ${columns[0]} and ${columns[1]}
-Confidence: ${columns[2] || 'Unknown'}
-Database: STRING`,
-        url: `https://string-db.org/cgi/network?identifiers=${columns[0]}`,
-        database: 'string',
-        geneSymbol: geneSymbol,
-        organism: organism,
-        confidence: parseFloat(columns[2]) || 0.5,
-        evidence: ['interaction'],
-        type: 'interaction' as const
-      });
-    }
-  }
+  // Extract disease information from OMIM response
+  // This is a placeholder - implement proper parsing
   
   return sources;
 }
 
-function parseOMIMResults(data: any, geneSymbol?: string, organism?: string): GeneSource[] {
-  // Parse OMIM results and extract disease association information
+function parseSTRINGResults(): GeneSource[] {
+  // Parse STRING TSV results and extract protein interaction information
   const sources: GeneSource[] = [];
-  
-  if (data.omim && data.omim.entryList) {
-    data.omim.entryList.forEach((entry: any) => {
-      sources.push({
-        title: `${entry.entry.titles.preferredTitle} (${entry.entry.mimNumber})`,
-        content: `Gene: ${entry.entry.geneMap?.geneSymbols?.geneSymbol || 'Unknown'}
-Phenotype: ${entry.entry.titles.preferredTitle}
-MIM Number: ${entry.entry.mimNumber}
-Inheritance: ${entry.entry.geneMap?.phenotypeMapList?.[0]?.phenotypeMap?.phenotypeInheritance || 'Unknown'}`,
-        url: `https://omim.org/entry/${entry.entry.mimNumber}`,
-        database: 'omim',
-        geneSymbol: geneSymbol,
-        organism: organism,
-        confidence: 0.9,
-        evidence: ['disease'],
-        type: 'disease' as const
-      });
-    });
-  }
-  
+  // This is a placeholder - implement proper parsing
   return sources;
 }
+
+
 
 function parseEnsemblResults(data: any, geneSymbol?: string, organism?: string): GeneSource[] {
   // Parse Ensembl results and extract gene annotation information

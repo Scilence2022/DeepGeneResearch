@@ -1,17 +1,6 @@
 // Gene-specific API integrations
 // Comprehensive API integration for molecular biology databases
 
-import { 
-  GeneBasicInfo, 
-  FunctionalData, 
-  ProteinInfo, 
-  ExpressionData, 
-  InteractionData, 
-  DiseaseData, 
-  EvolutionaryData,
-  LiteratureReference
-} from '@/types/gene-research';
-
 export interface APIIntegrationResult {
   success: boolean;
   data: any;

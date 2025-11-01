@@ -8,11 +8,7 @@ import {
   ExpressionData, 
   InteractionData, 
   DiseaseData, 
-  EvolutionaryData,
-  ProteinDomain,
-  BindingSite,
-  TissueExpression,
-  ProteinInteraction
+  EvolutionaryData
 } from '@/types/gene-research';
 
 export interface GeneVisualization {

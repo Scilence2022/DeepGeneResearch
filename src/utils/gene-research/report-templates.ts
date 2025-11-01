@@ -1,7 +1,6 @@
 // Gene research report templates and structure definitions
 // Comprehensive templates for molecular biology research reports
 
-import { GeneResearchWorkflow, GeneBasicInfo, FunctionalData, ProteinInfo, ExpressionData, InteractionData, DiseaseData, EvolutionaryData, LiteratureReference } from '@/types/gene-research';
 import { GeneVisualization } from './visualization-generators';
 
 export interface GeneReportTemplate {
