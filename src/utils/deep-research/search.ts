@@ -213,7 +213,10 @@ export async function createSearchProvider({
           contents: {
             text: true,
             summary: {
-              query: `Given the following query from the user:\n<query>${query}</query>\n\n${rewritingPrompt}`,
+              query: `Given the following query from the user:
+<Query>${query}</Query>
+
+${rewritingPrompt}`,
             },
             numResults: Number(maxResult) * 5,
             livecrawl: "auto",

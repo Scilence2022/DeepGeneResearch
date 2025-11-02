@@ -570,17 +570,34 @@ function useDeepResearch() {
     }
     if (reasoning) console.log(reasoning);
     if (sources.length > 0) {
-      content +=
-        "\n\n" +
-        sources
-          .map(
-            (item, idx) =>
-              `[${idx + 1}]: ${item.url}${
-                item.title ? ` "${item.title.replaceAll('"', " ")}"` : ""
-              }`
-          )
-          .join("\n");
+      // Sort sources by URL to ensure consistent ordering and better deduplication
+      const sortedSources = [...sources].sort((a, b) => a.url.localeCompare(b.url));
+      
+      // Apply enhanced citation formatting following scientific standards
+      content += "\n\n## References\n\n";
+      
+      // Add properly formatted references with deduplication checks
+      const urlSet = new Set<string>(); // To catch any remaining duplicates
+      
+      for (let idx = 0; idx < sortedSources.length; idx++) {
+        const item = sortedSources[idx];
+        // Normalize URL for better deduplication
+        const normalizedUrl = normalizeUrl(item.url);
+        
+        if (!urlSet.has(normalizedUrl)) {
+          urlSet.add(normalizedUrl);
+          
+          // Improved citation format following scientific standards
+          let formattedTitle = item.title ? item.title.replaceAll('"', "'") : "Untitled Source";
+          
+          // Format reference with proper citation style
+          content += `[${urlSet.size}]: ${item.url} ${formattedTitle ? `"${formattedTitle}"` : ""}\n`;
+        }
+      }
+      
       updateFinalReport(content);
+      
+      console.log(`Reference processing complete: ${urlSet.size} unique references added (${sources.length - urlSet.size} duplicates removed)`);
     }
     if (content.length > 0) {
       const title = (content || "")
@@ -654,6 +671,38 @@ function useDeepResearch() {
       await runSearchTask(queries);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  /**
+   * Normalize URL for better deduplication
+   * @param url The URL to normalize
+   * @returns Normalized URL string
+   */
+  function normalizeUrl(url: string): string {
+    try {
+      // Create URL object for consistent parsing
+      const urlObj = new URL(url);
+      
+      // Remove query parameters that don't affect content
+      const cleanParams = new URLSearchParams();
+      for (const [key, value] of urlObj.searchParams) {
+        // Keep only important parameters (customize based on your needs)
+        if (!['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', '_r', 'ref', 'referrer'].includes(key.toLowerCase())) {
+          cleanParams.append(key, value);
+        }
+      }
+      
+      // Reconstruct URL without fragment and with cleaned parameters
+      const paramsString = cleanParams.toString();
+      return `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}${paramsString ? `?${paramsString}` : ''}`;
+    } catch (error) {
+      // If URL parsing fails, return the original URL after basic cleanup
+      return url.toLowerCase().trim()
+        .replace(/\/$/, '')
+        .replace(/\?utm_[^&]+/g, '')
+        .replace(/&utm_[^&]+/g, '')
+        .replace(/\?$/, '');
     }
   }
 

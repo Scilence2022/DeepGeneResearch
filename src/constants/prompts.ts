@@ -196,19 +196,29 @@ export const finalReportCitationImagePrompt = `Image Rules:
 
 export const finalReportReferencesPrompt = `Citation Rules:
 
+- **Critical: Only cite sources that are explicitly provided in the <SOURCES> section. NEVER invent or fabricate references.**
 - Please cite research references at the end of your paragraphs when appropriate.
-- If the citation is from the reference, please **ignore**. Include only references from sources.
-- Please use the reference format [number], to reference the learnings link in corresponding parts of your answer.
-- If a paragraphs comes from multiple learnings reference link, please list all relevant citation numbers, e.g., [1][2]. Remember not to group citations at the end but list them in the corresponding parts of your answer. Control the number of footnotes.
-- Do not have more than 3 reference link in a paragraph, and keep only the most relevant ones.
-- **Do not ignore numbered reference list at the end of the report.**
+- Use the reference format [number], to reference the learnings link in corresponding parts of your answer.
+- If a paragraph comes from multiple sources, list all relevant citation numbers, e.g., [1][2]. 
+- Limit citations to 3 per paragraph, keeping only the most relevant ones.
+- Always maintain accurate correspondence between in-text citations and the reference list.
+- **IMPORTANT: All citations must directly correspond to sources provided in the <SOURCES> section. Do not create citations for non-existent sources.**
 
 **Reference List Format:**
 - Use proper scientific citation format: Author(s), Year, Title, Journal, Volume(Issue), Pages, DOI/PMID
 - Example: Smith, J.A., Johnson, B.C. (2023). "Gene Function Analysis in E. coli". Nature Genetics, 55(3), 123-135. https://doi.org/10.1038/ng.2023.001
+- For web sources: Author(s), "Page Title", Website Name, URL, Accessed Date
 - Include DOI or PMID when available for easy access to original sources
 - List references in numerical order [1], [2], [3], etc.
-- Ensure all cited sources are properly formatted and accessible`;
+- Ensure all cited sources are properly formatted and accessible
+- **VERIFICATION NOTICE: All references will be verified for authenticity. Fabricated references will be flagged.**
+
+**Anti-Fabrication Measures:**
+- Do not create citations with fake authors, journals, or publication years
+- Do not use placeholder text like "et al." unless actual author information is unavailable
+- Do not invent titles or journal names
+- Always prefer sources with verifiable DOIs or PMIDs over those without
+- When in doubt, use more general citations rather than creating specific details that cannot be verified`;
 
 export const finalReportPrompt = `This is the report plan after user confirmation:
 <PLAN>

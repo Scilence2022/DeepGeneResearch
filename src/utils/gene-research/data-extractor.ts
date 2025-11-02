@@ -13,6 +13,15 @@ import {
   BindingSite,
   PTM
 } from '@/types/gene-research';
+import { LiteratureValidator, EnhancedLiteratureReference } from './literature-validator';
+
+export interface ReferenceQualityStatistics {
+  validatedReferences: number;
+  duplicateReferences: number;
+  highConfidenceReferences: number;
+  warnings: number;
+  potentiallyFabricated: number;
+}
 
 export interface GeneDataExtractionResult {
   geneBasicInfo: GeneBasicInfo;
@@ -29,6 +38,8 @@ export interface GeneDataExtractionResult {
     sources: string[];
     confidence: number;
     completeness: number;
+    referenceQuality?: ReferenceQualityStatistics;
+    literatureQualityReport?: any; // Enhanced literature quality report
   };
 }
 
@@ -36,17 +47,45 @@ export class GeneDataExtractor {
   private geneSymbol: string;
   private organism: string;
   private extractionRules: GeneExtractionRules;
+  private literatureValidator: LiteratureValidator;
 
   constructor(geneSymbol: string, organism: string) {
     this.geneSymbol = geneSymbol;
     this.organism = organism;
     this.extractionRules = new GeneExtractionRules();
+    this.literatureValidator = new LiteratureValidator();
   }
 
   async extractFromContent(content: string, source: string): Promise<Partial<GeneDataExtractionResult>> {
     const extractionStart = Date.now();
     
     try {
+      // Extract raw references
+      const rawReferences = this.extractLiteratureReferences(content);
+      
+      // Add literature validation and deduplication with extraction method information
+      const rawReferencesWithSource = rawReferences.map(ref => ({
+        ...ref,
+        source,
+        extractionMethod: ref.methodology?.[0] || 'content_extraction' // Preserve original extraction method if available
+      }));
+      
+      // Validate and deduplicate references
+      const { uniqueReferences, duplicateCount, stats, qualityReport } = await this.literatureValidator.processReferences(
+        rawReferencesWithSource,
+        this.organism
+      );
+      
+      // Log reference processing statistics
+      console.log(`Reference processing results for ${source}:`, {
+        totalExtracted: rawReferences.length,
+        uniqueValidated: uniqueReferences.length,
+        duplicatesRemoved: duplicateCount,
+        highConfidence: stats.highConfidence,
+        potentiallyFabricated: stats.potentiallyFabricated
+      });
+      
+      // Create results object with basic extracted data
       const results: Partial<GeneDataExtractionResult> = {
         geneBasicInfo: this.extractGeneBasicInfo(content),
         functionalData: this.extractFunctionalData(content),
@@ -55,13 +94,36 @@ export class GeneDataExtractor {
         interactionData: this.extractInteractionData(content),
         diseaseData: this.extractDiseaseData(content),
         evolutionaryData: this.extractEvolutionaryData(content),
-        literatureReferences: this.extractLiteratureReferences(content),
+        // Convert enhanced references back to standard format for compatibility
+        literatureReferences: uniqueReferences
+          .filter(ref => ref.qualityMetadata?.verified || ref.qualityMetadata?.confidenceScore > 50)
+          .map(ref => ({
+          pmid: ref.pmid,
+          title: ref.title,
+          authors: ref.authors,
+          journal: ref.journal,
+          year: ref.year,
+          abstract: ref.abstract,
+          relevance: ref.relevance,
+          studyType: ref.studyType,
+          organism: ref.organism,
+          methodology: ref.methodology,
+          // Note: quality metadata is not included in the standard type
+          // but will be used internally by the validator
+        })),
         qualityScore: 0,
         extractionMetadata: {
           extractionTime: Date.now() - extractionStart,
           sources: [source],
           confidence: 0,
-          completeness: 0
+          completeness: 0,
+            referenceQuality: {
+              validatedReferences: stats.validated,
+              duplicateReferences: duplicateCount,
+              highConfidenceReferences: stats.highConfidence,
+              warnings: stats.warnings,
+              potentiallyFabricated: stats.potentiallyFabricated
+            }
         }
       };
 
@@ -69,6 +131,9 @@ export class GeneDataExtractor {
       results.qualityScore = this.calculateQualityScore(results);
       results.extractionMetadata!.confidence = this.calculateConfidence(results);
       results.extractionMetadata!.completeness = this.calculateCompleteness(results);
+      
+      // Add literature quality report to metadata
+      results.extractionMetadata!.literatureQualityReport = qualityReport;
 
       return results;
     } catch (error) {
@@ -79,7 +144,14 @@ export class GeneDataExtractor {
           extractionTime: Date.now() - extractionStart,
           sources: [source],
           confidence: 0,
-          completeness: 0
+          completeness: 0,
+          referenceQuality: {
+            validatedReferences: 0,
+            duplicateReferences: 0,
+            highConfidenceReferences: 0,
+            warnings: 1,
+            potentiallyFabricated: 0
+          }
         }
       };
     }
@@ -464,27 +536,95 @@ export class GeneDataExtractor {
 
   private extractLiteratureReferences(content: string): LiteratureReference[] {
     const references: LiteratureReference[] = [];
+    const extractedPMIDs = new Set<string>(); // Use Set to prevent duplicates during extraction
     
-    // Extract PMIDs
-    const pmidMatches = content.match(/pmid[:\s]*(\d+)/gi);
-    if (pmidMatches) {
-      pmidMatches.forEach(match => {
-        const pmid = match.replace(/pmid[:\s]*/i, '').trim();
-        if (pmid) {
-          references.push({
-            pmid,
-            title: 'Extracted from content',
-            authors: [],
-            journal: 'Unknown',
-            year: new Date().getFullYear(),
-            abstract: '',
-            relevance: 'medium' as const,
-            studyType: 'experimental' as const,
-            organism: this.organism,
-            methodology: ['extracted']
-          });
+    // Extract PMIDs with various formats
+    const pmidPatterns = [
+      /pmid[:\s]*(\d+)/gi,
+      /PubMed[:\s]*(\d+)/gi,
+      /\b(\d{7,8})\b(?=[^A-Za-z0-9]|$)/g // Standalone PMID-like numbers (7-8 digits)
+    ];
+    
+    // Extract all possible PMIDs using multiple patterns
+    for (const pattern of pmidPatterns) {
+      const matches = content.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          // Extract the numeric part
+          const pmidMatch = match.match(/(\d+)/);
+          if (pmidMatch && pmidMatch[1]) {
+            const pmid = pmidMatch[1].trim();
+            if (pmid && pmid.length >= 7 && pmid.length <= 8) { // Standard PMID format
+              extractedPMIDs.add(pmid);
+            }
+          }
+        });
+      }
+    }
+    
+    // Extract DOIs as alternative identifiers
+    const doiMatches = content.match(/doi[:\s]*([^\s.,;]+)/gi);
+    const extractedDOIs = new Set<string>();
+    if (doiMatches) {
+      doiMatches.forEach(match => {
+        const doi = match.replace(/doi[:\s]*/i, '').trim();
+        if (doi && doi.includes('10.')) { // Basic DOI validation
+          extractedDOIs.add(doi);
         }
       });
+    }
+    
+    // Create references from extracted PMIDs
+    extractedPMIDs.forEach(pmid => {
+      references.push({
+        pmid,
+        title: 'Pending validation', // Will be updated by validator
+        authors: [],
+        journal: 'Pending validation',
+        year: new Date().getFullYear(),
+        abstract: '',
+        relevance: 'medium' as const,
+        studyType: 'experimental' as const,
+        organism: this.organism,
+        methodology: ['pmid_extracted']
+      });
+    });
+    
+    // Note: DOIs will be handled during validation phase
+    // They can be used as fallback when PMID validation fails
+    
+    // Extract potential reference sections in text
+    const referenceSectionPattern = /(?:references?|bibliography|works cited):[\s\S]{10,5000}/i;
+    const refSectionMatch = content.match(referenceSectionPattern);
+    if (refSectionMatch && refSectionMatch[0]) {
+      // This is a simplified approach - in a real implementation, we would use
+      // more sophisticated parsing of reference sections
+      const refSection = refSectionMatch[0];
+      
+      // Extract potential citations with year patterns
+      const citationPattern = /([A-Z][a-z\-]+(?:\s+[A-Z][a-z\-]+)*)\s+\((\d{4})\)/g;
+      let match;
+      
+      while ((match = citationPattern.exec(refSection)) !== null) {
+        // Check if we already have this reference via PMID
+        const authors = match[1].split(/\s+/).filter(name => name.length > 0);
+        const year = parseInt(match[2], 10);
+        
+        // Create a reference with extracted author and year information
+        // This will be validated later
+        references.push({
+          pmid: '',
+          title: 'Reference section citation',
+          authors,
+          journal: 'Unknown',
+          year,
+          abstract: '',
+          relevance: 'medium' as const,
+          studyType: 'experimental' as const,
+          organism: this.organism,
+          methodology: ['text_extracted']
+        });
+      }
     }
 
     return references;
