@@ -223,28 +223,26 @@ flowchart TB
     
     %% AI Analysis Phase
     B --> F[❓ AI Analysis & System Questions Generation]
-    F --> G[👤 User Feedback & Questions]
+    F --> G[👤 User Feedback]
     G --> H[📝 Research Plan Generation]
     
     %% Search Phase
-    H --> I[🔍 Multi-Database Search & Analysis]
+    H --> I[🔍 Multi-Database Search & Integration of Results]
     I --> K[👤 User Review & Refinement]
     K --> L{🔄 More Research Needed?}
     
     %% Iteration Loop
     L -->|Yes| M[💡 Research Suggestions]
     M --> N[👤 User Feedback on Suggestions]
-    N --> O[🔍 Additional Database Queries]
-    O --> P[📊 New Results Integration]
-    P --> Q[👤 User Review & Refinement]
-    Q --> L
+    N --> H
+    
     
     %% Final Phase
-    L -->|No| R[📝 Report Writing Request]
+    L -->|No| R[👤📝 Report Writing Request & User Instructions]
     R --> S[👤 User Writing Instructions]
     S --> T[📄 Final Report Generation]
-    T --> U[🕸️ Knowledge Graph Creation]
-    U --> V[👤 User Review & Editing]
+    T --> V[👤 User Review & Editing]
+    T --> |Optional| U[🕸️ Knowledge Graph Creation]
     V --> W[📋 Final Report Output]
     
     %% User Interaction Styling
