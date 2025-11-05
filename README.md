@@ -218,8 +218,8 @@ NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
 flowchart TB
     %% User Input Phase
     A[🧬 Gene Input] --> B[🎯 Research Focus Selection]
-    C --> B[📋 Additional Parameters]
-    D --> B[📁 Local Resources Upload]
+    C[📋 Additional Parameters] --> B
+    D[📁 Local Resources Upload] --> B
     
     %% AI Analysis Phase
     B --> E[🤖 AI Analysis & Planning]
