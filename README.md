@@ -222,30 +222,24 @@ flowchart TB
     D[📁 Local Resources Upload] --> B
     
     %% AI Analysis Phase
-    B --> E[❓ AI Analysis & System Questions Generation]
+    B --> E[❓ AI Analysis & Questions Generation]
     E --> F[👤 User Feedback]
     F --> G[📝 Research Plan Generation]
     
     %% Search Phase
-    G --> H[🔍 Multi-Database Search & Integration of Results]
+    G --> H[🔍 Multi-Database Search]
     H --> I[👤 User Review & Refinement]
     I --> J{🔄 More Research Needed?}
     
     %% Iteration Loop
     J -->|Yes| K[💡 Research Suggestions]
-    K --> L[👤 User Feedback on Suggestions]
-    L --> M[🔍 Additional Database Queries]
-    M --> N[📊 New Results Integration]
-    N --> O[👤 Review & Refinement]
-    O --> J
+    K --> L[👤 User Feedback]
+    L --> H
     
     %% Final Phase
-    J -->|No| P[👤📝 Report Writing Request & User Instructions]
-    P --> Q[👤 User Writing Instructions]
-    Q --> R[📄 Final Report Generation]
-    R --> S[🕸️ Knowledge Graph Creation]
-    R --> T[👤 User Review & Editing]
-    T --> U[📋 Final Report Output]
+    J -->|No| M[📄 Report Generation]
+    M --> N[👤 User Review & Editing]
+    N --> O[📋 Final Report Output]
     
     %% User Interaction Styling
     style A fill:#e1f5fe,stroke:#01579b,stroke-width:3px
@@ -255,10 +249,7 @@ flowchart TB
     style I fill:#fff3e0,stroke:#e65100,stroke-width:3px
     style K fill:#fff3e0,stroke:#e65100,stroke-width:3px
     style L fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style O fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style P fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style Q fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style T fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style N fill:#fff3e0,stroke:#e65100,stroke-width:3px
     
     %% AI Processing Styling
     style E fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
@@ -266,13 +257,10 @@ flowchart TB
     style G fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
     style H fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
     style M fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style N fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style R fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style S fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
     
     %% Decision and Output Styling
     style J fill:#c8d6e5,stroke:#37474f,stroke-width:2px
-    style U fill:#e8eaf6,stroke:#3f51b5,stroke-width:3px
+    style O fill:#e8eaf6,stroke:#3f51b5,stroke-width:3px
 ```
 
 ### **Interactive Research Process**
