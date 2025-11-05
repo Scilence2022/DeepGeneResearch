@@ -217,62 +217,62 @@ NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
 ```mermaid
 flowchart TB
     %% User Input Phase
-    C[📋 Additional Parameters] --> B
     A[🧬 Gene Input] --> B[🎯 Research Focus Selection]
+    C[📋 Additional Parameters] --> B
     D[📁 Local Resources Upload] --> B
     
     %% AI Analysis Phase
-    B --> F[❓ AI Analysis & System Questions Generation]
-    F --> G[👤 User Feedback]
-    G --> H[📝 Research Plan Generation]
+    B --> E[❓ AI Analysis & System Questions Generation]
+    E --> F[👤 User Feedback]
+    F --> G[📝 Research Plan Generation]
     
     %% Search Phase
-    H --> I[🔍 Multi-Database Search & Integration of Results]
-    I --> K[👤 User Review & Refinement]
-    K --> L{🔄 More Research Needed?}
+    G --> H[🔍 Multi-Database Search & Integration of Results]
+    H --> I[👤 User Review & Refinement]
+    I --> J{🔄 More Research Needed?}
     
     %% Iteration Loop
-    L -->|Yes| M[💡 Research Suggestions]
-    M --> N[👤 User Feedback on Suggestions]
-    N --> H
-    
+    J -->|Yes| K[💡 Research Suggestions]
+    K --> L[👤 User Feedback on Suggestions]
+    L --> M[🔍 Additional Database Queries]
+    M --> N[📊 New Results Integration]
+    N --> O[👤 Review & Refinement]
+    O --> J
     
     %% Final Phase
-    L -->|No| R[👤📝 Report Writing Request & User Instructions]
-    R --> S[👤 User Writing Instructions]
-    S --> T[📄 Final Report Generation]
-    T --> V[👤 User Review & Editing]
-    T --> |Optional| U[🕸️ Knowledge Graph Creation]
-    V --> W[📋 Final Report Output]
+    J -->|No| P[👤📝 Report Writing Request & User Instructions]
+    P --> Q[👤 User Writing Instructions]
+    Q --> R[📄 Final Report Generation]
+    R --> S[🕸️ Knowledge Graph Creation]
+    R --> T[👤 User Review & Editing]
+    T --> U[📋 Final Report Output]
     
     %% User Interaction Styling
     style A fill:#e1f5fe,stroke:#01579b,stroke-width:3px
     style B fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
     style C fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
     style D fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
-    style G fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style I fill:#fff3e0,stroke:#e65100,stroke-width:3px
     style K fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style M fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style N fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style L fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style O fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style P fill:#fff3e0,stroke:#e65100,stroke-width:3px
     style Q fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style R fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style S fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    style V fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style T fill:#fff3e0,stroke:#e65100,stroke-width:3px
     
     %% AI Processing Styling
     style E fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
     style F fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style G fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
     style H fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style I fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style J fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style O fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style P fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style T fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    style U fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style M fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style N fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style R fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    style S fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
     
     %% Decision and Output Styling
-    style L fill:#c8d6e5,stroke:#37474f,stroke-width:2px
-    style W fill:#e8eaf6,stroke:#3f51b5,stroke-width:3px
+    style J fill:#c8d6e5,stroke:#37474f,stroke-width:2px
+    style U fill:#e8eaf6,stroke:#3f51b5,stroke-width:3px
 ```
 
 ### **Interactive Research Process**
