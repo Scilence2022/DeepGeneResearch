@@ -222,15 +222,13 @@ flowchart TB
     D[📁 Local Resources Upload] --> B
     
     %% AI Analysis Phase
-    B --> E[🤖 AI Analysis & Planning]
-    E --> F[❓ System Questions Generation]
+    B --> F[❓ AI Analysis & System Questions Generation]
     F --> G[👤 User Feedback & Questions]
     G --> H[📝 Research Plan Generation]
     
     %% Search Phase
-    H --> I[🔍 Multi-Database Search]
-    I --> J[📊 Search Results Analysis]
-    J --> K[👤 User Review & Refinement]
+    H --> I[🔍 Multi-Database Search & Analysis]
+    I --> K[👤 User Review & Refinement]
     K --> L{🔄 More Research Needed?}
     
     %% Iteration Loop
