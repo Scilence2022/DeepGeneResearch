@@ -627,25 +627,41 @@ export class LiteratureValidator {
 /**
  * Create a formatted citation string from a reference
  * @param reference The reference to format
- * @returns Formatted citation string
+ * @returns Formatted citation string with clickable links
  */
 export function formatCitation(reference: EnhancedLiteratureReference): string {
-  const authors = reference.authors && reference.authors.length > 0
-    ? reference.authors.join(', ')
-    : 'Anonymous';
-  
-  const journalInfo = reference.journal !== 'Unknown' ? reference.journal : 'Unknown Journal';
-  
-  let citation = `${authors} (${reference.year}). "${reference.title}". ${journalInfo}`;
-  
-  if (reference.volume && reference.issue && reference.pages) {
-    citation += `, ${reference.volume}(${reference.issue}), ${reference.pages}`;
+  // Format authors: "Conway T, et al." for multiple authors or just "Conway T" for single author
+  let authors = 'Anonymous';
+  if (reference.authors && reference.authors.length > 0) {
+    if (reference.authors.length === 1) {
+      authors = reference.authors[0];
+    } else {
+      // Show first author followed by ", et al."
+      authors = `${reference.authors[0]}, et al.`;
+    }
   }
   
+  // Build the citation in the requested format
+  let citation = `${authors} ${reference.year}. ${reference.title}. ${reference.journal}`;
+  
+  // Add volume, issue, and pages if available
+  if (reference.volume) {
+    citation += ` ${reference.volume}`;
+    if (reference.issue) {
+      citation += `(${reference.issue})`;
+    }
+    if (reference.pages) {
+      citation += `:${reference.pages}`;
+    }
+  }
+  
+  // Add DOI as a clickable link if available
   if (reference.doi) {
-    citation += `. https://doi.org/${reference.doi}`;
-  } else if (reference.pmid) {
-    citation += `. PMID: ${reference.pmid}`;
+    citation += ` DOI:[${reference.doi}](https://doi.org/${reference.doi})`;
+  } 
+  // Add PMID as a clickable link if DOI is not available
+  else if (reference.pmid) {
+    citation += ` PMID:[${reference.pmid}](https://pubmed.ncbi.nlm.nih.gov/${reference.pmid}/)`;
   }
   
   return citation;

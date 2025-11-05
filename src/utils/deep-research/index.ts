@@ -436,9 +436,29 @@ class DeepResearch {
         sources.push(part.source);
       } else if (part.type === "finish") {
         if (sources.length > 0) {
-          const sourceContent =
-            "\n\n---\n\n" +
-            sources
+          // Check if we have formatted citations (from gene research)
+          const hasFormattedCitations = sources.some(source => source.formattedCitation);
+          
+          let sourceContent = "\n\n---\n\n";
+          
+          if (hasFormattedCitations) {
+            // Use formatted citations for gene research reports
+            sourceContent += "## References\n\n";
+            sourceContent += sources
+              .map((source, idx) => {
+                // Use formatted citation if available, otherwise fall back to default format
+                if (source.formattedCitation) {
+                  return `[${idx + 1}]: ${source.formattedCitation}`;
+                } else {
+                  return `[${idx + 1}]: ${source.url}${
+                    source.title ? ` "${source.title.replaceAll('"', " ")}"` : ""
+                  }`;
+                }
+              })
+              .join("\n");
+          } else {
+            // Use default format for regular reports
+            sourceContent += sources
               .map(
                 (item, idx) =>
                   `[${idx + 1}]: ${item.url}${
@@ -446,6 +466,8 @@ class DeepResearch {
                   }`
               )
               .join("\n");
+          }
+          
           content += sourceContent;
         }
       }
@@ -537,12 +559,20 @@ class DeepResearch {
       this.onMessage("progress", { step: "gene-research", status: "end" });
 
       // Convert gene research result to standard format
-      const sources = result.workflow.literatureReview.map(ref => ({
-        title: ref.title,
-        url: `https://pubmed.ncbi.nlm.nih.gov/${ref.pmid}/`,
-        content: ref.abstract,
-        database: 'pubmed'
-      }));
+      // Use the formatCitation function to properly format literature references
+      const { formatCitation } = await import('./gene-research/literature-validator');
+      const sources = result.workflow.literatureReview.map(ref => {
+        // Create a formatted citation using the formatCitation function
+        const formattedCitation = formatCitation(ref);
+        
+        return {
+          title: ref.title,
+          url: `https://pubmed.ncbi.nlm.nih.gov/${ref.pmid}/`,
+          content: ref.abstract,
+          database: 'pubmed',
+          formattedCitation // Add the formatted citation
+        };
+      });
 
       const images = result.visualizations.map(viz => ({
         url: `data:image/svg+xml;base64,${Buffer.from(viz.content).toString('base64')}`,

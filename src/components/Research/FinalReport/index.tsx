@@ -282,13 +282,23 @@ function FinalReport() {
                 </h2>
                 <ol>
                   {taskStore.sources.map((source, idx) => {
-                    return (
-                      <li key={idx}>
-                        <a href={source.url} target="_blank">
-                          {source.title || source.url}
-                        </a>
-                      </li>
-                    );
+                    // Check if we have a formatted citation (from gene research)
+                    if (source.formattedCitation) {
+                      return (
+                        <li key={idx}>
+                          <div dangerouslySetInnerHTML={{ __html: source.formattedCitation }} />
+                        </li>
+                      );
+                    } else {
+                      // Default display for regular sources
+                      return (
+                        <li key={idx}>
+                          <a href={source.url} target="_blank">
+                            {source.title || source.url}
+                          </a>
+                        </li>
+                      );
+                    }
                   })}
                 </ol>
               </div>
