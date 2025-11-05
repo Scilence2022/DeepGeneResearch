@@ -217,8 +217,8 @@ NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
 ```mermaid
 flowchart TB
     %% User Input Phase
-    A[🧬 Gene Input] --> B[🎯 Research Focus Selection]
     C[📋 Additional Parameters] --> B
+    A[🧬 Gene Input] --> B[🎯 Research Focus Selection]
     D[📁 Local Resources Upload] --> B
     
     %% AI Analysis Phase
