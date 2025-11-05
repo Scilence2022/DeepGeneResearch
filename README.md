@@ -900,6 +900,6 @@ This project is licensed under the [MIT License](LICENSE) - see the LICENSE file
 ---
 
 <div align="center">
-  <p><strong>Built by <a href="https://github.com/Scilence2022">CodeXomics Team</a></strong></p>
+  <p><strong>Built by <a href="https://github.com/Scilence2022/CodeXomics">CodeXomics Team</a></strong></p>
   <p>Empowering researchers with AI-driven gene function analysis</p>
 </div>
