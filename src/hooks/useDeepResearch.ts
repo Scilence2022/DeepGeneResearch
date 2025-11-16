@@ -510,6 +510,7 @@ function useDeepResearch() {
       setSources,
       requirement,
       updateFinalReport,
+      setReportUrl,
     } = useTaskStore.getState();
     const { save } = useHistoryStore.getState();
     const { thinkingModel } = getModel();
@@ -517,6 +518,7 @@ function useDeepResearch() {
     updateFinalReport("");
     setTitle("");
     setSources([]);
+    setReportUrl("");
     const learnings = tasks.map((item) => item.learning);
     const sources: Source[] = unique(
       flat(tasks.map((item) => item.sources || [])),
@@ -609,6 +611,13 @@ function useDeepResearch() {
       setSources(sources);
       const id = save(taskStore.backup());
       setId(id);
+      
+      // Generate report URL
+      if (id) {
+        const reportUrl = `${window.location.origin}/report/${id}`;
+        setReportUrl(reportUrl);
+      }
+      
       return content;
     } else {
       return "";

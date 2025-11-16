@@ -58,7 +58,14 @@
       "researchedInfor": "Researched {{total}} websites",
       "localResearchedInfor": "Researched {{total}} local resources",
       "writingRequirementLabel": "Writing requirements (optional)",
-      "writingRequirementPlaceholder": "You can raise any request related to report writing."
+      "writingRequirementPlaceholder": "You can raise any request related to report writing.",
+      "shareUrl": "Share Report URL",
+      "copyUrl": "Copy URL",
+      "urlCopied": "URL Copied!",
+      "exportData": "Export Research Data",
+      "exportJSON": "Export as JSON",
+      "exportCSV": "Export as CSV",
+      "exportComplete": "Complete Package"
     }
   },
   "history": {

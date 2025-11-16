@@ -10,6 +10,10 @@ import {
   NotebookText,
   Waypoints,
   FileSpreadsheet,
+  Database,
+  Link2,
+  Copy,
+  CopyCheck,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -39,6 +43,11 @@ import { useKnowledgeStore } from "@/store/knowledge";
 import { getSystemPrompt } from "@/utils/deep-research/prompts";
 import { downloadFile } from "@/utils/file";
 import { markdownToDoc } from "@/utils/markdown";
+import {
+  exportResearchDataAsJSON,
+  exportResearchDataAsCSV,
+  exportCompleteResearchPackage,
+} from "@/utils/export-research";
 
 const MagicDown = dynamic(() => import("@/components/MagicDown"));
 const Artifact = dynamic(() => import("@/components/Artifact"));
@@ -60,6 +69,7 @@ function FinalReport() {
   } = useAccurateTimer();
   const [isWriting, setIsWriting] = useState<boolean>(false);
   const [openKnowledgeGraph, setOpenKnowledgeGraph] = useState<boolean>(false);
+  const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
   const taskFinished = useMemo(() => {
     const unfinishedTasks = taskStore.tasks.filter(
       (task) => task.state !== "completed"
@@ -160,6 +170,30 @@ function FinalReport() {
     document.title = originalTitle;
   }
 
+  const handleCopyReportUrl = () => {
+    if (taskStore.reportUrl) {
+      navigator.clipboard.writeText(taskStore.reportUrl);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+      toast.success("Report URL copied to clipboard!");
+    }
+  };
+
+  const handleExportJSON = () => {
+    exportResearchDataAsJSON(taskStore);
+    toast.success("Research data exported as JSON");
+  };
+
+  const handleExportCSV = () => {
+    exportResearchDataAsCSV(taskStore);
+    toast.success("Research data exported as CSV");
+  };
+
+  const handleExportComplete = () => {
+    exportCompleteResearchPackage(taskStore);
+    toast.success("Complete research package exported");
+  };
+
   useEffect(() => {
     form.setValue("requirement", taskStore.requirement);
   }, [taskStore.requirement, form]);
@@ -170,6 +204,40 @@ function FinalReport() {
         <h3 className="font-semibold text-lg border-b mb-2 leading-10 print:hidden">
           {t("research.finalReport.title")}
         </h3>
+        
+        {/* Report URL Display */}
+        {taskStore.reportUrl && taskStore.finalReport !== "" && (
+          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md print:hidden">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                  Share Report URL
+                </p>
+                <code className="text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded border">
+                  {taskStore.reportUrl}
+                </code>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyReportUrl}
+                className="ml-4"
+              >
+                {copiedUrl ? (
+                  <>
+                    <CopyCheck className="h-4 w-4 mr-2" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy URL
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
         {taskStore.finalReport !== "" ? (
           <article>
             <MagicDown
@@ -251,6 +319,42 @@ function FinalReport() {
                       >
                         <Signature />
                         <span>PDF</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <div className="px-1">
+                    <Separator className="dark:bg-slate-700" />
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        className="float-menu-button"
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        title="Export Research Data"
+                        side="left"
+                        sideoffset={8}
+                      >
+                        <Database />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      className="print:hidden"
+                      side="left"
+                      sideOffset={8}
+                    >
+                      <DropdownMenuItem onClick={() => handleExportJSON()}>
+                        <FileText />
+                        <span>Export as JSON</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleExportCSV()}>
+                        <FileSpreadsheet />
+                        <span>Export as CSV</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleExportComplete()}>
+                        <Database />
+                        <span>Complete Package</span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

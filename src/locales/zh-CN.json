@@ -58,7 +58,14 @@
       "researchedInfor": "已研究 {{total}} 个网站",
       "localResearchedInfor": "已研究 {{total}} 个本地资源",
       "writingRequirementLabel": "写作要求（可选）",
-      "writingRequirementPlaceholder": "您可以提出任何与撰写报告相关的要求。"
+      "writingRequirementPlaceholder": "您可以提出任何与撰写报告相关的要求。",
+      "shareUrl": "分享报告链接",
+      "copyUrl": "复制链接",
+      "urlCopied": "链接已复制!",
+      "exportData": "导出调研数据",
+      "exportJSON": "导出为 JSON",
+      "exportCSV": "导出为 CSV",
+      "exportComplete": "完整数据包"
     }
   },
   "history": {

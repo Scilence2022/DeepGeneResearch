@@ -18,6 +18,7 @@ export interface TaskStore {
   sources: Source[];
   images: ImageSource[];
   knowledgeGraph: string;
+  reportUrl?: string;
 }
 
 interface TaskActions {
@@ -40,6 +41,7 @@ interface TaskActions {
   setImages: (images: Source[]) => void;
   setFeedback: (feedback: string) => void;
   updateKnowledgeGraph: (knowledgeGraph: string) => void;
+  setReportUrl: (reportUrl: string) => void;
   clear: () => void;
   reset: () => void;
   backup: () => TaskStore;
@@ -62,6 +64,7 @@ const defaultValues: TaskStore = {
   sources: [],
   images: [],
   knowledgeGraph: "",
+  reportUrl: "",
 };
 
 export const useTaskStore = create(
@@ -108,6 +111,7 @@ export const useTaskStore = create(
       setImages: (images) => set(() => ({ images })),
       setFeedback: (feedback) => set(() => ({ feedback })),
       updateKnowledgeGraph: (knowledgeGraph) => set(() => ({ knowledgeGraph })),
+      setReportUrl: (reportUrl) => set(() => ({ reportUrl })),
       clear: () => set(() => ({ tasks: [] })),
       reset: () => set(() => ({ ...defaultValues })),
       backup: () => {
