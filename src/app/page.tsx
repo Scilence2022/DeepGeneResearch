@@ -7,17 +7,18 @@ import { useSearchParams } from "next/navigation";
 import { useGlobalStore } from "@/store/global";
 import { useSettingStore } from "@/store/setting";
 
-const Header = dynamic(() => import("@/components/Internal/Header"));
-const Setting = dynamic(() => import("@/components/Setting"));
-const ResearchCapabilities = dynamic(() => import("@/components/Research/ResearchCapabilities"));
-const Topic = dynamic(() => import("@/components/Research/Topic"));
-const Feedback = dynamic(() => import("@/components/Research/Feedback"));
+const Header = dynamic(() => import("@/components/Internal/Header"), { ssr: false });
+const Setting = dynamic(() => import("@/components/Setting"), { ssr: false });
+const ResearchCapabilities = dynamic(() => import("@/components/Research/ResearchCapabilities"), { ssr: false });
+const Topic = dynamic(() => import("@/components/Research/Topic"), { ssr: false });
+const Feedback = dynamic(() => import("@/components/Research/Feedback"), { ssr: false });
 const SearchResult = dynamic(
-  () => import("@/components/Research/SearchResult")
+  () => import("@/components/Research/SearchResult"),
+  { ssr: false }
 );
-const FinalReport = dynamic(() => import("@/components/Research/FinalReport"));
-const History = dynamic(() => import("@/components/History"));
-const Knowledge = dynamic(() => import("@/components/Knowledge"));
+const FinalReport = dynamic(() => import("@/components/Research/FinalReport"), { ssr: false });
+const History = dynamic(() => import("@/components/History"), { ssr: false });
+const Knowledge = dynamic(() => import("@/components/Knowledge"), { ssr: false });
 
 function TopicWithParams() {
   const searchParams = useSearchParams();
