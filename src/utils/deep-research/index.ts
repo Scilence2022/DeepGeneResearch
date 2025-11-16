@@ -559,11 +559,11 @@ class DeepResearch {
       this.onMessage("progress", { step: "gene-research", status: "end" });
 
       // Convert gene research result to standard format
-      // Use the formatCitation function to properly format literature references
-      const { formatCitation } = await import('./gene-research/literature-validator');
       const sources = result.workflow.literatureReview.map(ref => {
-        // Create a formatted citation using the formatCitation function
-        const formattedCitation = formatCitation(ref);
+        // Create a simple formatted citation string
+        const formattedCitation = ref.authors && ref.year
+          ? `${ref.authors.slice(0, 3).join(', ')}${ref.authors.length > 3 ? ' et al.' : ''}. (${ref.year}). ${ref.title}. ${ref.journal || ''}.`
+          : `${ref.title} (${ref.year || 'n.d.'})`;
         
         return {
           title: ref.title,
