@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const transport: StreamableHTTPServerTransport =
       new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
+        enableJsonResponse: true, // Return JSON instead of SSE for simple clients
       });
 
     transport.onclose = () => {
