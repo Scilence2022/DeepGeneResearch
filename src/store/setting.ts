@@ -149,7 +149,7 @@ export const defaultValues: SettingStore = {
   ollamaNetworkingModel: "",
   accessPassword: "",
   enableSearch: "1",
-  searchProvider: "model",
+  searchProvider: "searxng",  // Use SearXNG with PubMed priority for biological research
   tavilyApiKey: "",
   tavilyApiProxy: "",
   tavilyScope: "general",
@@ -160,8 +160,8 @@ export const defaultValues: SettingStore = {
   exaScope: "research paper",
   bochaApiKey: "",
   bochaApiProxy: "",
-  searxngApiProxy: "",
-  searxngScope: "all",
+  searxngApiProxy: "https://searx.be",  // Public SearXNG instance
+  searxngScope: "academic",  // Academic scope for biological/scientific queries
   parallelSearch: 1,
   searchMaxResult: 5,
   crawler: "jina",

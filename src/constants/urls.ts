@@ -14,4 +14,6 @@ export const TAVILY_BASE_URL = "https://api.tavily.com";
 export const FIRECRAWL_BASE_URL = "https://api.firecrawl.dev";
 export const EXA_BASE_URL = "https://api.exa.ai";
 export const BOCHA_BASE_URL = "https://api.bochaai.com";
-export const SEARXNG_BASE_URL = "http://localhost:8080";
+// SearXNG public instance - for production, consider running your own instance
+// Public instances: https://searx.space/ for list of available instances
+export const SEARXNG_BASE_URL = "https://searx.be";  // Public instance with good uptime
