@@ -1,0 +1,24 @@
+{
+  "name": "deep-research-mcp-examples",
+  "version": "1.0.0",
+  "description": "Example scripts for using Deep Research MCP server",
+  "main": "mcp-research-client.js",
+  "scripts": {
+    "single": "node mcp-research-client.js",
+    "batch": "node mcp-research-client.js --batch",
+    "help": "node mcp-research-client.js --help"
+  },
+  "keywords": [
+    "mcp",
+    "gene-research",
+    "bioinformatics",
+    "api-client"
+  ],
+  "author": "Deep Research Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
