@@ -331,8 +331,12 @@ async function main() {
       enableReferences: true
     });
 
-    // Save report
-    const reportContent = researchResult.report?.content || researchResult.finalReport || '';
+    // Save report - prioritize finalReport (the complete markdown content)
+    const reportContent = researchResult.finalReport || 
+                         researchResult.report?.content || 
+                         (researchResult.report?.sections ? 
+                           researchResult.report.sections.map(s => s.content).join('\n\n') : 
+                           '');
     
     if (reportContent) {
       await client.saveReport(
