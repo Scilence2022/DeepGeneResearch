@@ -51,6 +51,8 @@ function Home() {
 
   useLayoutEffect(() => {
     const settingStore = useSettingStore.getState();
+    // Run migration to update old settings to new defaults
+    settingStore.migrate();
     setTheme(settingStore.theme);
   }, [theme, setTheme]);
   return (

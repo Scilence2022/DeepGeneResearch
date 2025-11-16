@@ -83,11 +83,13 @@ export interface SettingStore {
   citationImage: "enable" | "disable";
   smoothTextStreamType: "character" | "word" | "line";
   onlyUseLocalResource: "enable" | "disable";
+  settingsVersion: number;  // Track settings schema version for migrations
 }
 
 interface SettingActions {
   update: (values: Partial<SettingStore>) => void;
   reset: () => void;
+  migrate: () => void;  // Migrate settings from old versions
 }
 
 export const defaultValues: SettingStore = {
@@ -172,14 +174,39 @@ export const defaultValues: SettingStore = {
   citationImage: "enable",
   smoothTextStreamType: "word",
   onlyUseLocalResource: "disable",
+  settingsVersion: 2,  // Version 2: Changed searchProvider from 'model' to 'searxng'
 };
 
 export const useSettingStore = create(
   persist<SettingStore & SettingActions>(
-    (set) => ({
+    (set, get) => ({
       ...defaultValues,
       update: (values) => set(values),
       reset: () => set(defaultValues),
+      migrate: () => {
+        const currentVersion = get().settingsVersion || 0;
+        
+        // Migration from version 0 or 1 to version 2
+        // Key change: searchProvider from 'model' to 'searxng' for real database searches
+        if (currentVersion < 2) {
+          const currentProvider = get().searchProvider;
+          
+          // Only migrate if user hasn't explicitly changed from default 'model'
+          // or if it's still 'model' (which was the old default)
+          if (currentProvider === 'model' || !currentProvider) {
+            console.log('[Settings Migration] Upgrading searchProvider from "model" to "searxng" for real database searches');
+            set({
+              searchProvider: 'searxng',
+              searxngApiProxy: defaultValues.searxngApiProxy,
+              searxngScope: 'academic',
+              settingsVersion: 2,
+            });
+          } else {
+            // User has custom provider, just update version
+            set({ settingsVersion: 2 });
+          }
+        }
+      },
     }),
     { name: "setting" }
   )
