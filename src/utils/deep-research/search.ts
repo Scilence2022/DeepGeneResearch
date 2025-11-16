@@ -293,10 +293,14 @@ ${rewritingPrompt}`,
       engines:
         scope === "academic"
           ? [
-              "arxiv",
-              "google scholar",
-              "pubmed",
-              "wikispecies",
+              // Core Literature Databases (Priority 1)
+              "pubmed",           // Most authoritative biomedical database
+              "google scholar",  // Comprehensive academic coverage
+              // Preprint Servers (Priority 2)
+              "arxiv",           // For computational biology/bioinformatics
+              // Specialized databases (Priority 3)
+              "wikispecies",     // Species information
+              // Image sources
               "google_images",
             ]
           : [

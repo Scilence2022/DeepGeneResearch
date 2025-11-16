@@ -102,7 +102,15 @@ Based on previous report plan, generate a list of SERP queries to further resear
 
 ${serpQuerySchemaPrompt}`;
 
-export const queryResultPrompt = `Please use the following query to get the latest information via the web:
+export const queryResultPrompt = `Please prioritize professional biological research literature sources when searching for information:
+
+**Priority Order:**
+1. 🧬 Core Literature Databases: PubMed, Web of Science, Scopus, Embase
+2. ⚡ Preprint Servers: bioRxiv, medRxiv, arXiv (q-bio)
+3. 🌐 General Academic: Google Scholar
+4. 🧬 Specialized Databases: KEGG, EcoCyc, Reactome (for pathway/metabolism queries)
+5. 🌐 Web Search: Only as supplementary source for full-text access or general context
+
 <QUERY>
 {query}
 </QUERY>
@@ -111,6 +119,12 @@ You need to organize the searched information according to the following require
 <RESEARCH_GOAL>
 {researchGoal}
 </RESEARCH_GOAL>
+
+**Important Notes:**
+- For biological/biomedical queries, ALWAYS prioritize peer-reviewed literature from PubMed, Scopus, Web of Science
+- For pathway/metabolism queries, integrate information from KEGG, EcoCyc, and Reactome databases
+- Preprints (bioRxiv, medRxiv) provide cutting-edge research but are NOT peer-reviewed
+- Web search is ONLY for accessing full-text articles or supplementary information
 
 You need to think like a human researcher.
 Generate a list of learnings from the search results.
@@ -124,17 +138,24 @@ export const citationRulesPrompt = `Citation Rules:
 - Please use the format of citation number [number] to reference the context in corresponding parts of your answer.
 - If a sentence comes from multiple contexts, please list all relevant citation numbers, e.g., [1][2]. Remember not to group citations at the end but list them in the corresponding parts of your answer.`;
 
-export const searchResultPrompt = `Given the following contexts from a SERP search for the query:
+export const searchResultPrompt = `Given the following contexts from professional literature sources for the query:
 <QUERY>
 {query}
 </QUERY>
+
+**Source Priority Guidance:**
+- PubMed, Scopus, Web of Science, Embase: Peer-reviewed, highly authoritative
+- bioRxiv, medRxiv, arXiv: Latest research, NOT peer-reviewed (use with caution)
+- KEGG, EcoCyc, Reactome: Authoritative for pathway/metabolism information
+- Google Scholar: Comprehensive but verify source quality
+- General Web: Supplementary only, NOT primary source
 
 You need to organize the searched information according to the following requirements:
 <RESEARCH_GOAL>
 {researchGoal}
 </RESEARCH_GOAL>
 
-The following context from the SERP search:
+The following context from the literature search:
 <CONTEXT>
 {context}
 </CONTEXT>
