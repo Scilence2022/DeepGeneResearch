@@ -288,11 +288,16 @@ async def main():
         )
         
         # Save report
-        await client.save_report(
-            'talB',
-            'Escherichia coli',
-            result['report']['content']
-        )
+        report_content = result.get('report', {}).get('content') or result.get('finalReport') or ''
+        
+        if report_content:
+            await client.save_report(
+                'talB',
+                'Escherichia coli',
+                report_content
+            )
+        else:
+            print('⚠️  No report content available to save')
         
         # Save complete data
         await client.save_research_data(
@@ -305,8 +310,10 @@ async def main():
         
         # Display summary
         print('📋 Summary:')
-        print(f"   - Report sections: {len(result['report'].get('sections', []))}")
-        print(f"   - Visualizations: {len(result['visualizations'])}")
+        print(f"   - Report available: {'Yes' if report_content else 'No'}")
+        print(f"   - Report length: {len(report_content) if report_content else 'N/A'} chars")
+        print(f"   - Visualizations: {len(result.get('visualizations', result.get('geneResearch', {}).get('visualizations', [])))}")
+        print(f"   - Sources: {len(result.get('sources', []))}")
         print(f"   - Quality metrics available: Yes")
         print()
         
@@ -355,11 +362,14 @@ async def batch_research():
                 enable_references=True
             )
             
-            await client.save_report(
-                gene_config['geneSymbol'],
-                gene_config['organism'],
-                result['report']['content']
-            )
+            report_content = result.get('report', {}).get('content') or result.get('finalReport') or ''
+            
+            if report_content:
+                await client.save_report(
+                    gene_config['geneSymbol'],
+                    gene_config['organism'],
+                    report_content
+                )
             
             results.append({
                 'gene': gene_config['geneSymbol'],

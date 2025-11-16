@@ -332,12 +332,18 @@ async function main() {
     });
 
     // Save report
-    await client.saveReport(
-      'talB',
-      'Escherichia coli',
-      researchResult.report.content,
-      CONFIG.outputDir
-    );
+    const reportContent = researchResult.report?.content || researchResult.finalReport || '';
+    
+    if (reportContent) {
+      await client.saveReport(
+        'talB',
+        'Escherichia coli',
+        reportContent,
+        CONFIG.outputDir
+      );
+    } else {
+      console.log('⚠️  No report content available to save');
+    }
 
     // Save complete data
     await client.saveResearchData(
@@ -351,8 +357,10 @@ async function main() {
     
     // Display summary
     console.log('📋 Summary:');
-    console.log(`   - Report sections: ${researchResult.report.sections?.length || 'N/A'}`);
-    console.log(`   - Visualizations: ${researchResult.visualizations.length}`);
+    console.log(`   - Report available: ${reportContent ? 'Yes' : 'No'}`);
+    console.log(`   - Report length: ${reportContent ? reportContent.length + ' chars' : 'N/A'}`);
+    console.log(`   - Visualizations: ${researchResult.visualizations?.length || researchResult.geneResearch?.visualizations?.length || 0}`);
+    console.log(`   - Sources: ${researchResult.sources?.length || 0}`);
     console.log(`   - Quality metrics available: Yes`);
     console.log('');
 
@@ -404,12 +412,16 @@ async function batchResearch() {
         enableReferences: true
       });
 
-      await client.saveReport(
-        gene.geneSymbol,
-        gene.organism,
-        result.report.content,
-        CONFIG.outputDir
-      );
+      const reportContent = result.report?.content || result.finalReport || '';
+      
+      if (reportContent) {
+        await client.saveReport(
+          gene.geneSymbol,
+          gene.organism,
+          reportContent,
+          CONFIG.outputDir
+        );
+      }
 
       results.push({ gene: gene.geneSymbol, success: true, result });
       
