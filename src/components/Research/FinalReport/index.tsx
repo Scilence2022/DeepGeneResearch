@@ -11,7 +11,6 @@ import {
   Waypoints,
   FileSpreadsheet,
   Database,
-  Link2,
   Copy,
   CopyCheck,
 } from "lucide-react";

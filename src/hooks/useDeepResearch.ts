@@ -590,7 +590,7 @@ function useDeepResearch() {
           urlSet.add(normalizedUrl);
           
           // Improved citation format following scientific standards
-          let formattedTitle = item.title ? item.title.replaceAll('"', "'") : "Untitled Source";
+          const formattedTitle = item.title ? item.title.replaceAll('"', "'") : "Untitled Source";
           
           // Format reference with proper citation style
           content += `[${urlSet.size}]: ${item.url} ${formattedTitle ? `"${formattedTitle}"` : ""}\n`;

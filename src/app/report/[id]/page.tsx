@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/Internal/Button";
-import { ArrowLeft, Download, FileText, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, FileText, FileSpreadsheet } from "lucide-react";
 import { useHistoryStore } from "@/store/history";
 import { downloadFile } from "@/utils/file";
 import { markdownToDoc } from "@/utils/markdown";

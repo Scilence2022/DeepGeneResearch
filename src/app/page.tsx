@@ -22,9 +22,9 @@ const Knowledge = dynamic(() => import("@/components/Knowledge"));
 function TopicWithParams() {
   const searchParams = useSearchParams();
   
-  // Extract URL parameters
-  const urlGeneSymbol = searchParams.get('gene') || searchParams.get('geneSymbol') || undefined;
-  const urlOrganism = searchParams.get('organism') || searchParams.get('organismName') || undefined;
+  // Extract URL parameters safely
+  const urlGeneSymbol = searchParams?.get('gene') || searchParams?.get('geneSymbol') || undefined;
+  const urlOrganism = searchParams?.get('organism') || searchParams?.get('organismName') || undefined;
   
   return (
     <Topic 
