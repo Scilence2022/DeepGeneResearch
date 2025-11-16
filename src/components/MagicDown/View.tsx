@@ -23,6 +23,19 @@ export type MarkdownProps = {
   components?: Partial<Components>;
 };
 
+// Utility function to clean AI tool markers from markdown content
+function cleanToolMarkers(content: string): string {
+  // Remove <TOOL_CALL> and </TOOL_CALL> tags and similar AI markers
+  return content
+    .replace(/<TOOL_CALL>/gi, '')
+    .replace(/<\/TOOL_CALL>/gi, '')
+    .replace(/<tool>/gi, '')
+    .replace(/<\/tool>/gi, '')
+    // Also handle variants with underscores
+    .replace(/<TOOL_CALL>/gi, '')
+    .replace(/<\/TOOL_CALL>/gi, '');
+}
+
 function MarkdownBlock({ children: content, ...rest }: Options) {
   const remarkPlugins = useMemo(
     () => rest.remarkPlugins ?? [],
@@ -33,6 +46,9 @@ function MarkdownBlock({ children: content, ...rest }: Options) {
     [rest.rehypePlugins]
   );
   const components = useMemo(() => rest.components ?? {}, [rest.components]);
+  
+  // Clean the content to remove AI tool markers
+  const cleanedContent = useMemo(() => cleanToolMarkers(content || ''), [content]);
 
   return (
     <ReactMarkdown
@@ -44,7 +60,7 @@ function MarkdownBlock({ children: content, ...rest }: Options) {
         rehypeKatex,
         ...rehypePlugins,
       ]}
-      disallowedElements={["script", "form"]}
+      disallowedElements={["script", "form", "tool", "TOOL_CALL"]}
       components={{
         pre: (props) => {
           const { children, className, ...rest } = props;
@@ -158,7 +174,7 @@ function MarkdownBlock({ children: content, ...rest }: Options) {
         ...components,
       }}
     >
-      {content}
+      {cleanedContent}
     </ReactMarkdown>
   );
 }
