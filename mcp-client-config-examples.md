@@ -41,7 +41,35 @@
 }
 ```
 
-## 3. 自定义 MCP 客户端
+## 3. Cherry Studio 配置
+
+### 配置说明
+Cherry Studio supports the standard MCP protocol configuration, similar to Claude Desktop and Cursor.
+
+### 配置内容
+```json
+{
+  "mcpServers": {
+    "deep-gene-research": {
+      "url": "http://127.0.0.1:3000/api/mcp",
+      "transportType": "streamable-http",
+      "timeout": 600,
+      "headers": {
+        "Authorization": "Bearer YOUR_ACCESS_PASSWORD"
+      }
+    }
+  }
+}
+```
+
+### 配置步骤
+1. Open Cherry Studio settings
+2. Find the MCP server configuration section
+3. Add the above configuration content
+4. Save and restart Cherry Studio
+5. Use Deep Gene Research MCP tools (like `gene-research`) in conversations
+
+## 4. 自定义 MCP 客户端
 
 ### JavaScript/TypeScript 示例
 ```typescript
