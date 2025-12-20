@@ -415,7 +415,7 @@ Deep Gene Research provides a comprehensive MCP Server for integration with AI a
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
-| `gene-research` | Conduct specialized gene function research | geneSymbol, organism, researchFocus, userPrompt |
+| `deep-gene-research` | Conduct specialized gene function research | geneSymbol, organism, researchFocus, userPrompt |
 | `write-research-plan` | Generate research plan based on query | query, language |
 | `generate-SERP-query` | Generate data collection tasks | plan, language |
 | `search-task` | Execute search queries | tasks, language, maxResult |
@@ -446,7 +446,7 @@ Deep Gene Research provides a comprehensive MCP Server for integration with AI a
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "gene-research",
+    "name": "deep-gene-research",
     "arguments": {
       "geneSymbol": "BRCA1",
       "organism": "Homo sapiens",
@@ -517,7 +517,7 @@ const response = await fetch('https://your-domain.com/api/mcp', {
     id: 1,
     method: "tools/call",
     params: {
-      name: "gene-research",
+      name: "deep-gene-research",
       arguments: {
         geneSymbol: "TP53",
         organism: "Homo sapiens",
@@ -667,7 +667,7 @@ What are the therapeutic implications of the TP53 gene in cancer treatment?
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "gene-research",
+    "name": "deep-gene-research",
     "arguments": {
       "geneSymbol": "EGFR",
       "organism": "Homo sapiens",

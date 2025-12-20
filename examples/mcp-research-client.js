@@ -159,7 +159,7 @@ class MCPResearchClient {
     const startTime = Date.now();
 
     try {
-      const result = await this.callTool('gene-research', {
+      const result = await this.callTool('deep-gene-research', {
         geneSymbol,
         organism,
         researchFocus,

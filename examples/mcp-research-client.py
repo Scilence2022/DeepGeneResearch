@@ -116,7 +116,7 @@ class MCPResearchClient:
         start_time = datetime.now()
         
         try:
-            result = await self.call_tool('gene-research', {
+            result = await self.call_tool('deep-gene-research', {
                 'geneSymbol': gene_symbol,
                 'organism': organism,
                 'researchFocus': research_focus or [],

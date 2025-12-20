@@ -76,7 +76,7 @@ export function initMcpServer() {
     {
       capabilities: {
         tools: {
-          "gene-research": {
+          "deep-gene-research": {
             description: geneResearchToolDescription,
           },
           "write-research-plan": {
@@ -98,7 +98,7 @@ export function initMcpServer() {
 
 
   server.tool(
-    "gene-research",
+    "deep-gene-research",
     geneResearchToolDescription,
     {
       geneSymbol: z.string().describe("The gene symbol to research (e.g., 'lysC', 'BRCA1')."),

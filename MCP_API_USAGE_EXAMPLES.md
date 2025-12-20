@@ -4,7 +4,7 @@
 
 The Deep Research MCP server provides 5 main tools for automated gene research:
 
-1. **`gene-research`** - Complete end-to-end gene research (recommended)
+1. **`deep-gene-research`** - Complete end-to-end gene research (recommended)
 2. **`write-research-plan`** - Generate research plan from query
 3. **`generate-SERP-query`** - Generate search tasks from plan
 4. **`search-task`** - Execute search tasks and collect information
@@ -66,7 +66,7 @@ import httpx
 
 async def conduct_gene_research():
     """
-    Complete end-to-end gene research using the gene-research tool.
+    Complete end-to-end gene research using the deep-gene-research tool.
     This is the simplest and most recommended approach.
     """
     
@@ -85,7 +85,7 @@ async def conduct_gene_research():
         "id": 1,
         "method": "tools/call",
         "params": {
-            "name": "gene-research",
+            "name": "deep-gene-research",
             "arguments": {
                 "geneSymbol": "talB",
                 "organism": "Escherichia coli",
@@ -154,7 +154,7 @@ async function conductGeneResearch() {
     id: 1,
     method: 'tools/call',
     params: {
-      name: 'gene-research',
+      name: 'deep-gene-research',
       arguments: {
         geneSymbol: 'talB',
         organism: 'Escherichia coli',
@@ -213,9 +213,9 @@ curl -X POST http://localhost:3000/api/mcp \
     "jsonrpc": "2.0",
     "id": 1,
     "method": "tools/call",
-    "params": {
-      "name": "gene-research",
-      "arguments": {
+      "params": {
+        "name": "deep-gene-research",
+        "arguments": {
         "geneSymbol": "talB",
         "organism": "Escherichia coli",
         "researchFocus": ["molecular_function", "metabolic_pathways"],
@@ -419,9 +419,9 @@ async def batch_gene_research(genes: List[Dict[str, str]]):
                 "jsonrpc": "2.0",
                 "id": idx,
                 "method": "tools/call",
-                "params": {
-                    "name": "gene-research",
-                    "arguments": {
+                    "params": {
+                        "name": "deep-gene-research",
+                        "arguments": {
                         **gene_config,
                         "language": "en-US",
                         "maxResult": 10,
@@ -482,7 +482,7 @@ asyncio.run(batch_gene_research(genes_to_research))
 
 ## Response Format
 
-### gene-research Tool Response
+### deep-gene-research Tool Response
 
 ```json
 {
@@ -533,10 +533,10 @@ async def safe_gene_research(gene_symbol, organism, max_retries=3):
                         "jsonrpc": "2.0",
                         "id": 1,
                         "method": "tools/call",
-                        "params": {
-                            "name": "gene-research",
-                            "arguments": {
-                                "geneSymbol": gene_symbol,
+                            "params": {
+                                "name": "deep-gene-research",
+                                "arguments": {
+                                    "geneSymbol": gene_symbol,
                                 "organism": organism
                             }
                         }
