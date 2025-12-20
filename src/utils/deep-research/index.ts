@@ -499,36 +499,106 @@ class DeepResearch {
   async start(
     query: string,
     enableCitationImage = true,
-    enableReferences = true
+    enableReferences = true,
+    taskId?: string
   ) {
     try {
       // Check if this is a gene research query
       if (isGeneResearchQuery(query)) {
-        return await this.conductGeneResearch(query);
+        return await this.conductGeneResearch(query, taskId);
+      }
+
+      // Update task status if taskId is provided
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "in-progress",
+          step: "report-plan",
+          status: "start"
+        });
       }
 
       const reportPlan = await this.writeReportPlan(query);
+      
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "in-progress",
+          step: "serp-query",
+          status: "start"
+        });
+      }
+
       const tasks = await this.generateSERPQuery(reportPlan);
+      
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "in-progress",
+          step: "task-list",
+          status: "start"
+        });
+      }
+
       const results = await this.runSearchTask(tasks, enableReferences);
+      
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "in-progress",
+          step: "final-report",
+          status: "start"
+        });
+      }
+
       const finalReport = await this.writeFinalReport(
         reportPlan,
         results,
         enableCitationImage,
         enableReferences
       );
+      
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "completed",
+          result: finalReport
+        });
+      }
+      
       return finalReport;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       this.onMessage("error", { message: errorMessage });
+      
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "failed",
+          error: errorMessage
+        });
+      }
+      
       throw new Error(errorMessage);
     }
   }
 
   // Gene research specific method
   async conductGeneResearch(
-    query: string
+    query: string,
+    taskId?: string
   ) {
     try {
+      // Update task status if taskId is provided
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "in-progress",
+          step: "gene-research",
+          status: "start"
+        });
+      }
+      
       this.onMessage("progress", { step: "gene-research", status: "start" });
       
       // Extract gene information from query
@@ -582,7 +652,7 @@ class DeepResearch {
 
       const finalReport = result.report.title + '\n\n' + result.report.sections.map((s: any) => s.content).join('\n\n');
 
-      return {
+      const researchResult = {
         title: result.report.title,
         finalReport,
         learnings: result.workflow.literatureReview.map(ref => ref.abstract),
@@ -594,9 +664,31 @@ class DeepResearch {
           workflow: result.workflow
         }
       };
+      
+      // Update task status if taskId is provided
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "completed",
+          result: researchResult
+        });
+      }
+      
+      return researchResult;
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Gene research error";
+      
+      // Update task status if taskId is provided
+      if (taskId) {
+        this.onMessage("task-status", {
+          taskId,
+          status: "failed",
+          error: errorMessage
+        });
+      }
+      
       this.onMessage("error", {
-        message: err instanceof Error ? err.message : "Gene research error",
+        message: errorMessage,
       });
       throw err;
     }
