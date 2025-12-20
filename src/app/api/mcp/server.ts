@@ -122,6 +122,7 @@ export function initMcpServer() {
         diseaseContext, 
         experimentalApproach, 
         userPrompt, 
+        language,
         maxResult,
         enableCitationImage = true,
         enableReferences = true
@@ -137,7 +138,7 @@ export function initMcpServer() {
         
         // Use the standard deep research workflow instead of conductGeneResearch
         // This ensures actual database searches are performed
-        const deepResearch = initDeepResearchServer({ maxResult });
+        const deepResearch = initDeepResearchServer({ language, maxResult });
         
         // Create research query from gene parameters
         const query = userPrompt

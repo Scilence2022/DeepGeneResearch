@@ -30,6 +30,7 @@ export interface GeneResearchConfig {
   enableVisualization?: boolean;
   maxSearchResults?: number;
   searchProviders?: string[];
+  language?: string;
 }
 
 export interface GeneResearchResult {
