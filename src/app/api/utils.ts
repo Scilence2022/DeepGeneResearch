@@ -34,7 +34,9 @@ const EXA_API_BASE_URL = process.env.EXA_API_BASE_URL || "https://api.exa.ai";
 const BOCHA_API_BASE_URL =
   process.env.BOCHA_API_BASE_URL || "https://api.bochaai.com";
 const SEARXNG_API_BASE_URL =
-  process.env.SEARXNG_API_BASE_URL || "http://0.0.0.0:8080";
+  process.env.SEARXNG_API_BASE_URL ||
+  process.env.SEARXNG_API_PROXY ||
+  "http://0.0.0.0:8080";
 
 const GOOGLE_GENERATIVE_AI_API_KEY =
   process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
