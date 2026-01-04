@@ -14,7 +14,7 @@ const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
 const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
 const THINKING_MODEL = process.env.MCP_THINKING_MODEL || "";
 const TASK_MODEL = process.env.MCP_TASK_MODEL || "";
-const MCP_TIMEOUT = parseInt(process.env.MCP_SERVER_TIMEOUT || "600") * 1000; // 转换为毫秒
+const MCP_TIMEOUT = parseInt(process.env.MCP_SERVER_TIMEOUT || "600") * 1000; // Convert to ms
 
 function initDeepResearchServer({
   language,
