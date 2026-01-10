@@ -9,6 +9,7 @@ import {
   getSearchProviderBaseURL,
   getSearchProviderApiKey,
 } from "../utils";
+import { storeResearchResult } from "@/utils/mcp-research-store";
 
 const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
 const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
@@ -100,6 +101,8 @@ export function initMcpServer() {
       maxResult: z.number().optional().default(5).describe("Maximum number of search results."),
       enableCitationImage: z.boolean().default(true).optional().describe("Whether to include content-related images in the final report."),
       enableReferences: z.boolean().default(true).optional().describe("Whether to include citation links in search results and final reports."),
+      returnReportAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Report as a downloadable URL instead of inline content."),
+      returnDetailsAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Details (workflow, sources, metadata) as a downloadable URL instead of inline content."),
     },
     async (
       {
@@ -113,7 +116,9 @@ export function initMcpServer() {
         language,
         maxResult,
         enableCitationImage = true,
-        enableReferences = true
+        enableReferences = true,
+        returnReportAsUrl = false,
+        returnDetailsAsUrl = false
       },
       { signal }
     ) => {
@@ -209,6 +214,47 @@ export function initMcpServer() {
           sources: report.sources || [],
           images: report.images || []
         };
+
+        // Handle URL-based output if requested
+        if (returnReportAsUrl || returnDetailsAsUrl) {
+          // Store research result for download
+          const researchId = storeResearchResult(
+            report.finalReport,
+            result
+          );
+
+          // Build download URLs (use relative paths, client will resolve base URL)
+          const downloadUrls: { report?: string; details?: string } = {};
+
+          if (returnReportAsUrl) {
+            downloadUrls.report = `/api/mcp/download/${researchId}/report`;
+            // Remove inline report content
+            result.finalReport = `[Download available at: ${downloadUrls.report}]`;
+            result.report.content = result.finalReport;
+          }
+
+          if (returnDetailsAsUrl) {
+            downloadUrls.details = `/api/mcp/download/${researchId}/details`;
+            // Simplify inline workflow content
+            result.workflow = {
+              geneIdentification: result.workflow.geneIdentification,
+              researchPlan: '[See downloadable details]',
+              searchTasks: [],
+              searchResults: []
+            } as typeof result.workflow;
+          }
+
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                ...result,
+                downloadUrls,
+                message: `Research completed. ${Object.keys(downloadUrls).length} downloadable file(s) available.`
+              })
+            }],
+          };
+        }
 
         return {
           content: [{ type: "text", text: JSON.stringify(result) }],

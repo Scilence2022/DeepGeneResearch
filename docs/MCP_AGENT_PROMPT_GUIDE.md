@@ -33,6 +33,8 @@ Use this tool for 95% of user requests. It runs a complete, end-to-end research 
 - `researchFocus`: A list of areas to prioritize (e.g., `["molecular_function", "disease_association", "drug_targets"]`).
 - `specificAspects`: Detailed questions or angles to investigate (e.g., `["active site mechanism", "interaction with protein Y"]`).
 - `userPrompt`: (Optional) The raw user query relative to the gene/organism context.
+- `returnReportAsUrl`: (Optional, default: `false`) When `true`, returns the Research Report as a downloadable URL instead of inline content. Useful for large reports or integration with external systems.
+- `returnDetailsAsUrl`: (Optional, default: `false`) When `true`, returns the Research Details (workflow, sources, metadata) as a downloadable URL instead of inline content.
 
 ### 2. Manual Workflow Tools (Advanced)
 Use these only if the user specifically requests a step-by-step breakdown or if you need to debug a research path.
