@@ -15,6 +15,7 @@ const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
 const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
 const THINKING_MODEL = process.env.MCP_THINKING_MODEL || "";
 const TASK_MODEL = process.env.MCP_TASK_MODEL || "";
+const MCP_SERVER_BASE_URL = process.env.MCP_SERVER_BASE_URL || "";
 const MCP_TIMEOUT = parseInt(process.env.MCP_SERVER_TIMEOUT || "600") * 1000; // Convert to ms
 
 function initDeepResearchServer({
@@ -223,18 +224,19 @@ export function initMcpServer() {
             result
           );
 
-          // Build download URLs (use relative paths, client will resolve base URL)
+          // Build download URLs using configured base URL
+          const baseUrl = MCP_SERVER_BASE_URL.replace(/\/$/, ''); // Remove trailing slash if present
           const downloadUrls: { report?: string; details?: string } = {};
 
           if (returnReportAsUrl) {
-            downloadUrls.report = `/api/mcp/download/${researchId}/report`;
+            downloadUrls.report = `${baseUrl}/api/mcp/download/${researchId}/report`;
             // Remove inline report content
             result.finalReport = `[Download available at: ${downloadUrls.report}]`;
             result.report.content = result.finalReport;
           }
 
           if (returnDetailsAsUrl) {
-            downloadUrls.details = `/api/mcp/download/${researchId}/details`;
+            downloadUrls.details = `${baseUrl}/api/mcp/download/${researchId}/details`;
             // Simplify inline workflow content
             result.workflow = {
               geneIdentification: result.workflow.geneIdentification,

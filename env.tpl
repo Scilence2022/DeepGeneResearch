@@ -106,6 +106,9 @@ MCP_SEARCH_PROVIDER=
 MCP_THINKING_MODEL=
 # (Optional) MCP Server task model id, used for secondary tasks, high output models are recommended.
 MCP_TASK_MODEL=
+# (Optional) Base URL for MCP Server download links.
+# Auto-detected from request headers if not set. Example: https://your-domain.com
+MCP_SERVER_BASE_URL=
 
 # (Optional) Disable server-side AI provider usage permissions
 # Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama, siliconflow
