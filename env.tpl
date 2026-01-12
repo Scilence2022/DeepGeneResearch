@@ -108,7 +108,7 @@ MCP_THINKING_MODEL=
 MCP_TASK_MODEL=
 # (Optional) Base URL for MCP Server download links.
 # Auto-detected from request headers if not set. Example: https://your-domain.com
-MCP_SERVER_BASE_URL=
+MCP_SERVER_BASE_URL= http://localhost:3000
 
 # (Optional) Disable server-side AI provider usage permissions
 # Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama, siliconflow
