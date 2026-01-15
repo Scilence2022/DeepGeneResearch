@@ -88,3 +88,19 @@ Use these only if the user specifically requests a step-by-step breakdown or if 
 
 - **Be Specific**: The more specific your question ("What is the catalytic mechanism?" vs "Tell me about it"), the better the agent can tune the `specificAspects` parameter.
 - **Iterate**: If the first report misses a detail, ask a follow-up. The agent handles context, but for a fresh deep dive, explicitly asking to "research X aspect again" triggers a new, focused tool call.
+- **Use URL Output for Large Reports**: For integration with external systems, set `returnReportAsUrl: true` or `returnDetailsAsUrl: true` to receive downloadable links instead of inline content.
+
+## MCP Server Setup
+
+Before using these tools, ensure the Deep Gene Research MCP server is connected:
+
+1. **Local Development**: Start the server with `pnpm dev` at `http://localhost:3000/api/mcp`
+2. **Production**: Use your deployed URL (e.g., `https://your-domain.com/api/mcp`)
+
+See [MCP Client Configuration Examples](../mcp-client-config-examples.md) for setup instructions for Claude Desktop, Cursor, and other MCP clients.
+
+## Related Documentation
+
+- [MCP API Usage Examples](../MCP_API_USAGE_EXAMPLES.md) - Comprehensive code examples
+- [API Documentation](./deep-research-api-doc.md) - SSE API reference
+- [Main README](../README.md) - Project overview

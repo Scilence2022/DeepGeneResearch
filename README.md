@@ -839,10 +839,12 @@ We welcome contributions! Here's how you can help:
 
 ## 📚 **Documentation**
 
+- [Documentation Index](./docs/README.md)
 - [API Documentation](./docs/deep-research-api-doc.md)
-- [Deployment Guide](./docs/How-to-deploy-to-Cloudflare-Pages.md)
-- [MCP Configuration](./mcp-client-config-examples.md)
-- [Timeout Configuration](./TIMEOUT_CONFIGURATION_SUMMARY.md)
+- [MCP API Usage Examples](./MCP_API_USAGE_EXAMPLES.md)
+- [MCP Client Configuration](./mcp-client-config-examples.md)
+- [MCP Agent Prompt Guide](./docs/MCP_AGENT_PROMPT_GUIDE.md)
+- [Cloudflare Deployment Guide](./docs/How-to-deploy-to-Cloudflare-Pages.md)
 
 ## 🆘 **Support & Community**
 
