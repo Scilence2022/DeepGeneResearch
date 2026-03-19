@@ -10,10 +10,10 @@
 ```json
 {
   "mcpServers": {
-    "deep-research": {
+    "deep-gene-research": {
       "url": "http://127.0.0.1:3000/api/mcp",
       "transportType": "streamable-http",
-      "timeout": 600,
+      "timeout": 900,
       "headers": {
         "Authorization": "Bearer YOUR_ACCESS_PASSWORD"
       }
@@ -32,7 +32,7 @@
 ```json
 {
   "mcpServers": {
-    "deep-research": {
+    "deep-gene-research": {
       "url": "http://127.0.0.1:3000/api/mcp",
       "transportType": "streamable-http",
       "timeout": 600
