@@ -179,6 +179,16 @@ export const useHistoryStore = create(
     {
       name: "historyStore",
       version: 2,
+      migrate: (persistedState, version) => {
+        if (version === 1) {
+          // Migration from version 1 to 2
+          return {
+            ...persistedState,
+            researchTasks: persistedState.researchTasks || [],
+          };
+        }
+        return persistedState;
+      },
       storage: {
         getItem: async (key: string) => {
           return await researchStore.getItem<

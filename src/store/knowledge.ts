@@ -56,6 +56,9 @@ export const useKnowledgeStore = create(
     {
       name: "knowledgeStore",
       version: 1,
+      migrate: (persistedState, version) => {
+        return persistedState;
+      },
       storage: {
         getItem: async (key: string) => {
           return await researchStore.getItem<
