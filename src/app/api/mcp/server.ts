@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@/libs/mcp-server/mcp";
 import DeepResearch from "@/utils/deep-research";
-import { conductGeneResearch } from "@/utils/gene-research";
 import { multiApiKeyPolling } from "@/utils/model";
 import {
   getAIProviderBaseURL,
@@ -9,16 +8,16 @@ import {
   getSearchProviderBaseURL,
   getSearchProviderApiKey,
 } from "../utils";
-import { storeResearchResult } from "@/utils/mcp-research-store";
+import { taskQueue } from "@/services/task-queue";
+import { taskStore } from "@/services/task-store";
 
 const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
 const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
 const THINKING_MODEL = process.env.MCP_THINKING_MODEL || "";
 const TASK_MODEL = process.env.MCP_TASK_MODEL || "";
 const MCP_SERVER_BASE_URL = process.env.MCP_SERVER_BASE_URL || "";
-const MCP_TIMEOUT = parseInt(process.env.MCP_SERVER_TIMEOUT || "600") * 1000; // Convert to ms
 
-function initDeepResearchServer({
+export function initDeepResearchServer({
   language,
   maxResult,
 }: {
@@ -61,14 +60,6 @@ function initDeepResearchServer({
 export function initMcpServer() {
   const geneResearchToolDescription =
     "Conduct specialized gene function research with custom user prompts and research guidelines.";
-  const writeResearchPlanDescription =
-    "Generate research plan based on user query.";
-  const generateSERPQueryDescription =
-    "Generate a list of data collection tasks based on the research plan.";
-  const searchTaskDescription =
-    "Generate SERP queries based on the research plan.";
-  const writeFinalReportDescription =
-    "Write a final research report based on the research plan and the results of the information collection tasks.";
 
   const server = new McpServer(
     {
@@ -128,138 +119,91 @@ export function initMcpServer() {
       });
 
       try {
-        const startTime = Date.now();
-
-        // Use the standard deep research workflow instead of conductGeneResearch
-        // This ensures actual database searches are performed
-        const deepResearch = initDeepResearchServer({ language, maxResult });
-
-        // Create research query from gene parameters
-        let baseQuery = `Gene research: ${geneSymbol} in ${organism}`;
-
-        if (researchFocus && researchFocus.length > 0) {
-          baseQuery += `\nFocus areas: ${researchFocus.join(', ')}`;
-        }
-
-        if (specificAspects && specificAspects.length > 0) {
-          baseQuery += `\nSpecific aspects: ${specificAspects.join(', ')}`;
-        }
-
-        if (diseaseContext) {
-          baseQuery += `\nDisease context: ${diseaseContext}`;
-        }
-
-        if (experimentalApproach) {
-          baseQuery += `\nExperimental approach: ${experimentalApproach}`;
-        }
-
-        const query = userPrompt
-          ? userPrompt.replace('{geneSymbol}', geneSymbol).replace('{organism}', organism)
-          : `${baseQuery}\n\nResearch Question:\nWhat is the function, structure, and biological role of the gene ${geneSymbol} in ${organism}? Include information about its pathway, regulation, cofactors, substrates, products, and any recent research findings.${researchFocus?.length ? ` Please specifically focus on: ${researchFocus.join(', ')}.` : ''
-          }${specificAspects?.length ? ` Investigate these specific aspects: ${specificAspects.join(', ')}.` : ''
-          }`;
-
-        // Step 1: Generate research plan
-        const reportPlan = await deepResearch.writeReportPlan(query);
-
-        // Step 2: Generate search queries
-        const queries = await deepResearch.generateSERPQuery(reportPlan);
-
-        // Step 3: Execute searches
-        const searchResults = await deepResearch.runSearchTask(queries, enableReferences);
-
-        // Step 4: Write final report
-        const report = await deepResearch.writeFinalReport(
-          reportPlan,
-          searchResults,
+        // 创建异步任务
+        const task = await taskQueue.addTask({
+          geneSymbol,
+          organism,
+          researchFocus,
+          specificAspects,
+          diseaseContext,
+          experimentalApproach,
+          userPrompt,
+          language,
+          maxResult,
           enableCitationImage,
-          enableReferences
-        );
+          enableReferences,
+          returnReportAsUrl,
+          returnDetailsAsUrl
+        });
 
-        const researchTime = Date.now() - startTime;
-
-        // Format result to match expected structure
-        const result = {
-          workflow: {
-            geneIdentification: {
-              geneSymbol,
-              organism,
-              researchFocus,
-              specificAspects
-            },
-            researchPlan: reportPlan,
-            searchTasks: queries,
-            searchResults: searchResults
-          },
-          qualityMetrics: {
-            dataCompleteness: searchResults.length > 0 ? 0.8 : 0,
-            literatureCoverage: searchResults.reduce((sum, t) => sum + (t.sources?.length || 0), 0) > 0 ? 0.9 : 0,
-            experimentalEvidence: 0.7,
-            crossSpeciesValidation: 0.6,
-            databaseConsistency: 0.8,
-            overallQuality: searchResults.length > 0 ? 0.75 : 0.2
-          },
-          visualizations: [],
-          report: {
-            title: `Gene Research Report: ${geneSymbol} in ${organism}`,
-            content: report.finalReport,
-            sections: []
-          },
-          metadata: {
-            researchTime,
-            dataSources: ['searxng', 'pubmed', 'ncbi', 'kegg', 'string'],
-            confidence: searchResults.length > 0 ? 0.75 : 0.2,
-            completeness: searchResults.length > 0 ? 0.8 : 0
-          },
-          finalReport: report.finalReport,
-          sources: report.sources || [],
-          images: report.images || []
+        // 返回任务 ID 和状态
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              taskId: task.id,
+              status: task.status,
+              message: "Research task has been queued. Use the task ID to check status and retrieve results.",
+              taskUrl: `${MCP_SERVER_BASE_URL}/api/mcp/tasks/${task.id}`
+            })
+          }],
         };
-
-        // Handle URL-based output if requested
-        if (returnReportAsUrl || returnDetailsAsUrl) {
-          // Store research result for download
-          const researchId = storeResearchResult(
-            report.finalReport,
-            result
-          );
-
-          // Build download URLs using configured base URL
-          const baseUrl = MCP_SERVER_BASE_URL.replace(/\/$/, ''); // Remove trailing slash if present
-          const downloadUrls: { report?: string; details?: string } = {};
-
-          if (returnReportAsUrl) {
-            downloadUrls.report = `${baseUrl}/api/mcp/download/${researchId}/report`;
-            // Remove inline report content
-            result.finalReport = `[Download available at: ${downloadUrls.report}]`;
-            result.report.content = result.finalReport;
-          }
-
-          if (returnDetailsAsUrl) {
-            downloadUrls.details = `${baseUrl}/api/mcp/download/${researchId}/details`;
-            // Simplify inline workflow content
-            result.workflow = {
-              geneIdentification: result.workflow.geneIdentification,
-              researchPlan: '[See downloadable details]',
-              searchTasks: [],
-              searchResults: []
-            } as typeof result.workflow;
-          }
-
-          return {
-            content: [{
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            {
               type: "text",
-              text: JSON.stringify({
-                ...result,
-                downloadUrls,
-                message: `Research completed. ${Object.keys(downloadUrls).length} downloadable file(s) available.`
-              })
-            }],
+              text: `Error: ${error instanceof Error ? error.message : "Unknown error"
+                }`,
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  // 添加任务状态查询工具
+  server.tool(
+    "get-task-status",
+    "Get the status and result of a gene research task.",
+    {
+      taskId: z.string().describe("The ID of the task to query."),
+    },
+    async ({ taskId }, { signal }) => {
+      signal.addEventListener("abort", () => {
+        throw new Error("The client closed unexpectedly!");
+      });
+
+      try {
+        const task = await taskStore.getTask(taskId);
+        if (!task) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Error: Task ${taskId} not found`,
+              },
+            ],
           };
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(result) }],
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              taskId: task.id,
+              status: task.status,
+              progress: task.progress,
+              step: task.step,
+              createdAt: task.createdAt,
+              updatedAt: task.updatedAt,
+              result: task.result,
+              error: task.error,
+              parameters: task.parameters
+            })
+          }],
         };
       } catch (error) {
         return {
