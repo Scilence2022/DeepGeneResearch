@@ -512,7 +512,6 @@ class DeepResearch {
       if (taskId) {
         this.onMessage("task-status", {
           taskId,
-          status: "in-progress",
           step: "report-plan",
           status: "start"
         });
@@ -523,7 +522,6 @@ class DeepResearch {
       if (taskId) {
         this.onMessage("task-status", {
           taskId,
-          status: "in-progress",
           step: "serp-query",
           status: "start"
         });
@@ -534,7 +532,6 @@ class DeepResearch {
       if (taskId) {
         this.onMessage("task-status", {
           taskId,
-          status: "in-progress",
           step: "task-list",
           status: "start"
         });
@@ -545,7 +542,6 @@ class DeepResearch {
       if (taskId) {
         this.onMessage("task-status", {
           taskId,
-          status: "in-progress",
           step: "final-report",
           status: "start"
         });
@@ -593,7 +589,6 @@ class DeepResearch {
       if (taskId) {
         this.onMessage("task-status", {
           taskId,
-          status: "in-progress",
           step: "gene-research",
           status: "start"
         });

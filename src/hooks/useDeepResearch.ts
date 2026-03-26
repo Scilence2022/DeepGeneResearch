@@ -705,7 +705,7 @@ function useDeepResearch() {
       // Reconstruct URL without fragment and with cleaned parameters
       const paramsString = cleanParams.toString();
       return `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}${paramsString ? `?${paramsString}` : ''}`;
-    } catch (error) {
+    } catch {
       // If URL parsing fails, return the original URL after basic cleanup
       return url.toLowerCase().trim()
         .replace(/\/$/, '')

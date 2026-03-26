@@ -165,7 +165,7 @@ export const useHistoryStore = create(
             return {
               ...task,
               result,
-              status: 'completed',
+              status: 'completed' as ResearchStatus,
               updatedAt: new Date().toISOString(),
             };
           }

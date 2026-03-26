@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@/libs/mcp-server/mcp";
 import DeepResearch from "@/utils/deep-research";
-import { conductGeneResearch } from "@/utils/gene-research";
 import { multiApiKeyPolling } from "@/utils/model";
 import {
   getAIProviderBaseURL,
@@ -14,7 +13,6 @@ const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
 const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
 const THINKING_MODEL = process.env.MCP_THINKING_MODEL || "";
 const TASK_MODEL = process.env.MCP_TASK_MODEL || "";
-const MCP_TIMEOUT = parseInt(process.env.MCP_SERVER_TIMEOUT || "600") * 1000; // 转换为毫秒
 
 function initDeepResearchServer({
   language,
@@ -119,8 +117,6 @@ export function initMcpServer() {
         organism, 
         researchFocus = [], 
         specificAspects = [], 
-        diseaseContext, 
-        experimentalApproach, 
         userPrompt, 
         language,
         maxResult,
