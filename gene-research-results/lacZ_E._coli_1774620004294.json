@@ -1,0 +1,17 @@
+{
+  "title": "lacZ Gene Function Research Report: E. coli",
+  "finalReport": "# lacZ Gene Research Report\n## E. coli\n\n**Note**: External database access is currently unavailable. This information is based on existing gene annotations.\n\n### Gene Overview\n- **Gene Name**: lacZ\n- **Organism**: E. coli\n- **Research Focus**: general\n\n### Key Research Areas\n\n\n### Recommendations\n1. Configure a valid search API to obtain latest research data\n2. Use PubMed, UniProt for literature search\n3. Visit KEGG, BioCyc for metabolic pathway information\n\n---\n*Report generated: 2026-03-27T14:00:04.293Z*",
+  "sources": [
+    {
+      "title": "AI Model Knowledge Synthesis",
+      "content": "Information synthesized from training data",
+      "url": "internal:model_synthesis"
+    }
+  ],
+  "searchMethod": "model_fallback",
+  "qualityMetrics": {
+    "dataCompleteness": 0.3,
+    "literatureCoverage": 0.2,
+    "overallQuality": 0.3
+  }
+}

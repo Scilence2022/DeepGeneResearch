@@ -1,0 +1,17 @@
+{
+  "title": "BRCA1 Gene Function Research Report: Human",
+  "finalReport": "# BRCA1 Gene Research Report\n## Human\n\n**Note**: External database access is currently unavailable. This information is based on existing gene annotations.\n\n### Gene Overview\n- **Gene Name**: BRCA1\n- **Organism**: Human\n- **Research Focus**: general\n\n### Key Research Areas\n\n\n### Recommendations\n1. Configure a valid search API to obtain latest research data\n2. Use PubMed, UniProt for literature search\n3. Visit KEGG, BioCyc for metabolic pathway information\n\n---\n*Report generated: 2026-03-27T14:00:54.583Z*",
+  "sources": [
+    {
+      "title": "AI Model Knowledge Synthesis",
+      "content": "Information synthesized from training data",
+      "url": "internal:model_synthesis"
+    }
+  ],
+  "searchMethod": "model_fallback",
+  "qualityMetrics": {
+    "dataCompleteness": 0.3,
+    "literatureCoverage": 0.2,
+    "overallQuality": 0.3
+  }
+}

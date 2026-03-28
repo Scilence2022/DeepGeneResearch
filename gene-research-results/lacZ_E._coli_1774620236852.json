@@ -1,0 +1,87 @@
+{
+  "title": "lacZ Gene Function Research Report: E. coli",
+  "finalReport": "# lacZ Gene Function Research Report\n## E. coli\n\n**Data Source**: Literature Database Search\n\n---\n### 📊 Literature Search Statistics\n\n- PubMed: 0 articles\n- Europe PMC: 1 articles\n- NCBI Gene: 0 entries\n- UniProt: 0 entries\n- bioRxiv: 14 preprints\n\n---\n\n## 📄 Europe PMC Full-text\n\n1. [The evolution of a Na + -sensitive Vibrio cholerae mutant unmasks the moonlighting aminopeptidase PepA as a regulator of nhaB Na + /H + antiporter gene expression](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13015355/?tool=EBI)\n   \nUnknown Journal 2026\n\nAbstract: No abstract available...\n\n\n## ⚠️ bioRxiv Preprints (Not Peer-Reviewed)\n\n1. [Lacto-N-tetraose biosynthesis from lactose via metabolically rewired Escherichia coli.](https://doi.org/10.1016/j.ymben.2025.12.001)\n\n2. [Multicopy insAB Sequences Are Efficient Gene Integration Sites in the Escherichia coli Genome.](https://doi.org/10.1002/jobm.70146)\n\n3. [CRISPR-Cas9 Mediated Knockout of LacZ Gene in Escherichia Coli for Enhanced Production of Asparaginase](https://doi.org/10.21203/rs.3.rs-7802084/v1)\n\n\n\n---\n*Report generated: 2026-03-27T14:03:56.850Z*\n*Data sources: NCBI PubMed, Europe PMC, NCBI Gene, UniProt, bioRxiv*",
+  "sources": [
+    {
+      "title": "Lacto-N-tetraose biosynthesis from lactose via metabolically rewired Escherichia coli.",
+      "content": "Human milk oligosaccharides (HMOs), such as lacto-N-tetraose (LNT), play critical roles in infant health by shaping gut microbiota and modulating immune function. While LNT is already produced at industrial scales, efficient microbial routes to more complex HMOs derived from LNT remain limited. Here, we established a simplified microbial platform in Escherichia coli that produces LNT directly from lactose as the sole carbon and precursor source. A key innovation was construction of a strain libr",
+      "url": "https://doi.org/10.1016/j.ymben.2025.12.001"
+    },
+    {
+      "title": "Multicopy insAB Sequences Are Efficient Gene Integration Sites in the Escherichia coli Genome.",
+      "content": "Multiple replication sequences in a genome can provide multiple integration sites, thus increasing target gene integration efficiency. In this study, in the Escherichia coli BL21(DE3) genome, we identified 19 multicopy sequences including rDNA sites and insAB repeats that occurred 28 times and had the highest copy number. For target gene integration, at least 15/28 insAB sites underwent target gene integration with no concomitant effects on cell growth. In addition, lacZ activity at insAB sites ",
+      "url": "https://doi.org/10.1002/jobm.70146"
+    },
+    {
+      "title": "The evolution of a Na + -sensitive Vibrio cholerae mutant unmasks the moonlighting aminopeptidase PepA as a regulator of nhaB Na + /H + antiporter gene expression",
+      "content": "\nUnknown Journal 2026\n\nAbstract: No abstract available",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13015355/?tool=EBI"
+    },
+    {
+      "title": "CRISPR-Cas9 Mediated Knockout of LacZ Gene in Escherichia Coli for Enhanced Production of Asparaginase",
+      "content": "<title>Abstract</title>  <p>  Genome editing with CRISPR-Cas9 offers a powerful approach for enhancing enzyme production in microorganisms. This study aimed to genetically engineer the  <italic>lacZ</italic>  gene in  <italic>Escherichia coli</italic>  using CRISPR-Cas9 to evaluate its impact on asparaginase production during submerged fermentation with rice bran serving as a glucose source. Both edited and wild-type  <italic>E. coli</italic>  strains were cultured at optimal conditions to produ",
+      "url": "https://doi.org/10.21203/rs.3.rs-7802084/v1"
+    },
+    {
+      "title": "Discovery and Preliminary Characterization of Lactose-Transforming Enzymes in <i>Ewingella americana</i> L47: A Genomic, Biochemical, and In Silico Approach.",
+      "content": "D-tagatose is a high-value, low-calorie sweetener that can be produced from dairy lactose via a two-step enzymatic route: lactose hydrolysis to galactose followed by galactose isomerization to tagatose. Here, we combined genomics, in silico structural analysis, and biochemical assays to evaluate the lactose-to-tagatose conversion potential of an Antarctic isolate, L47, identified as <i>Ewingella americana</i> (NCBI accession SAMN54554459). Genome mining revealed one L-arabinose isomerase gene (<",
+      "url": "https://doi.org/10.3390/ijms27021128"
+    },
+    {
+      "title": "Accumulation of 2-methylcitrate induces metabolic imbalance in &lt;i&gt;Bacillus thuringiensis&lt;/i&gt;, revealing a detoxification strategy mediated by an internal promoter.",
+      "content": "Propionic acid is a common food preservative, but many microbes, including the important biocontrol agent <i>Bacillus thuringiensis</i>, can metabolize it via the 2-methylcitrate cycle. However, the accumulation of cycle intermediates, such as 2-methylcitrate, can be toxic, and the overall physiological effects of this toxicity on <i>B. thuringiensis</i> are unclear. In this study, we investigated the toxic effects of 2-methylcitrate on <i>B. thuringiensis</i> and its corresponding cellular resp",
+      "url": "https://doi.org/10.3389/fmicb.2026.1675856"
+    },
+    {
+      "title": "Roles of the membrane-binding motif and the C-terminal domain of RNase E in localization and diffusion in &lt;i&gt;E. coli&lt;/i&gt;.",
+      "content": "In <i>Escherichia coli</i>, RNase E, a central enzyme in RNA processing and mRNA degradation, contains a catalytic N-terminal domain, a membrane-targeting sequence (MTS), and a C-terminal domain (CTD). We investigated how MTS and CTD influence RNase E localization, diffusion, and function. Super-resolution microscopy revealed that ~93% of RNase E localizes to the inner membrane and exhibits slow diffusion similar to polysomes. Comparing the native amphipathic MTS with a transmembrane motif showe",
+      "url": "https://doi.org/10.7554/eLife.105062"
+    },
+    {
+      "title": "LeuO fine-tunes the virulence attributable to &lt;i&gt;Salmonella&lt;/i&gt; pathogenicity island-2 via repressing &lt;i&gt;ssrA&lt;/i&gt; transcription in &lt;i&gt;Salmonella&lt;/i&gt; Typhimurium.",
+      "content": "LeuO, initially identified as a leucine regulator in <i>Escherichia coli</i>, has since been identified as a global regulator required for bacterial pathogenicity in a broad range of bacteria, including <i>Salmonella</i>, <i>Shigella</i>, and <i>Vibrio</i>. This study aimed to determine the regulatory role of LeuO in <i>Salmonella</i> pathogenicity island (SPI)-2, essential for the intracellular proliferation of <i>Salmonella enterica</i> serovar Typhimurium (<i>S</i>. Typhimurium). Overexpressi",
+      "url": "https://doi.org/10.1080/21505594.2026.2629059"
+    },
+    {
+      "title": "A novel extracytoplasmic function sigma factor (RpoE6) regulates biogenesis of a minor flagellin and other functions in &lt;i&gt;Azospirillum brasilense&lt;/i&gt; Sp7.",
+      "content": "In Gammaproteobacteria, the biogenesis of the flagellar filaments is regulated by a flagellum-specific sigma factor (FliA). In Alphaproteobacteria, however, a flagellum-specific sigma factor is not known. In our search for a FliA-like sigma factor in <i>Azospirillum brasilense</i> Sp7, we found an extracytoplasmic function sigma factor (RpoE6) located in a gene cluster consisting of FlgK, FlgL, FliD, FliS, and FliC2. A strain lacking RpoE6 (Δ<i>rpoE6</i>) was compromised in expressing a small fl",
+      "url": "https://doi.org/10.1128/jb.00464-25"
+    },
+    {
+      "title": "Investigating the Trans Effects of IS&lt;italic&gt;1&lt;/italic&gt; Transposases on Intragenomic DNA Movements in &lt;italic&gt;Escherichia coli&lt;/italic&gt;.",
+      "content": "<h4>Introduction</h4>The transposase protein, InsAB', is the key cytoplastic determinant that catalyzes IS1 movement within a single DNA molecule or between two DNA molecules. Regulation of InsAB' synthesis, its structural characteristics, and its potent cis effect on IS1 transposition have been subjects of thorough investigation. However, limited efforts have been devoted to measuring the levels of IS1 transcripts and transposases made by native IS1 elements and examining their trans-acting fun",
+      "url": "https://doi.org/10.1159/000549727"
+    },
+    {
+      "title": "&lt;i&gt;Escherichia coli&lt;/i&gt; is poised to grow using 5'-deoxynucleosides via MtnR and CRP regulation of DHAP shunt gene expression.",
+      "content": "The dihydroxyacetone phosphate (DHAP) shunt is a multifunctional pathway for the metabolism of 5'-deoxynucleosides and 5-deoxypentose sugars, such as 5'-methylthioadenosine (MTA) and 5'-deoxyadenosine (5dAdo), into DHAP and an aldehyde species depending on the substrate. Previous work revealed that <i>Escherichia coli</i> strains with the DHAP shunt can utilize exogenous MTA, 5dAdo, and derivatives thereof as sole carbon and energy sources for growth. However, if and how the DHAP shunt was regul",
+      "url": "https://doi.org/10.1128/jb.00280-25"
+    },
+    {
+      "title": "Type I-Fv and engineered type IV-A1 CRISPR-Cas effectors facilitate genome reduction in Escherichia coli.",
+      "content": "Class 1 CRISPR-Cas systems utilize multi-subunit effector ribonucleoprotein complexes to identify and target DNA. Upon recognition, type I systems recruit the helicase/nuclease Cas3 for DNA degradation, while type IV-A systems use the helicase CasDinG for transcriptional repression. Here, we developed two recombinant class 1 CRISPR-Cas genome editing tools for inducing large genomic deletions: the compact type I-Fv (also termed I-F2) system from Shewanella putrefaciens and the type IV-A1 system ",
+      "url": "https://doi.org/10.1093/nar/gkaf1399"
+    },
+    {
+      "title": "Structural and functional implications of phase separation of membrane protein LacY in Escherichia coli.",
+      "content": "Liquid-liquid phase-separation (LLPS) controls protein activity and dynamically organizes (macro)molecules in living systems without the need for membrane-bound compartments. Biomolecular condensates of water-soluble proteins have extensively been studied, but little is known about LLPS of membrane proteins. In this work we induce in vivo condensation of lactose permease (LacY), a widely-studied model monomeric inner membrane protein in Escherichia coli, and evaluate how it affects LacY function",
+      "url": "https://doi.org/10.1038/s41467-026-69951-7"
+    },
+    {
+      "title": "Control of the &lt;i&gt;Pseudomonas aeruginosa&lt;/i&gt; LbcA•CtpA proteolytic complex and its substrates.",
+      "content": "<i>Pseudomonas aeruginosa</i> is a highly adaptable bacterial pathogen with a resilient cell envelope. This envelope must be elongated as cells grow, which requires coordinated biosynthesis of the inner and outer membranes and the peptidoglycan cell wall. Cell wall endopeptidases are essential to expand the peptidoglycan sacculus, and the LbcA•CtpA proteolytic complex controls the activity of multiple endopeptidases by degrading them. Here, we report an investigation into control of the LbcA•Ctp",
+      "url": "https://doi.org/10.1128/jb.00169-25"
+    },
+    {
+      "title": "Development of a markerless tool for targeted chromosome modification in the thermophilic and methylotrophic bacterium Bacillus methanolicus.",
+      "content": "Irla M, Brito LF, Langlo J, Wohlers C, Benninghaus L +4 more\nUnknown Journal 2025\n\nAbstract: No abstract available",
+      "url": "https://doi.org/10.1186/s12934-025-02880-0"
+    }
+  ],
+  "searchMethod": "literature_database",
+  "qualityMetrics": {
+    "dataCompleteness": 0.8,
+    "literatureCoverage": 0.85,
+    "overallQuality": 0.8
+  }
+}

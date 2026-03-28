@@ -1,0 +1,17 @@
+{
+  "title": "dapA Gene Function Research Report: Escherichia coli",
+  "finalReport": "# dapA 基因研究报告\n## Escherichia coli\n\n**注意**: 当前无法从外部数据库获取最新数据，以下信息基于已有的基因功能注释。\n\n### 基因概述\n- **基因名称**: dapA\n- **物种**: Escherichia coli\n- **研究重点**: general\n\n### 关键研究领域\n\n\n### 建议\n1. 请配置有效的搜索API以获取最新研究数据\n2. 建议使用PubMed、UniProt等数据库进行文献检索\n3. 可访问KEGG、BioCyc等数据库获取代谢途径信息\n\n---\n*报告生成时间: 2026-03-26T13:15:50.728Z*",
+  "sources": [
+    {
+      "title": "AI Model Knowledge Synthesis",
+      "content": "Information synthesized from training data",
+      "url": "internal:model_synthesis"
+    }
+  ],
+  "searchMethod": "model_fallback",
+  "qualityMetrics": {
+    "dataCompleteness": 0.3,
+    "literatureCoverage": 0.2,
+    "overallQuality": 0.3
+  }
+}
