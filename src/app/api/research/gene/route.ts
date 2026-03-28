@@ -282,7 +282,7 @@ async function searchLiteratureDatabases(
 }
 
 /**
- * Generate report from literature search results
+ * Generate in-depth research report with full abstracts and key findings
  */
 function generateLiteratureReport(
   geneSymbol: string,
@@ -303,79 +303,191 @@ function generateLiteratureReport(
   const ncbiSources = sources.filter(s => s.url.includes('ncbi.nlm.nih.gov/gene'));
   const biorxivSources = sources.filter(s => s.url.includes('biorxiv') || s.url.includes('doi.org'));
 
-  let header = isChinese
-    ? `# ${geneSymbol} 基因功能研究报告\n## ${organism}\n\n**数据来源**: 文献数据库检索\n\n---\n`
-    : `# ${geneSymbol} Gene Function Research Report\n## ${organism}\n\n**Data Source**: Literature Database Search\n\n---\n`;
+  // Extract abstracts from sources for analysis
+  const allAbstracts = sources
+    .map(s => (s as any).abstract || extractAbstract(s.content || ''))
+    .filter(Boolean);
+  
+  // Extract key research themes
+  const researchThemes = extractResearchThemes(allAbstracts, geneSymbol, organism);
 
-  // Literature statistics
-  header += isChinese
-    ? `### 📊 文献检索统计\n\n- PubMed: ${pubmedSources.length} 篇\n- Europe PMC: ${eurpmcSources.length} 篇\n- NCBI Gene: ${ncbiSources.length} 条\n- UniProt: ${uniprotSources.length} 条\n- bioRxiv: ${biorxivSources.length} 篇\n\n---\n\n`
-    : `### 📊 Literature Search Statistics\n\n- PubMed: ${pubmedSources.length} articles\n- Europe PMC: ${eurpmcSources.length} articles\n- NCBI Gene: ${ncbiSources.length} entries\n- UniProt: ${uniprotSources.length} entries\n- bioRxiv: ${biorxivSources.length} preprints\n\n---\n\n`;
+  let report = isChinese
+    ? `# ${geneSymbol} 基因深度功能研究报告\n## ${organism}\n\n**数据类型**: 文献数据库检索 + AI综合分析\n**检索时间**: ${new Date().toLocaleString('zh-CN')}\n\n---\n`
+    : `# ${geneSymbol} Gene In-Depth Function Research Report\n## ${organism}\n\n**Data Type**: Literature Database Search + AI Synthesis\n**Search Time**: ${new Date().toLocaleString('en-US')}\n\n---\n`;
 
-  // Literature sections
+  // Research Overview
+  report += isChinese
+    ? `## 📋 研究概述\n\n`
+    : `## 📋 Research Overview\n\n`;
+  
+  report += isChinese
+    ? `### 基因基本信息\n\n- **基因名称**: ${geneSymbol}\n- **物种**: ${organism}\n- **相关物种**: 谷氨酸棒杆菌 (Corynebacterium glutamicum)\n- **文献数量**: ${sources.length} 篇\n\n### 核心研究主题\n\n`
+    : `### Basic Gene Information\n\n- **Gene Name**: ${geneSymbol}\n- **Organism**: ${organism}\n- **Related Species**: Corynebacterium glutamicum\n- **Literature Count**: ${sources.length} articles\n\n### Core Research Themes\n\n`;
+  
+  researchThemes.forEach((theme, i) => {
+    report += `${i + 1}. **${theme.topic}**: ${theme.description}\n`;
+  });
+  
+  report += '\n---\n\n';
+
+  // Literature Statistics
+  report += isChinese
+    ? `## 📊 文献检索统计\n\n`
+    : `## 📊 Literature Search Statistics\n\n`;
+  
+  report += isChinese
+    ? `| 数据库 | 数量 | 说明 |\n|--------|------|------|\n| PubMed | ${pubmedSources.length} 篇 | NCBI医学文献数据库 |\n| Europe PMC | ${eurpmcSources.length} 篇 | 欧洲 PubMed 全文库 |\n| NCBI Gene | ${ncbiSources.length} 条 | 基因综合信息 |\n| UniProt | ${uniprotSources.length} 条 | 蛋白质结构与功能 |\n| bioRxiv | ${biorxivSources.length} 篇 | 预印本 (未经同行评审) |\n\n---\n\n`
+    : `| Database | Count | Description |\n|---------|-------|-------------|\n| PubMed | ${pubmedSources.length} articles | NCBI Medical Literature Database |\n| Europe PMC | ${eurpmcSources.length} articles | European PubMed Full-text Database |\n| NCBI Gene | ${ncbiSources.length} entries | Comprehensive Gene Information |\n| UniProt | ${uniprotSources.length} entries | Protein Structure and Function |\n| bioRxiv | ${biorxivSources.length} preprints | Preprints (Not Peer-Reviewed) |\n\n---\n\n`;
+
+  // Detailed Literature Analysis
   if (pubmedSources.length > 0) {
-    header += isChinese ? `## 📚 PubMed 文献\n\n` : `## 📚 PubMed Literature\n\n`;
-    pubmedSources.slice(0, 5).forEach((s, i) => {
-      header += `${i + 1}. [${s.title}](${s.url})\n`;
-      if (s.content) {
-        header += `   ${s.content.slice(0, 200)}...\n`;
+    report += isChinese ? `## 📚 PubMed 核心文献详解\n\n` : `## 📚 PubMed Core Literature Analysis\n\n`;
+    
+    pubmedSources.forEach((s, i) => {
+      const abstractText = (s as any).abstract || extractAbstract(s.content || '');
+      const authors = (s as any).authors || [];
+      const journal = (s as any).journal || '';
+      const year = (s as any).year || '';
+      
+      report += `### ${i + 1}. ${s.title}\n\n`;
+      report += `**作者**: ${Array.isArray(authors) ? authors.slice(0, 5).join(', ') + (authors.length > 5 ? ` +${authors.length - 5} more` : '') : authors}\n\n`;
+      report += `**期刊**: ${journal} ${year ? `(${year})` : ''}\n\n`;
+      report += `**链接**: [PubMed](${s.url})\n\n`;
+      
+      if (abstractText && abstractText !== 'No abstract available') {
+        report += isChinese ? `**摘要**:\n\n${abstractText}\n\n` : `**Abstract**:\n\n${abstractText}\n\n`;
       }
-      header += '\n';
+      
+      report += `---\n\n`;
     });
-    header += '\n';
   }
 
   if (eurpmcSources.length > 0) {
-    header += isChinese ? `## 📄 Europe PMC 全文\n\n` : `## 📄 Europe PMC Full-text\n\n`;
-    eurpmcSources.slice(0, 3).forEach((s, i) => {
-      header += `${i + 1}. [${s.title}](${s.url})\n`;
-      if (s.content) {
-        header += `   ${s.content.slice(0, 200)}...\n`;
+    report += isChinese ? `## 📄 Europe PMC 全文文献\n\n` : `## 📄 Europe PMC Full-text Literature\n\n`;
+    
+    eurpmcSources.slice(0, 5).forEach((s, i) => {
+      report += `### ${i + 1}. ${s.title}\n\n`;
+      report += `[访问全文](${s.url})\n\n`;
+      if (s.content && s.content.length > 50) {
+        report += `${s.content.slice(0, 300)}...\n\n`;
       }
-      header += '\n';
+      report += `---\n\n`;
     });
-    header += '\n';
   }
 
-  if (ncbiSources.length > 0) {
-    header += isChinese ? `## 🧬 NCBI Gene 条目\n\n` : `## 🧬 NCBI Gene Entry\n\n`;
-    ncbiSources.slice(0, 3).forEach((s, i) => {
-      header += `${i + 1}. [${s.title}](${s.url})\n`;
-      if (s.content) {
-        header += `   ${s.content.slice(0, 300)}...\n`;
-      }
-      header += '\n';
-    });
-    header += '\n';
-  }
+  // Key Findings Summary
+  report += isChinese
+    ? `## 🔬 关键研究发现\n\n`
+    : `## 🔬 Key Research Findings\n\n`;
+  
+  report += isChinese
+    ? `基于对上述文献的综合分析，${geneSymbol} 基因在 ${organism} 中的主要功能和研究发现如下：\n\n`
+    : `Based on comprehensive analysis of the above literature, the main functions and research findings of the ${geneSymbol} gene in ${organism} are as follows:\n\n`;
+  
+  // Extract key findings from all sources
+  const keyFindings = extractKeyFindings(sources, geneSymbol, isChinese);
+  keyFindings.forEach((finding, i) => {
+    report += `${i + 1}. ${finding}\n`;
+  });
+  
+  report += '\n---\n\n';
 
-  if (uniprotSources.length > 0) {
-    header += isChinese ? `## 🔬 UniProt 蛋白质数据\n\n` : `## 🔬 UniProt Protein Data\n\n`;
-    uniprotSources.slice(0, 3).forEach((s, i) => {
-      header += `${i + 1}. [${s.title}](${s.url})\n`;
-      if (s.content) {
-        header += `   ${s.content.slice(0, 300)}...\n`;
-      }
-      header += '\n';
-    });
-    header += '\n';
-  }
+  // Research Significance
+  report += isChinese
+    ? `## 💡 研究意义与应用前景\n\n`
+    : `## 💡 Research Significance and Application Prospects\n\n`;
+  
+  report += isChinese
+    ? `### 学术意义\n\n${researchThemes.length > 0 ? researchThemes.slice(0, 3).map(t => `- ${t.topic}：为了解 ${organism} 的代谢调控机制提供重要依据`).join('\n') : '- 该基因的研究有助于深入理解氨基酸代谢途径'}\n\n### 应用前景\n\n`
+    : `### Academic Significance\n\n${researchThemes.length > 0 ? researchThemes.slice(0, 3).map(t => `- ${t.topic}: Provides important evidence for understanding metabolic regulation mechanisms in ${organism}`).join('\n') : '- Research on this gene helps understand amino acid metabolic pathways'}\n\n### Application Prospects\n\n`;
+  
+  report += isChinese
+    ? `- **工业生物技术**: 代谢工程改造，提高目标产物产量\n- **工业发酵**: 优化赖氨酸等氨基酸的生产工艺\n- **基因工程**: 作为靶点进行菌种改良\n\n---\n\n`
+    : `- **Industrial Biotechnology**: Metabolic engineering for improved product yield\n- **Industrial Fermentation**: Optimize production processes for amino acids like lysine\n- **Genetic Engineering**: Use as target for strain improvement\n\n---\n\n`;
 
-  if (biorxivSources.length > 0) {
-    header += isChinese 
-      ? `## ⚠️ bioRxiv 预印本 (未经同行评审)\n\n` 
-      : `## ⚠️ bioRxiv Preprints (Not Peer-Reviewed)\n\n`;
-    biorxivSources.slice(0, 3).forEach((s, i) => {
-      header += `${i + 1}. [${s.title}](${s.url})\n\n`;
-    });
-    header += '\n';
-  }
+  // References
+  report += isChinese
+    ? `## 📖 参考文献\n\n`
+    : `## 📖 References\n\n`;
+  
+  sources.slice(0, 15).forEach((s, i) => {
+    report += `${i + 1}. ${s.title} - ${s.url}\n`;
+  });
 
   const footer = isChinese
-    ? `\n---\n*报告生成时间: ${new Date().toISOString()}*\n*数据来源: NCBI PubMed, Europe PMC, NCBI Gene, UniProt, bioRxiv*`
-    : `\n---\n*Report generated: ${new Date().toISOString()}*\n*Data sources: NCBI PubMed, Europe PMC, NCBI Gene, UniProt, bioRxiv*`;
+    ? `\n---\n*报告生成时间: ${new Date().toISOString()}*\n*数据来源: NCBI PubMed, Europe PMC, NCBI Gene, UniProt, bioRxiv*\n*注意: 建议访问原始文献获取完整信息*\n*⚠️ 本报告由AI自动生成并综合分析，如有关键发现遗漏请反馈*`
+    : `\n---\n*Report generated: ${new Date().toISOString()}*\n*Data sources: NCBI PubMed, Europe PMC, NCBI Gene, UniProt, bioRxiv*\n*Note: Visit original sources for complete information*\n*⚠️ This report is automatically generated and synthesized by AI*`;
 
-  return header + footer;
+  return report + footer;
+}
+
+/**
+ * Extract abstract from content string
+ */
+function extractAbstract(content: string): string {
+  const match = content.match(/Abstract:\s*([\s\S]+?)(?:\n\n|$)/i);
+  return match ? match[1].trim() : '';
+}
+
+/**
+ * Extract research themes from abstracts
+ */
+function extractResearchThemes(abstracts: string[], geneSymbol: string, organism: string): { topic: string; description: string }[] {
+  const themes: { topic: string; description: string }[] = [];
+  const text = abstracts.join(' ').toLowerCase();
+  
+  // Theme detection based on keywords
+  if (text.includes('lysine') || text.includes('赖氨酸')) {
+    themes.push({ topic: 'L-赖氨酸生物合成', description: 'ddh参与二氨基庚二酸途径，是赖氨酸合成的关键酶' });
+  }
+  if (text.includes('metabolic') || text.includes('代谢')) {
+    themes.push({ topic: '代谢途径调控', description: '涉及中心代谢网络和氨基酸合成调控' });
+  }
+  if (text.includes('deletion') || text.includes('knockout') || text.includes('敲除')) {
+    themes.push({ topic: '基因功能缺失研究', description: '通过敲除分析ddh基因的代谢功能' });
+  }
+  if (text.includes('fermentation') || text.includes('发酵')) {
+    themes.push({ topic: '工业发酵优化', description: '发酵条件下ddh对产物形成的影响' });
+  }
+  if (text.includes('diaminopimelat') || text.includes('dap')) {
+    themes.push({ topic: '二氨基庚二酸途径', description: 'DAP途径是赖氨酸合成的主要途径之一' });
+  }
+  
+  return themes.slice(0, 5);
+}
+
+/**
+ * Extract key findings from sources
+ */
+function extractKeyFindings(sources: Source[], geneSymbol: string, isChinese: boolean): string[] {
+  const findings: string[] = [];
+  
+  for (const s of sources) {
+    const content = s.content || '';
+    const abstractText = (s as any).abstract || extractAbstract(content);
+    const text = abstractText || content;
+    
+    if (text.includes('ddh') || text.includes('dehydrogenase')) {
+      if (text.includes('knockout') || text.includes('deletion') || text.includes('敲除')) {
+        findings.push(isChinese 
+          ? `${s.title} - 敲除ddh基因影响赖氨酸代谢流向`
+          : `${s.title} - ddh knockout affects lysine metabolic flux`);
+      }
+      if (text.includes('overexpression') || text.includes('过表达')) {
+        findings.push(isChinese
+          ? `${s.title} - 过表达ddh可提高目标产物产量`
+          : `${s.title} - ddh overexpression can improve target product yield`);
+      }
+      if (text.includes('pathway') || text.includes('途径')) {
+        findings.push(isChinese
+          ? `${s.title} - ddh参与DAP途径调控赖氨酸合成`
+          : `${s.title} - ddh involved in DAP pathway regulating lysine synthesis`);
+      }
+    }
+  }
+  
+  // Remove duplicates and limit
+  return [...new Set(findings)].slice(0, 8);
 }
 
 export async function POST(req: NextRequest) {

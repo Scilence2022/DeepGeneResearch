@@ -1,0 +1,137 @@
+{
+  "title": "ddh Gene Function Research Report: Corynebacterium glutamicum",
+  "finalReport": "# ddh 基因功能研究报告\n## Corynebacterium glutamicum\n\n**数据来源**: 文献数据库检索\n\n---\n### 📊 文献检索统计\n\n- PubMed: 0 篇\n- Europe PMC: 4 篇\n- NCBI Gene: 0 条\n- UniProt: 0 条\n- bioRxiv: 18 篇\n\n---\n\n## 📄 Europe PMC 全文\n\n1. [Biological Characteristics and Comparative Genomic Analysis of Corynebacterium hindlerae from Bovine Skin Abscess](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12943055/?tool=EBI)\n   \nUnknown Journal 2026\n\nAbstract: No abstract available...\n\n2. [Sustainable production of glutaric acid in microbial cell factories: Current advances and future prospects](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12861294/?tool=EBI)\n   Liu J, Mei D, Zhang X, Zhang W, Zhu L\nUnknown Journal 2026\n\nAbstract: No abstract available...\n\n3. [Recent Advances in Metabolic Engineering for the Biosynthesis of Phosphoenol Pyruvate–Oxaloacetate–Pyruvate-Derived Amino Acids](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11206799/?tool=EBI)\n   Yin L, Zhou Y, Ding N, Fang Y\nUnknown Journal 2024\n\nAbstract: No abstract available...\n\n\n## ⚠️ bioRxiv 预印本 (未经同行评审)\n\n1. [Kinetic modeling of multiple-strain artificial consortium to improve fengycin production of Bacillus subtilis.](https://doi.org/10.1186/s13068-025-02733-3)\n\n2. [High Throughput Screening of Transcription Factor LysG for Constructing a Better Lysine Biosensor.](https://doi.org/10.3390/bios14100455)\n\n3. [Genome-Wide Analysis of DtxR and HrrA Regulons Reveals Novel Targets and a High Level of Interconnectivity Between Iron and Heme Regulatory Networks in Corynebacterium glutamicum.](https://doi.org/10.1111/mmi.15376)\n\n\n\n---\n*报告生成时间: 2026-03-28T10:29:18.999Z*\n*数据来源: NCBI PubMed, Europe PMC, NCBI Gene, UniProt, bioRxiv*",
+  "sources": [
+    {
+      "title": "Kinetic modeling of multiple-strain artificial consortium to improve fengycin production of Bacillus subtilis.",
+      "content": "<h4>Background</h4>Artificial microbial consortium has been widely employed to improve the production of fengycin, a natural lipopeptide. Kinetic models are essential for understanding and predicting the dynamic behavior of metabolic systems, especially microbial consortia. Since the time evolution of metabolite concentrations and biomass is continuous and dynamic, systems of ordinary differential equations (ODEs) provide a natural and effective framework for capturing such interactions. In this",
+      "url": "https://doi.org/10.1186/s13068-025-02733-3"
+    },
+    {
+      "title": "Biological Characteristics and Comparative Genomic Analysis of Corynebacterium hindlerae from Bovine Skin Abscess",
+      "content": "\nUnknown Journal 2026\n\nAbstract: No abstract available",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12943055/?tool=EBI"
+    },
+    {
+      "title": "Sustainable production of glutaric acid in microbial cell factories: Current advances and future prospects",
+      "content": "Liu J, Mei D, Zhang X, Zhang W, Zhu L\nUnknown Journal 2026\n\nAbstract: No abstract available",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12861294/?tool=EBI"
+    },
+    {
+      "title": "High Throughput Screening of Transcription Factor LysG for Constructing a Better Lysine Biosensor.",
+      "content": "The biosensors based on transcription factors (TFs) are widely used in high throughput screening of metabolic overproducers. The unsatisfactory performances (narrow detection and dynamic ranges) of biosensors limit their practical application and need more improvement. In this study, using the TF LysG (sensing lysine) as an example, a biosensor optimization method was constructed by growth-coupled screening of TF random mutant libraries. The better the performance of the biosensor, the faster th",
+      "url": "https://doi.org/10.3390/bios14100455"
+    },
+    {
+      "title": "Genome-Wide Analysis of DtxR and HrrA Regulons Reveals Novel Targets and a High Level of Interconnectivity Between Iron and Heme Regulatory Networks in Corynebacterium glutamicum.",
+      "content": "Iron is vital for most organisms, serving as a cofactor in enzymes, regulatory proteins, and respiratory cytochromes. In Corynebacterium glutamicum , iron and heme homeostasis are tightly interconnected and controlled by the global regulators DtxR and HrrA. While DtxR senses intracellular Fe<sup>2+</sup>, HrrSA is activated by heme. This study provides the first genome-wide analysis of DtxR and HrrA binding dynamics under varying iron and heme conditions using chromatin affinity purification and",
+      "url": "https://doi.org/10.1111/mmi.15376"
+    },
+    {
+      "title": "Recent Advances in Metabolic Engineering for the Biosynthesis of Phosphoenol Pyruvate–Oxaloacetate–Pyruvate-Derived Amino Acids",
+      "content": "Yin L, Zhou Y, Ding N, Fang Y\nUnknown Journal 2024\n\nAbstract: No abstract available",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11206799/?tool=EBI"
+    },
+    {
+      "title": "Enhancing the bioconversion of phytosterols to 22-hydroxy-23,24- bisnorchol-4-ene-3-one in Mycobacterium neoaurum ZS-15 through genetic modification of kstD1 and wecA.",
+      "content": "Guo S, Song M, Song Z, Liu T, Zhang D +4 more\nUnknown Journal 2026\n\nAbstract: No abstract available",
+      "url": "https://doi.org/10.1186/s12934-025-02921-8"
+    },
+    {
+      "title": "CRISPR/dCas-mediated counter-silencing: reprogramming dCas proteins into antagonists of xenogeneic silencers.",
+      "content": "Lsr2-like nucleoid-associated proteins function as xenogeneic silencers (XSs) inhibiting expression of horizontally acquired, adenine-thymine-rich DNA in actinobacteria. Interference by transcription factors can lead to counter-silencing of XS target promoters, but relief of this repression typically requires promoter engineering. In this study, we developed a novel clustered regularly interspaced short palindromic repeats (CRISPR)/dCas-mediated counter-silencing (CRISPRcosi) approach by using n",
+      "url": "https://doi.org/10.1128/mbio.00382-25"
+    },
+    {
+      "title": "Reconstruction the feedback regulation of amino acid metabolism to develop a non-auxotrophic L-threonine producing Corynebacterium glutamicum.",
+      "content": "L-Threonine is an important feed additive with the third largest market size among the amino acids produced by microbial fermentation. The GRAS (generally regarded as safe) industrial workhorse Corynebacterium glutamicum is an attractive chassis for L-threonine production. However, the present L-threonine production in C. glutamicum cannot meet the requirement of industrialization due to the relatively low production level of L-threonine and the accumulation of large amounts of by-products (such",
+      "url": "https://doi.org/10.1186/s40643-024-00753-9"
+    },
+    {
+      "title": "Utilization of orange peel waste for sustainable amino acid production by <i>Corynebacterium glutamicum</i>.",
+      "content": "Oranges are the most processed fruit in the world-it is therefore apparent that the industrial production of orange juice generates large quantities of orange peel as a by-product. Unfortunately, the management of the orange peel waste leads to economic and environmental problems. Meanwhile, the use of sustainable raw materials for the production of bulk chemicals, such as amino acids, is becoming increasingly attractive. To address both issues, this study focused on the use of orange peel waste",
+      "url": "https://doi.org/10.3389/fbioe.2024.1419444"
+    },
+    {
+      "title": "De novo biosynthesis of α-aminoadipate via multi-strategy metabolic engineering in Escherichia coli.",
+      "content": "As a non-protein amino acid, α-aminoadipate is used in the fields of medicine, chemical engineering, food science, and others. For example, α-aminoadipate is an important precursor for the production of β-lactam antibiotics. Currently, the synthesis of α-aminoadipate depends on chemical catalysis that has the disadvantages of high cost, low yield, and serious pollution. In this study, we construct a biosynthesis pathway of α-aminoadipate in Escherichia coli using lysine as a precursor. In additi",
+      "url": "https://doi.org/10.1002/mbo3.1301"
+    },
+    {
+      "title": "Genomic Insights into Bacterioruberin and Halorhodopsin Biosynthetic Genes in 12 Halophilic Archaea Isolated from Korean Solar Salterns.",
+      "content": "Halophilic archaea are extremophilic microorganisms uniquely adapted to thrive in hypersaline environments such as solar salterns, saline lakes, and brines. Their ability to survive under high-salt conditions is closely associated with the production of unique compounds specifically synthesized by haloarchaea, including bacterioruberin and halorhodopsin. Bacterioruberin is a carotenoid pigment that protects cells from oxidative stress and contributes to osmotic stress resistance. Halorhodopsin i",
+      "url": "https://doi.org/10.4014/jmb.2601.01015"
+    },
+    {
+      "title": "Reconstruction of the Diaminopimelic Acid Pathway to Promote L-lysine Production in <i>Corynebacterium glutamicum</i>.",
+      "content": "The dehydrogenase pathway and the succinylase pathway are involved in the synthesis of L-lysine in <i>Corynebacterium glutamicum</i>. Despite the low contribution rate to L-lysine production, the dehydrogenase pathway is favorable for its simple steps and potential to increase the production of L-lysine. The effect of ammonium (NH<sub>4</sub><sup>+</sup>) concentration on L-lysine biosynthesis was investigated, and the results indicated that the biosynthesis of L-lysine can be promoted in a high",
+      "url": "https://doi.org/10.3390/ijms22169065"
+    },
+    {
+      "title": "Enhanced ε-Poly-L-Lysine Production in <i>Streptomyces albulus</i> through Multi-Omics-Guided Metabolic Engineering.",
+      "content": "Safe and eco-friendly preservatives are crucial to preventing food spoilage and illnesses, as foodborne diseases caused by pathogens result in approximately 600 million cases of illness and 420,000 deaths annually. ε-Poly-L-lysine (ε-PL) is a novel food preservative widely used in many countries. However, its commercial application has been hindered by high costs and low production. In this study, ε-PL's biosynthetic capacity was enhanced in <i>Streptomyces albulus</i> WG608 through metabolic en",
+      "url": "https://doi.org/10.3390/biom14070752"
+    },
+    {
+      "title": "Optimizing <i>Escherichia coli</i> strains and fermentation processes for enhanced L-lysine production: a review.",
+      "content": "lysine is an essential amino acid with significant importance, widely used in the food, feed, and pharmaceutical industries. To meet the increasing demand, microbial fermentation has emerged as an effective and sustainable method for L-lysine production. <i>Escherichia coli</i> has become one of the primary microorganisms for industrial L-lysine production due to its rapid growth, ease of genetic manipulation, and high production efficiency. This paper reviews the recent advances in <i>E. coli</",
+      "url": "https://doi.org/10.3389/fmicb.2024.1485624"
+    },
+    {
+      "title": "A global perspective on the genomics of &lt;i&gt;Moraxella catarrhalis&lt;/i&gt;.",
+      "content": "<i>Moraxella catarrhalis</i> is an opportunistic pathogen of the human respiratory tract, primarily associated with otitis media in children and exacerbations of chronic obstructive pulmonary disease in adults. Despite its clinical importance, the genomic diversity and functional specialization of <i>M. catarrhalis</i> remain insufficiently characterized. This study aimed to analyse the global genetic diversity of <i>M. catarrhalis</i> using whole-genome sequencing to identify phylogenetic linea",
+      "url": "https://doi.org/10.1099/mgen.0.001488"
+    },
+    {
+      "title": "Reconstruction of the Diaminopimelic Acid Pathway to Promote L-lysine Production in Corynebacterium Glutamicum",
+      "content": "<title>Abstract</title>  <p><bold>Background: </bold>The dehydrogenase pathway and the succinylase pathway are involved in the synthesis of L-lysine in <italic>Corynebacterium glutamicum</italic>. Despite the low contribution rate to L-lysine production, the dehydrogenase pathway is favorable for its simple steps and great potentials to increase the production of L-lysine. <bold>Results:</bold> The aim of this work is to enhance the carbon flux in dehydrogenase pathway to promote L-lysine produc",
+      "url": "https://www.researchsquare.com/article/rs-539166/latest.pdf"
+    },
+    {
+      "title": "Formamide-based production of amines by metabolically engineering Corynebacterium glutamicum.",
+      "content": "Formamide is rarely used as nitrogen source by microorganisms. Therefore, formamide and formamidase have been used as protection system to allow for growth under non-sterile conditions and for non-sterile production of acetoin, a product lacking nitrogen. Here, we equipped Corynebacterium glutamicum, a renowned workhorse for industrial amino acid production for 60 years, with formamidase from Helicobacter pylori 26695, enabling growth with formamide as sole nitrogen source. Thereupon, the formam",
+      "url": "https://doi.org/10.1007/s00253-023-12592-3"
+    },
+    {
+      "title": "Bioactivity profiling of the extremolyte ectoine as a promising protectant and its heterologous production.",
+      "content": "Ectoine is a compatible solutes that is diffusely dispersed in bacteria and archaea. It plays a significant role as protectant against various external pressures, such as high temperature, high osmolarity, dryness and radiation, in cells. Ectoine can be utilized in cosmetics due to its properties of moisturizing and antiultraviolet. It can also be used in the pharmaceutical industry for treating various diseases. Therefore, strong protection of ectoine creates a high commercial value. Its curren",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/9606177"
+    },
+    {
+      "title": "Post-defecation exposure alters gut microbiota of forest musk deer with implications for conservation metagenomics.",
+      "content": "In endangered species conservation, fecal samples are a vital non-invasive tool for gut microbiota analysis. Yet, the influence of external exposure time on microbial composition and function remains unclear, constraining data accuracy and reliability. To address this, we investigated the time-gradient effect in the globally endangered forest musk deer (Moschus berezovskii). Using non-invasive sampling under standardized captive conditions, fecal samples were collected at six storage times: (0, ",
+      "url": "https://doi.org/10.1007/s00253-026-13729-w"
+    },
+    {
+      "title": "Glutaric acid production by systems metabolic engineering of an l-lysine-overproducing <i>Corynebacterium glutamicum</i>.",
+      "content": "There is increasing industrial demand for five-carbon platform chemicals, particularly glutaric acid, a widely used building block chemical for the synthesis of polyesters and polyamides. Here we report the development of an efficient glutaric acid microbial producer by systems metabolic engineering of an l-lysine-overproducing <i>Corynebacterium glutamicum</i> BE strain. Based on our previous study, an optimal synthetic metabolic pathway comprising <i>Pseudomonas putida</i> l-lysine monooxygena",
+      "url": "https://doi.org/10.1073/pnas.2017483117"
+    },
+    {
+      "title": "Transcriptome profiles of high-lysine adaptation reveal insights into osmotic stress response in <i>Corynebacterium glutamicum</i>.",
+      "content": "<i>Corynebacterium glutamicum</i> has been widely and effectively used for fermentative production of l-lysine on an industrial scale. However, high-level accumulation of end products inevitably leads to osmotic stress and hinders further increase of l-lysine production. At present, the underlying mechanism by which <i>C. glutamicum</i> cells adapt to high-lysine-induced osmotic stress is still unclear. In this study, we conducted a comparative transcriptomic analysis by RNA-seq to determine gen",
+      "url": "https://doi.org/10.3389/fbioe.2022.933325"
+    },
+    {
+      "title": "Production of Biopolyamide Precursors 5-Amino Valeric Acid and Putrescine From Rice Straw Hydrolysate by Engineered &lt;i&gt;Corynebacterium glutamicum&lt;/i&gt;.",
+      "content": "The non-proteinogenic amino acid 5-amino valeric acid (5-AVA) and the diamine putrescine are potential building blocks in the bio-polyamide industry. The production of 5-AVA and putrescine using engineered <i>Corynebacterium glutamicum</i> by the co-consumption of biomass-derived sugars is an attractive strategy and an alternative to their petrochemical synthesis. In our previous work, 5-AVA production from pure xylose by C. <i>glutamicum</i> was shown by heterologously expressing <i>xylA</i> fr",
+      "url": "https://doi.org/10.3389/fbioe.2021.635509"
+    },
+    {
+      "title": "Expressing 2-keto acid pathway enzymes significantly increases photosynthetic isobutanol production.",
+      "content": "<h4>Background</h4>Cyanobacteria, photosynthetic microorganisms, are promising green cell factories for chemical production, including biofuels. Isobutanol, a four-carbon alcohol, is considered as a superior candidate as a biofuel for its high energy density with suitable chemical and physical characteristics. The unicellular cyanobacterium Synechocystis PCC 6803 has been successfully engineered for photosynthetic isobutanol production from CO<sub>2</sub> and solar energy in a direct process.<h4",
+      "url": "https://microbialcellfactories.biomedcentral.com/track/pdf/10.1186/s12934-022-01738-z"
+    },
+    {
+      "title": "De novo assembly and comparative genome analysis for polyhydroxyalkanoates-producing Bacillus sp. BNPI-92 strain.",
+      "content": "<h4>Background</h4>Certain Bacillus species play a vital role in polyhydroxyalkanoate (PHA) production. However, most of these isolates did not properly identify to species level when scientifically had been reported.<h4>Results</h4>From NGS analysis, 5719 genes were predicted in the de novo genome assembly. Based on genome annotation using RAST server, 5,527,513 bp sequences were predicted with 5679 bp number of protein-coding sequence. Its genome sequence contains 35.1% and 156 GC content and ",
+      "url": "https://jgeb.springeropen.com/counter/pdf/10.1186/s43141-023-00578-7"
+    }
+  ],
+  "searchMethod": "literature_database",
+  "qualityMetrics": {
+    "dataCompleteness": 0.8,
+    "literatureCoverage": 0.85,
+    "overallQuality": 0.8
+  }
+}

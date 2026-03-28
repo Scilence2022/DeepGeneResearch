@@ -109,7 +109,148 @@ export async function searchPubMed({
       return { sources: [], images: [], metadata: { totalResults: 0, database: 'pubmed', searchTime: Date.now() - startTime, geneSymbol, organism } };
     }
 
-    // Step 2: Fetch detailed information using esummary (JSON mode)
+    // Step 2: Fetch detailed information using efetch (XML mode for full abstracts)
+    const fetchUrl = `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=pubmed&id=${pmids.join(',')}&retmode=xml&rettype=abstract`;
+    
+    let xmlText = '';
+    try {
+      const fetchResponse = await fetch(fetchUrl, { 
+        headers,
+        signal: AbortSignal.timeout(15000)  // 15 second timeout
+      });
+      xmlText = await fetchResponse.text();
+    } catch (fetchError) {
+      console.error('PubMed efetch error:', fetchError);
+      // Fallback to esummary if efetch fails
+      return await searchPubMedEsummary(pmids, geneSymbol, organism, startTime, headers);
+    }
+
+    // Parse XML manually without external dependencies
+    const sources: GeneSource[] = [];
+    
+    // Extract each PubmedArticle - handle nested XML properly
+    const articleMatches = xmlText.split(/<PubmedArticle>/).slice(1);
+    
+    for (const articleXml of articleMatches) {
+      const articleContent = articleXml.split(/<\/PubmedArticle>/)[0];
+      
+      // Extract PMID - look for <PMID Version="1">27702487</PMID>
+      const pmidMatch = articleContent.match(/<PMID[^>]*>(\d+)<\/PMID>/);
+      const pmid = pmidMatch ? pmidMatch[1] : '';
+      
+      // Extract ArticleTitle - may contain HTML entities
+      const titleMatch = articleContent.match(/<ArticleTitle>([\s\S]*?)<\/ArticleTitle>/);
+      let title = 'Untitled';
+      if (titleMatch) {
+        title = titleMatch[1]
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .replace(/&quot;/g, '"')
+          .replace(/&#xa;/g, '\n')
+          .trim();
+      }
+      
+      // Extract AbstractText - handle both simple and structured abstracts
+      const abstractMatches = articleContent.match(/<AbstractText[^>]*>([\s\S]*?)<\/AbstractText>/gi) || [];
+      let abstractStr = '';
+      for (const abs of abstractMatches) {
+        let absContent = abs.replace(/<AbstractText[^>]*>/i, '').replace(/<\/AbstractText>/i, '');
+        absContent = absContent
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .replace(/&quot;/g, '"')
+          .replace(/&#xa;/g, '\n')
+          .replace(/&#xA;/g, '\n')
+          .trim();
+        abstractStr += (abstractStr ? '\n\n' : '') + absContent;
+      }
+      
+      // Extract Authors - each Author element contains LastName, ForeName
+      const authorNames: string[] = [];
+      const authorBlockMatch = articleContent.match(/<AuthorList[^>]*>([\s\S]*?)<\/AuthorList>/i);
+      if (authorBlockMatch) {
+        const authorBlock = authorBlockMatch[1];
+        const lastNameMatches = authorBlock.match(/<LastName>([^<]+)<\/LastName>/gi) || [];
+        const foreNameMatches = authorBlock.match(/<ForeName>([^<]+)<\/ForeName>/gi) || [];
+        const collectiveMatches = authorBlock.match(/<CollectiveName>([^<]+)<\/CollectiveName>/gi) || [];
+        
+        for (const c of collectiveMatches) {
+          const match = c.match(/<CollectiveName>([^<]+)<\/CollectiveName>/i);
+          if (match) authorNames.push(match[1]);
+        }
+        
+        for (let i = 0; i < lastNameMatches.length && authorNames.length < 10; i++) {
+          const lnMatch = lastNameMatches[i].match(/<LastName>([^<]+)<\/LastName>/i);
+          const fnMatch = foreNameMatches[i]?.match(/<ForeName>([^<]+)<\/ForeName>/i);
+          if (lnMatch) {
+            authorNames.push(fnMatch ? `${fnMatch[1]} ${lnMatch[1]}` : lnMatch[1]);
+          }
+        }
+      }
+      const authorStr = authorNames.length > 5 
+        ? `${authorNames.slice(0, 5).join(", ")} +${authorNames.length - 5} more`
+        : authorNames.join(", ");
+      
+      // Extract Journal Title
+      const journalMatch = articleContent.match(/<Title>([^<]+)<\/Title>/i);
+      const journal = journalMatch ? journalMatch[1] : 'Unknown Journal';
+      
+      // Extract Year from PubDate
+      const yearMatch = articleContent.match(/<PubDate>[\s\S]*?<Year>(\d{4})<\/Year>[\s\S]*?<\/PubDate>/i);
+      const year = yearMatch ? yearMatch[1] : '';
+      
+      if (pmid && title && title !== 'Untitled') {
+        sources.push({
+          title,
+          content: `${authorStr}\n${journal} ${year}\n\nAbstract: ${abstractStr || 'No abstract available'}`,
+          url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+          database: 'pubmed',
+          geneSymbol,
+          organism,
+          confidence: 0.95,
+          evidence: ['pubmed'],
+          type: 'literature',
+          authors: authorNames,
+          journal,
+          year,
+          pmid,
+          abstract: abstractStr,
+          citations: 0
+        });
+      }
+    }
+
+    return {
+      sources,
+      images: [],
+      metadata: {
+        totalResults: count,
+        database: 'pubmed',
+        searchTime: Date.now() - startTime,
+        geneSymbol,
+        organism,
+        qualityScore: sources.length > 0 ? 0.95 : 0
+      }
+    };
+  } catch (error) {
+    console.error('PubMed search error:', error);
+    return { sources: [], images: [], metadata: { totalResults: 0, database: 'pubmed', searchTime: Date.now() - startTime, geneSymbol, organism } };
+  }
+}
+
+/**
+ * Fallback search using esummary when efetch fails
+ */
+async function searchPubMedEsummary(
+  pmids: string[],
+  geneSymbol: string,
+  organism: string,
+  startTime: number,
+  headers: HeadersInit
+): Promise<GeneSearchResult> {
+  try {
     const summaryUrl = `${GENE_DATABASE_URLS.NCBI_EUTILS}esummary.fcgi?db=pubmed&id=${pmids.join(',')}&retmode=json`;
     const summaryResponse = await fetch(summaryUrl, { headers });
     const summaryData = await summaryResponse.json();
@@ -133,7 +274,7 @@ export async function searchPubMed({
           database: 'pubmed',
           geneSymbol,
           organism,
-          confidence: 0.95,
+          confidence: 0.9,
           evidence: ['pubmed'],
           type: 'literature',
           authors,
@@ -150,16 +291,16 @@ export async function searchPubMed({
       sources,
       images: [],
       metadata: {
-        totalResults: count,
+        totalResults: sources.length,
         database: 'pubmed',
         searchTime: Date.now() - startTime,
         geneSymbol,
         organism,
-        qualityScore: sources.length > 0 ? 0.9 : 0
+        qualityScore: sources.length > 0 ? 0.85 : 0
       }
     };
   } catch (error) {
-    console.error('PubMed search error:', error);
+    console.error('PubMed esummary fallback error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'pubmed', searchTime: Date.now() - startTime, geneSymbol, organism } };
   }
 }
