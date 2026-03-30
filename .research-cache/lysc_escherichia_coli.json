@@ -1,0 +1,145 @@
+{
+  "geneSymbol": "lysC",
+  "organism": "Escherichia coli",
+  "data": {
+    "title": "lysC Gene Function Research Report: Escherichia coli",
+    "finalReport": "# lysC 基因深度功能研究报告\n## Escherichia coli\n\n**数据类型**: 文献数据库检索 + AI综合分析\n**检索时间**: 2026/3/28 20:04:09\n\n---\n## 📋 研究概述\n\n### 基因基本信息\n\n- **基因名称**: lysC\n- **物种**: Escherichia coli\n- **相关物种**: 谷氨酸棒杆菌 (Corynebacterium glutamicum)\n- **文献数量**: 25 篇\n\n### 核心研究主题\n\n\n---\n\n## 📊 文献检索统计\n\n| 数据库 | 数量 | 说明 |\n|--------|------|------|\n| PubMed | 0 篇 | NCBI医学文献数据库 |\n| Europe PMC | 1 篇 | 欧洲 PubMed 全文库 |\n| NCBI Gene | 0 条 | 基因综合信息 |\n| UniProt | 0 条 | 蛋白质结构与功能 |\n| bioRxiv | 24 篇 | 预印本 (未经同行评审) |\n\n---\n\n## 📄 Europe PMC 全文文献\n\n### 1. Sustainable production of glutaric acid in microbial cell factories: Current advances and future prospects\n\n[访问全文](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12861294/?tool=EBI)\n\nLiu J, Mei D, Zhang X, Zhang W, Zhu L\nUnknown Journal 2026\n\nAbstract: No abstract available...\n\n---\n\n## 🔬 关键研究发现\n\n基于对上述文献的综合分析，lysC 基因在 Escherichia coli 中的主要功能和研究发现如下：\n\n\n---\n\n## 💡 研究意义与应用前景\n\n### 学术意义\n\n- 该基因的研究有助于深入理解氨基酸代谢途径\n\n### 应用前景\n\n- **工业生物技术**: 代谢工程改造，提高目标产物产量\n- **工业发酵**: 优化赖氨酸等氨基酸的生产工艺\n- **基因工程**: 作为靶点进行菌种改良\n\n---\n\n## 📖 参考文献\n\n1. UltraPlex-TMT: Expanding Isobaric Hyperplexing via Orthogonal Protease Cleavage. - https://doi.org/10.1021/acs.jproteome.5c01084\n2. Oxidative Peptide Backbone Cleavage by a HEXXH Enzyme during RiPP Biosynthesis. - https://doi.org/10.1021/jacs.5c19246\n3. Intracellular self-assembly and metabolite analysis of key enzymes for L-lysine synthesis based on key components of cellulosomes. - https://doi.org/10.3389/fmicb.2025.1596240\n4. Constructing Genetically Engineered Escherichia coli for De Novo Production of L-Threo-3-Hydroxyaspartic Acid. - https://doi.org/10.1007/s12010-025-05224-1\n5. Thyme, Oregano, and Cinnamon Essential Oils: Investigating Their Molecular Mechanism of Action for the Treatment of Bacteria-Induced Cystitis. - https://doi.org/10.1021/acsomega.5c10256\n6. Genetic make-up and regulation of the L-lysine biosynthesis pathway in &lt;i&gt;Vibrio natriegens&lt;/i&gt;. - https://doi.org/10.15698/mic2026.02.867\n7. Live-Cell Chemoproteomic Profiling Identifies the Uncharacterised Protein YbaA as a Direct Target of Ciprofloxacin in  <i>Escherichia coli</i> - https://doi.org/10.1101/2025.10.16.682360\n8. Direct and indirect control of Rho-dependent transcription termination by the &lt;i&gt;Escherichia coli lysC&lt;/i&gt; riboswitch. - https://doi.org/10.1261/rna.079779.123\n9. Development of a lysine biosensor for the dynamic regulation of cadaverine biosynthesis in E. coli. - https://doi.org/10.1186/s12934-025-02772-3\n10. High Ectoine Production from Lignocellulosic Hydrolysate by &lt;i&gt;Escherichia coli&lt;/i&gt; through Metabolic and Fermentation Engineering. - https://doi.org/10.1021/acssynbio.4c00899\n11. High Throughput Screening of Transcription Factor LysG for Constructing a Better Lysine Biosensor. - https://doi.org/10.3390/bios14100455\n12. High-Throughput Proteomics Sample Preparation Using a 96-Channel Pipettor and Magnetic Pin Device. - https://doi.org/10.1021/acs.jproteome.5c01020\n13. Metabolic engineering strategies for L-Homoserine production in Escherichia coli. - https://doi.org/10.1186/s12934-024-02623-7\n14. Residue-level determinants of the thermal stability of the extremophilic Ts2631 endolysin. - https://doi.org/10.1038/s41598-026-38786-z\n15. Metabolic engineering of Bacillus licheniformis DW2 for ectoine production. - https://doi.org/10.1007/s11274-024-04238-x\n\n---\n*报告生成时间: 2026-03-28T12:04:09.897Z*\n*数据来源: NCBI PubMed, Europe PMC, NCBI Gene, UniProt, bioRxiv*\n*注意: 建议访问原始文献获取完整信息*\n*⚠️ 本报告由AI自动生成并综合分析，如有关键发现遗漏请反馈*",
+    "sources": [
+      {
+        "title": "UltraPlex-TMT: Expanding Isobaric Hyperplexing via Orthogonal Protease Cleavage.",
+        "content": "Isobaric labeling is widely used in quantitative proteomics for its multiplexing capabilities, but scaling beyond current limits remains a challenge. Here, we introduce UltraPlex-TMT, a streamlined and scalable workflow that integrates orthogonal protease digestion with hyperplex TMT/TMTpro labeling to effectively double sample throughput. UltraPlex-TMT can be readily implemented without custom chemistry or instrumentation. We benchmarked UltraPlex-TMT using lysine- and arginine-specific proteas",
+        "url": "https://doi.org/10.1021/acs.jproteome.5c01084"
+      },
+      {
+        "title": "Oxidative Peptide Backbone Cleavage by a HEXXH Enzyme during RiPP Biosynthesis.",
+        "content": "Ribosomally synthesized and post-translationally modified peptides (RiPPs) rely on a diverse array of enzymes to tailor peptide backbones and side chains. In this study, we characterized enzymes from two different biosynthetic gene clusters (BGCs) from Pseudomonas strains (<i>pfl</i> and <i>pos</i>) that catalyze new transformations in RiPP biosynthesis. Two α-ketoglutarate-dependent HEXXH enzymes, PflC and PosC, perform hydroxylation of multiple consecutive glutamine residues and selectively re",
+        "url": "https://doi.org/10.1021/jacs.5c19246"
+      },
+      {
+        "title": "Intracellular self-assembly and metabolite analysis of key enzymes for L-lysine synthesis based on key components of cellulosomes.",
+        "content": "<h4>Introduction</h4>Cellulosome is a natural multi-enzyme complex in the extracellular space of anaerobic microorganisms, which has the advantages of small molecular weight, multiple binding sites, and strong designability. This study aimed to explore the influence of intracellular self-assembly complexes on L-lysine biosynthesis.<h4>Methods</h4>Two novel L-lysine-engineered bacteria modification strategies were designed, considering the L-lysine biosynthesis pathway using DocA-S3/Coh as an eff",
+        "url": "https://doi.org/10.3389/fmicb.2025.1596240"
+      },
+      {
+        "title": "Constructing Genetically Engineered Escherichia coli for De Novo Production of L-Threo-3-Hydroxyaspartic Acid.",
+        "content": "L-threo-3-hydroxyaspartic acid (L-THA) is a non-proteinogenic amino acid that has garnered significant attention due to its diverse biological activities. However, the synthesis of L-THA through enzymatic and whole-cell catalysis requires the expensive substrate L-aspartic acid or L-asparagine, and co-substrate α-ketoglutarate, which limits their large-scale application. Here, this is the first report of engineering E. coli as a cell factory for de novo production of L-THA from glucose by fermen",
+        "url": "https://doi.org/10.1007/s12010-025-05224-1"
+      },
+      {
+        "title": "Thyme, Oregano, and Cinnamon Essential Oils: Investigating Their Molecular Mechanism of Action for the Treatment of Bacteria-Induced Cystitis.",
+        "content": "Pathogen infections, exacerbated by emerging drug resistance, remain among the most challenging health issues, for which multitargeting approaches may offer effective solutions. In this context, medicinal plants, including essential oils, provide complex mixtures of diverse molecules that can exert therapeutic effects, either alone or synergistically with established antibiotics. Although several databases comprehensively collect information on the antibacterial properties of medicinal plants, i",
+        "url": "https://doi.org/10.1021/acsomega.5c10256"
+      },
+      {
+        "title": "Genetic make-up and regulation of the L-lysine biosynthesis pathway in &lt;i&gt;Vibrio natriegens&lt;/i&gt;.",
+        "content": "<i>Vibrio natriegens</i>, the fastest growing non-pathogenic microorganism known to date, has emerged as a highly promising chassis strain for synthetic biology and biotechnology applications. This study analysed the make-up and regulation of the biosynthetic pathway for L-lysine and related L-aspartate family amino acids (AFAAs) in <i>V. natriegens</i> DSM759 to provide a comprehensive basis for future metabolic engineering endeavours aiming at developing this strain into an amino acid overprod",
+        "url": "https://doi.org/10.15698/mic2026.02.867"
+      },
+      {
+        "title": "Live-Cell Chemoproteomic Profiling Identifies the Uncharacterised Protein YbaA as a Direct Target of Ciprofloxacin in  <i>Escherichia coli</i>",
+        "content": "Fluoroquinolone antibiotics, such as ciprofloxacin, are important broad-spectrum agents for a range of bacterial infections; however, fluoroquinolone usage is increasingly challenged by the emergence of resistance. Ciprofloxacin resistance mechanisms include mutations in the antibiotic target DNA gyrase, downregulation of porins required for bacterial cell penetration, and upregulation of efflux pumps to expel the antibiotic. However, new pathways driving bacterial tolerance to fluoroquinolones ",
+        "url": "https://doi.org/10.1101/2025.10.16.682360"
+      },
+      {
+        "title": "Direct and indirect control of Rho-dependent transcription termination by the &lt;i&gt;Escherichia coli lysC&lt;/i&gt; riboswitch.",
+        "content": "Bacterial riboswitches are molecular structures that play a crucial role in controlling gene expression to maintain cellular balance. The <i>Escherichia coli lysC</i> riboswitch has been previously shown to regulate gene expression through translation initiation and mRNA decay. Recent research suggests that <i>lysC</i> gene expression is also influenced by Rho-dependent transcription termination. Through a series of in silico, in vitro, and in vivo experiments, we provide experimental evidence t",
+        "url": "https://doi.org/10.1261/rna.079779.123"
+      },
+      {
+        "title": "Development of a lysine biosensor for the dynamic regulation of cadaverine biosynthesis in E. coli.",
+        "content": "<h4>Background</h4>As one of the most promising monomers of biobased polyamides, cadaverine has wide industrial application prospects. However, in microbial cadaverine fermentation with glucose as the sole carbon source, the impaired coordination between precursor (lysine) utilization and cytotoxic cadaverine accumulation has been identified as the primary bottleneck limiting high-yield biosynthesis. Here, we developed a lysine biosensor in Escherichia coli to dynamically regulate cadaverine bio",
+        "url": "https://doi.org/10.1186/s12934-025-02772-3"
+      },
+      {
+        "title": "High Ectoine Production from Lignocellulosic Hydrolysate by &lt;i&gt;Escherichia coli&lt;/i&gt; through Metabolic and Fermentation Engineering.",
+        "content": "Ectoine, a major compatible solute in halophilic micro-organisms, shows great potential in cosmetics and pharmaceuticals areas owing to its water-binding properties and capability to prevent oxidative damage. In this study, the <i>ectABC</i> gene cluster responsible for the ectoine synthesis originated from halophilic bacterium <i>Halomonas venusta</i> was first assembled into <i>Escherichia coli</i>. Subsequently, the <i>crr</i> gene in PTS was knocked out to further drive the metabolic flux fr",
+        "url": "https://doi.org/10.1021/acssynbio.4c00899"
+      },
+      {
+        "title": "High Throughput Screening of Transcription Factor LysG for Constructing a Better Lysine Biosensor.",
+        "content": "The biosensors based on transcription factors (TFs) are widely used in high throughput screening of metabolic overproducers. The unsatisfactory performances (narrow detection and dynamic ranges) of biosensors limit their practical application and need more improvement. In this study, using the TF LysG (sensing lysine) as an example, a biosensor optimization method was constructed by growth-coupled screening of TF random mutant libraries. The better the performance of the biosensor, the faster th",
+        "url": "https://doi.org/10.3390/bios14100455"
+      },
+      {
+        "title": "High-Throughput Proteomics Sample Preparation Using a 96-Channel Pipettor and Magnetic Pin Device.",
+        "content": "High-throughput proteomics requires efficient and highly reproducible sample processing, yet workflows─particularly for PTM profiling─remain complex and costly to fully automate. Here, we present a practical intermediate solution using manually operated 96-channel devices: the Gilson Platemaster P220 pipettor and VP Scientific 96-well magnetic pin device. Using this setup, we achieved robust and reproducible phosphoproteomics in a 96-well format, completing protein aggregation capture (PAC/SP3) ",
+        "url": "https://doi.org/10.1021/acs.jproteome.5c01020"
+      },
+      {
+        "title": "Metabolic engineering strategies for L-Homoserine production in Escherichia coli.",
+        "content": "L-Homoserine, serves as a non-essential precursor for the essential amino acids derived from L-aspartate in both animals and humans. It finds widespread applications across the food, cosmetics, pharmaceutical, and animal feed industries. Microbial fermentation, primarily utilizing Escherichia coli, is the dominant approach for L-Homoserine production. However, despite recent advancements in fermentative processes employing E. coli strains, low production efficiency remains a significant barrier ",
+        "url": "https://doi.org/10.1186/s12934-024-02623-7"
+      },
+      {
+        "title": "Residue-level determinants of the thermal stability of the extremophilic Ts2631 endolysin.",
+        "content": "Cieminska K, Kaczorowska AK, Kozlowski LP, Gorniak M, Fridjonsson OH +3 more\nUnknown Journal 2026\n\nAbstract: No abstract available",
+        "url": "https://doi.org/10.1038/s41598-026-38786-z"
+      },
+      {
+        "title": "Metabolic engineering of Bacillus licheniformis DW2 for ectoine production.",
+        "content": "Ectoine is a high-value protective agent with extensive applications in the fields of fine chemicals and biopharmaceuticals, and it is naturally synthesized by Halomonas in extreme environment, however, the current production level cannot meet the growing market demand. In this study, we aimed to develop an efficient and environmentally friendly ectoine production process using Bacillus licheniformis as the host organism. Through introducing ectoine synthetase gene cluster ectABC from Halomonas ",
+        "url": "https://doi.org/10.1007/s11274-024-04238-x"
+      },
+      {
+        "title": "Synthetic pathways for microbial biosynthesis of valuable pyrazine derivatives using genetically modified &lt;i&gt;Pseudomonas putida&lt;/i&gt; KT2440.",
+        "content": "Using engineered microbes for synthesizing high-valued chemicals from renewable sources is a foundation in synthetic biology, however, it is still in its early stages. Here, we present peculiarities and troubleshooting of the construction of novel synthetic metabolic pathways in genetically modified work-horse <i>Pseudomonas putida</i> KT2440. The combination of this microbial host and heterologous expressed non-heme diiron monooxygenases enabled <i>de novo</i> biosynthesis of 2,5-dimethylpyrazi",
+        "url": "https://doi.org/10.1016/j.mec.2025.e00258"
+      },
+      {
+        "title": "Decoupled tricarboxylic acid cycle and glycolysis of &lt;i&gt;Corynebacterium glutamicum&lt;/i&gt; combined with acetate supply promote high-yield biosynthesis of l-homoserine.",
+        "content": "l-Homoserine is a valuable intermediate with broad applications in the food, pharmaceutical, and chemical industries. Although <i>Corynebacterium glutamicum</i> has been engineered for the efficient biosynthesis of l-homoserine, both production efficiency and glucose conversion remain suboptimal. In this study, an engineered <i>C. glutamicum</i> strain capable of high-yield l-homoserine production from glucose was successfully developed. First, an engineered <i>C. glutamicum</i> strain capable o",
+        "url": "https://doi.org/10.1016/j.synbio.2025.07.012"
+      },
+      {
+        "title": "Optimizing <i>Escherichia coli</i> strains and fermentation processes for enhanced L-lysine production: a review.",
+        "content": "lysine is an essential amino acid with significant importance, widely used in the food, feed, and pharmaceutical industries. To meet the increasing demand, microbial fermentation has emerged as an effective and sustainable method for L-lysine production. <i>Escherichia coli</i> has become one of the primary microorganisms for industrial L-lysine production due to its rapid growth, ease of genetic manipulation, and high production efficiency. This paper reviews the recent advances in <i>E. coli</",
+        "url": "https://doi.org/10.3389/fmicb.2024.1485624"
+      },
+      {
+        "title": "Integrating Alternative Fragmentation Techniques into Standard LC-MS Workflows Using a Single Deep Learning Model Enhances Proteome Coverage",
+        "content": "We built and characterised a mass spectrometer capable of performing CID (both beam type and resonant type), UVPD, EID and ECD in an automated fashion during an LCMS type experiment. We exploited this ability to generate large datasets through multienzyme deep proteomics experiments for characterisation of these activation techniques. As a further step, motivated by the complexity generated by these dissociation techniques, we developed a single Prosit deep learning model for fragment ion intens",
+        "url": "https://www.biorxiv.org/content/biorxiv/early/2025/06/01/2025.05.28.656555.full.pdf"
+      },
+      {
+        "title": "Sustainable production of glutaric acid in microbial cell factories: Current advances and future prospects",
+        "content": "Liu J, Mei D, Zhang X, Zhang W, Zhu L\nUnknown Journal 2026\n\nAbstract: No abstract available",
+        "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12861294/?tool=EBI"
+      },
+      {
+        "title": "Enterolyin S, a Polythiazole-containing Hemolytic Peptide from Enterococcus caccae.",
+        "content": "The β-hemolytic factor streptolysin S (SLS) is an important linear azol(in)e-containing peptide (LAP) that contributes significantly to the virulence of Streptococcus pyogenes. Despite its discovery 85 years ago, SLS has evaded structural characterizing owing to its notoriously problematic physicochemical properties. Here, we report the discovery and characterization of a structurally analogous hemolytic peptide from Enterococcus caccae, termed enterolysin S (ELS). Through heterologous expressio",
+        "url": "https://doi.org/10.1002/cbic.202400212"
+      },
+      {
+        "title": "Reconstruction the feedback regulation of amino acid metabolism to develop a non-auxotrophic L-threonine producing Corynebacterium glutamicum.",
+        "content": "L-Threonine is an important feed additive with the third largest market size among the amino acids produced by microbial fermentation. The GRAS (generally regarded as safe) industrial workhorse Corynebacterium glutamicum is an attractive chassis for L-threonine production. However, the present L-threonine production in C. glutamicum cannot meet the requirement of industrialization due to the relatively low production level of L-threonine and the accumulation of large amounts of by-products (such",
+        "url": "https://doi.org/10.1186/s40643-024-00753-9"
+      },
+      {
+        "title": "An Efficient CO<sub>2</sub>-Upcycling Platform Based on Engineered Halomonas TD with Enhanced Acetate-Utilizing Capacity via Adaptive Laboratory Evolution.",
+        "content": "Biohybrid conversion of carbon dioxide (CO<sub>2</sub>) into value-added bioproducts via engineered microbes using CO<sub>2</sub>-derived electrolytes (CDE) addresses global CO<sub>2</sub> emissions, but most recombinants have poor saline CDE tolerance and low carbon conversion rate (CCR). Herein, Halomonas TD (salt-resistant) was adaptively evolved into TD80, which efficiently uses acetate; its aceE gene mutation (encoding pyruvate dehydrogenase) drives acetate utilization. Subsequently, differ",
+        "url": "https://doi.org/10.1002/advs.202513060"
+      },
+      {
+        "title": "TaRTLEt: Transcriptionally-active Riboswitch Tracer Leveraging Edge deTection.",
+        "content": "Structured RNAs have emerged as a major component of cellular regulatory systems, but their mechanism of action is often poorly understood. Riboswitches are structured RNAs that allosterically regulate gene expression through any of several different mechanisms. <i>In vitro</i> approaches to characterizing this mechanism are costly, low-throughput, and must be repeated for each individual riboswitch locus of interest. Bioinformatic methods promise higher throughput; despite robust computational ",
+        "url": "https://doi.org/10.7717/peerj.19418"
+      },
+      {
+        "title": "Deletion of succinic semialdehyde dehydrogenase sad and chromosomal expression of phosphoenolpyruvate carboxylase as metabolic requirements for improved production of 2,4-dihydroxybutyric acid via malyl-P pathway using &lt;i&gt;E. coli&lt;/i&gt;.",
+        "content": "The fermentative production of the functional precursor 2,4-dihydroxybutyrate (DHB) enables sustainable synthesis of the methionine analogue hydroxy-4-(methylthio) butyrate, which is currently still produced from fossil fuels. In this work, we aimed to optimize the aerobic production of DHB from glucose through the synthetic malyl phosphate (MalP) pathway, which comprises the conversion of the natural TCA cycle intermediate malate into MalP and the subsequent reactions to yield malate semialdehy",
+        "url": "https://doi.org/10.3389/fbioe.2025.1589489"
+      }
+    ],
+    "searchMethod": "literature_database",
+    "qualityMetrics": {
+      "dataCompleteness": 0.8,
+      "literatureCoverage": 0.85,
+      "overallQuality": 0.8
+    }
+  },
+  "createdAt": "2026-03-26T07:53:39.884Z",
+  "updatedAt": "2026-03-28T12:04:09.897Z",
+  "confidence": 0.8,
+  "version": "1.0.0"
+}

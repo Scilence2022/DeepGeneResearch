@@ -309,7 +309,7 @@ function generateLiteratureReport(
     .filter(Boolean);
   
   // Extract key research themes
-  const researchThemes = extractResearchThemes(allAbstracts, geneSymbol, organism);
+  const researchThemes = extractResearchThemes(allAbstracts);
 
   let report = isChinese
     ? `# ${geneSymbol} 基因深度功能研究报告\n## ${organism}\n\n**数据类型**: 文献数据库检索 + AI综合分析\n**检索时间**: ${new Date().toLocaleString('zh-CN')}\n\n---\n`
@@ -432,7 +432,7 @@ function extractAbstract(content: string): string {
 /**
  * Extract research themes from abstracts
  */
-function extractResearchThemes(abstracts: string[], geneSymbol: string, organism: string): { topic: string; description: string }[] {
+function extractResearchThemes(abstracts: string[]): { topic: string; description: string }[] {
   const themes: { topic: string; description: string }[] = [];
   const text = abstracts.join(' ').toLowerCase();
   
