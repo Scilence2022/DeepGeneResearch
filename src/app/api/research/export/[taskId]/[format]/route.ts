@@ -4,10 +4,10 @@ import { isValidTaskId } from '@/utils/task-id-generator';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { taskId: string; format: string } }
+  { params }: { params: Promise<{ taskId: string; format: string }> }
 ) {
   try {
-    const { taskId, format } = params;
+    const { taskId, format } = await params;
     
     // Validate taskId format
     if (!isValidTaskId(taskId)) {

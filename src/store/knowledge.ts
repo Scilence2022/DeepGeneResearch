@@ -56,7 +56,7 @@ export const useKnowledgeStore = create(
     {
       name: "knowledgeStore",
       version: 1,
-      migrate: (persistedState, version) => {
+      migrate: (persistedState: any, _version: number): any => {
         return persistedState;
       },
       storage: {

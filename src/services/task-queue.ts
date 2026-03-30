@@ -38,6 +38,12 @@ class TaskQueue extends EventEmitter {
           this.processQueue();
         });
       }
+      // 如果队列已空，立即重置标志以便下一次处理
+      // 注意：.finally() 中的 isProcessing = false 是针对异步任务完成的回调
+      // 这里处理的是任务被取出但 while 循环正常退出的情况
+      if (this.queue.length === 0) {
+        this.isProcessing = false;
+      }
     } catch (error) {
       console.error('Error processing queue:', error);
       this.isProcessing = false;

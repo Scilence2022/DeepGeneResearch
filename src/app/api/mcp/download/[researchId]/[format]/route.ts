@@ -13,10 +13,10 @@ const VALID_FORMATS: Format[] = ['report', 'details'];
 
 export async function GET(
     req: NextRequest,
-    { params }: { params: { researchId: string; format: string } }
+    { params }: { params: Promise<{ researchId: string; format: string }> }
 ) {
     try {
-        const { researchId, format } = params;
+        const { researchId, format } = await params;
 
         // Validate format
         const lowerFormat = format.toLowerCase() as Format;

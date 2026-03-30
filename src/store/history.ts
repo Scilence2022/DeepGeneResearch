@@ -165,7 +165,7 @@ export const useHistoryStore = create(
             return {
               ...task,
               result,
-              status: 'completed',
+              status: 'completed' as ResearchStatus,
               updatedAt: new Date().toISOString(),
             };
           }
@@ -179,7 +179,7 @@ export const useHistoryStore = create(
     {
       name: "historyStore",
       version: 2,
-      migrate: (persistedState, version) => {
+      migrate: (persistedState: any, version) => {
         if (version === 1) {
           // Migration from version 1 to 2
           return {

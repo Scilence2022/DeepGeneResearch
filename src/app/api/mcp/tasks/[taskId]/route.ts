@@ -7,8 +7,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
+  const { taskId } = await params;
   try {
-    const { taskId } = await params;
     const task = await taskStore.getTask(taskId);
     
     if (!task) {
@@ -20,7 +20,7 @@ export async function GET(
     
     return NextResponse.json(task);
   } catch (error) {
-    console.error(`Error getting task ${params.taskId}:`, error);
+    console.error(`Error getting task ${taskId}:`, error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -33,9 +33,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
+  const { taskId } = await params;
   try {
-    const { taskId } = await params;
-    
     // 尝试从队列中取消任务
     const canceledFromQueue = taskQueue.cancelTask(taskId);
     
@@ -51,7 +50,7 @@ export async function DELETE(
     
     return NextResponse.json({ success: true, message: `Task ${taskId} deleted` });
   } catch (error) {
-    console.error(`Error deleting task ${params.taskId}:`, error);
+    console.error(`Error deleting task ${taskId}:`, error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

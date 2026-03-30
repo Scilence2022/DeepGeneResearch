@@ -33,7 +33,9 @@ const MODEL_LIST = process.env.NEXT_PUBLIC_MODEL_LIST || "";
 
 // Limit the middleware to paths starting with `/api/`
 export const config = {
-  matcher: "/api/:path*",
+  // Skip middleware for /api/mcp routes - the MCP server handles its own auth
+  // This avoids Edge Runtime eval() issue with certain API routes
+  matcher: ["/api/ai/:path*", "/api/search/:path*", "/api/sse/:path*", "/api/research/:path*"],
 };
 
 const ERRORS = {
