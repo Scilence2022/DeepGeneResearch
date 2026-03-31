@@ -112,7 +112,7 @@ export class LiteratureValidator {
     // Prioritize validation by PMID
     if (reference.pmid && /^\d+$/.test(reference.pmid)) {
       try {
-        enhancedReference = await this.validateByPMID(reference, organism);
+        enhancedReference = await this.validateByPMID(reference);
       } catch (error) {
         console.error(`Error validating PMID ${reference.pmid}:`, error);
         enhancedReference.qualityMetadata.warningFlags.push(
@@ -151,8 +151,7 @@ export class LiteratureValidator {
    * @returns Enhanced reference with validation metadata
    */
   private async validateByPMID(
-    reference: LiteratureReference,
-    organism: string
+    reference: LiteratureReference
   ): Promise<EnhancedLiteratureReference> {
     const enhancedReference: EnhancedLiteratureReference = {
       ...reference,
@@ -485,7 +484,7 @@ export class LiteratureValidator {
   deduplicateReferences(references: EnhancedLiteratureReference[]): { uniqueReferences: EnhancedLiteratureReference[], duplicateCount: number, stats: { validated: number, highConfidence: number, warnings: number } } {
     const uniqueMap = new Map<string, EnhancedLiteratureReference>();
     let duplicateCount = 0;
-    let stats = {
+    const stats = {
       validated: 0,
       highConfidence: 0,
       warnings: 0
