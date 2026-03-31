@@ -122,29 +122,32 @@ class TaskStore {
   async createTask(parameters: GeneResearchParameters): Promise<GeneResearchTask> {
     await this.ensureCache();
     
-    return await withFileLock(async () => {
-      const task = createTask(parameters);
+    let task: GeneResearchTask;
+    // Lock only protects the in-memory cache update
+    await withFileLock(async () => {
+      task = createTask(parameters);
       taskCache.set(task.id, task);
-      // 立即写盘确保不丢失
-      await syncToDisk();
-      console.log(`[TaskStore] Created task: ${task.id}, total: ${taskCache.size}`);
-      return task;
     });
+    // Sync to disk AFTER releasing the lock to avoid deadlock
+    // (syncToDisk uses its own lock internally)
+    await syncToDisk();
+    console.log(`[TaskStore] Created task: ${task!.id}, total: ${taskCache.size}`);
+    return task!;
   }
 
   // 更新任务
   async updateTask(updatedTask: GeneResearchTask): Promise<GeneResearchTask> {
     await this.ensureCache();
     
-    return await withFileLock(async () => {
+    await withFileLock(async () => {
       if (!taskCache.has(updatedTask.id)) {
         throw new Error(`Task ${updatedTask.id} not found`);
       }
       taskCache.set(updatedTask.id, updatedTask);
-      // 立即写盘
-      await syncToDisk();
-      return updatedTask;
     });
+    // Sync to disk AFTER releasing the lock to avoid deadlock
+    await syncToDisk();
+    return updatedTask;
   }
 
   // 更新任务状态
@@ -156,74 +159,86 @@ class TaskStore {
   ): Promise<GeneResearchTask> {
     await this.ensureCache();
     
-    return await withFileLock(async () => {
+    let updatedTask: GeneResearchTask;
+    await withFileLock(async () => {
       const task = taskCache.get(taskId);
       if (!task) {
         throw new Error(`Task ${taskId} not found`);
       }
-      const updatedTask = updateTaskStatus(task, status, progress, step);
+      updatedTask = updateTaskStatus(task, status, progress, step);
       taskCache.set(taskId, updatedTask);
-      // 立即写盘
-      await syncToDisk();
-      return updatedTask;
     });
+    // Sync to disk AFTER releasing the lock to avoid deadlock
+    await syncToDisk();
+    return updatedTask!;
   }
 
   // 更新任务结果
   async updateTaskResult(taskId: string, result: any): Promise<GeneResearchTask> {
     await this.ensureCache();
     
-    return await withFileLock(async () => {
+    let updatedTask: GeneResearchTask;
+    await withFileLock(async () => {
       const task = taskCache.get(taskId);
       if (!task) {
         throw new Error(`Task ${taskId} not found`);
       }
-      const updatedTask = updateTaskResult(task, result);
+      updatedTask = updateTaskResult(task, result);
       taskCache.set(taskId, updatedTask);
-      await syncToDisk();
-      return updatedTask;
     });
+    // Sync to disk AFTER releasing the lock to avoid deadlock
+    await syncToDisk();
+    return updatedTask!;
   }
 
   // 更新任务错误
   async updateTaskError(taskId: string, error: string): Promise<GeneResearchTask> {
     await this.ensureCache();
     
-    return await withFileLock(async () => {
+    let updatedTask: GeneResearchTask;
+    await withFileLock(async () => {
       const task = taskCache.get(taskId);
       if (!task) {
         throw new Error(`Task ${taskId} not found`);
       }
-      const updatedTask = updateTaskError(task, error);
+      updatedTask = updateTaskError(task, error);
       taskCache.set(taskId, updatedTask);
-      await syncToDisk();
-      return updatedTask;
     });
+    // Sync to disk AFTER releasing the lock to avoid deadlock
+    await syncToDisk();
+    return updatedTask!;
   }
 
   // 删除任务
   async deleteTask(taskId: string): Promise<boolean> {
     await this.ensureCache();
     
-    return await withFileLock(async () => {
+    let deleted = false;
+    await withFileLock(async () => {
       if (!taskCache.has(taskId)) {
-        return false;
+        deleted = false;
+        return;
       }
       taskCache.delete(taskId);
+      deleted = true;
+    });
+    if (deleted) {
+      // Sync to disk AFTER releasing the lock to avoid deadlock
       await syncToDisk();
       console.log(`[TaskStore] Deleted task ${taskId}, remaining: ${taskCache.size}`);
-      return true;
-    });
+    }
+    return deleted;
   }
 
   // 清除所有任务
   async clearAllTasks(): Promise<boolean> {
-    return await withFileLock(async () => {
+    await withFileLock(async () => {
       taskCache.clear();
-      await syncToDisk();
-      console.log('[TaskStore] Cleared all tasks');
-      return true;
     });
+    // Sync to disk AFTER releasing the lock to avoid deadlock
+    await syncToDisk();
+    console.log('[TaskStore] Cleared all tasks');
+    return true;
   }
 }
 
