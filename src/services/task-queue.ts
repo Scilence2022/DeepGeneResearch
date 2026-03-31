@@ -98,6 +98,10 @@ class TaskQueue extends EventEmitter {
             case 'task-list':
               progress = 60;
               break;
+            case 'search-task':
+              // Individual search queries running (60-75%)
+              progress = 60;
+              break;
             case 'final-report':
               progress = 80;
               break;
