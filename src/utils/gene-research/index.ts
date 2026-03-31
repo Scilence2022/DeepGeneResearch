@@ -145,7 +145,7 @@ export class GeneResearchEngine {
 
   private async executeSearches(queries: GeneSearchTask[]): Promise<Map<string, any>> {
     const searchResults = new Map<string, any>();
-    const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'];
+    const searchProviders = this.config.searchProviders || ['pubmed', 'europe_pmc', 'semantic_scholar', 'biorxiv', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'];
 
     for (const query of queries) {
       try {
@@ -496,7 +496,7 @@ export const GENE_RESEARCH_PRESETS = {
     enableQualityControl: true,
     enableVisualization: true,
     maxSearchResults: 20,
-    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome']
+    searchProviders: ['pubmed', 'europe_pmc', 'semantic_scholar', 'biorxiv', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome']
   },
   
   CLINICAL: {
@@ -507,7 +507,7 @@ export const GENE_RESEARCH_PRESETS = {
     enableQualityControl: true,
     enableVisualization: true,
     maxSearchResults: 15,
-    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene']
+    searchProviders: ['pubmed', 'europe_pmc', 'semantic_scholar', 'uniprot', 'ncbi_gene']
   },
   
   EDUCATIONAL: {
@@ -517,7 +517,7 @@ export const GENE_RESEARCH_PRESETS = {
     enableQualityControl: true,
     enableVisualization: true,
     maxSearchResults: 10,
-    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene']
+    searchProviders: ['pubmed', 'europe_pmc', 'semantic_scholar', 'uniprot', 'ncbi_gene']
   },
   
   QUICK: {
@@ -527,7 +527,7 @@ export const GENE_RESEARCH_PRESETS = {
     enableQualityControl: false,
     enableVisualization: false,
     maxSearchResults: 5,
-    searchProviders: ['pubmed', 'uniprot']
+    searchProviders: ['pubmed', 'europe_pmc', 'semantic_scholar', 'uniprot']
   }
 };
 
