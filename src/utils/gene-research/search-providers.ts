@@ -122,7 +122,7 @@ export async function searchPubMed({
     } catch (fetchError) {
       console.error('PubMed efetch error:', fetchError);
       // Fallback to esummary if efetch fails
-      return await searchPubMedEsummary(pmids, geneSymbol, organism, startTime, headers);
+      return await searchPubMedEsummary(pmids as string[], geneSymbol || '', organism || '', startTime, headers);
     }
 
     // Parse XML manually without external dependencies
