@@ -1,0 +1,170 @@
+{
+  "geneSymbol": "lysC",
+  "organism": "Escherichia coli",
+  "data": {
+    "title": "lysC Gene Function Research Report: Escherichia coli",
+    "finalReport": "# lysC Gene In-Depth Function Research Report\n## Escherichia coli\n\n**Data Type**: Literature Database Search + AI Synthesis\n**Search Time**: 3/31/2026, 11:28:44 AM\n\n---\n## 📋 Research Overview\n\n### Basic Gene Information\n\n- **Gene Name**: lysC\n- **Organism**: Escherichia coli\n- **Related Species**: Corynebacterium glutamicum\n- **Literature Count**: 30 articles\n\n### Core Research Themes\n\n\n---\n\n## 📊 Literature Search Statistics\n\n| Database | Count | Description |\n|---------|-------|-------------|\n| PubMed | 15 articles | NCBI Medical Literature Database |\n| Europe PMC | 0 articles | European PubMed Full-text Database |\n| NCBI Gene | 0 entries | Comprehensive Gene Information |\n| UniProt | 0 entries | Protein Structure and Function |\n| bioRxiv | 15 preprints | Preprints (Not Peer-Reviewed) |\n\n---\n\n## 📚 PubMed Core Literature Analysis\n\n### 1. Direct and indirect control of Rho-dependent transcription termination by the <i>Escherichia coli lysC</i> riboswitch.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/38253429/)\n\n---\n\n### 2. Global gene expression profiling of wild type and lysC knockout Escherichia coli W3110.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/17956427/)\n\n---\n\n### 3. The leader sequence of the Escherichia coli lysC gene is involved in the regulation of LysC synthesis.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/9851048/)\n\n---\n\n### 4. Nucleotide sequence of lysC gene encoding the lysine-sensitive aspartokinase III of Escherichia coli K12. Evolutionary pathway leading to three isofunctional enzymes.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/3003049/)\n\n---\n\n### 5. Site-directed mutagenesis of the aspartokinase gene lysC and its characterization in Brevibacterium flavum.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/9080702/)\n\n---\n\n### 6. Analysis of the regulatory region of the lysC gene of Escherichia coli.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/9812360/)\n\n---\n\n### 7. Aspartokinase genes lysC alpha and lysC beta overlap and are adjacent to the aspartate beta-semialdehyde dehydrogenase gene asd in Corynebacterium glutamicum.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/1980002/)\n\n---\n\n### 8. Efficient Tandem LysC/Trypsin Digestion in Detergent Conditions.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/31536157/)\n\n---\n\n### 9. Nucleotide sequence of the metH gene of Escherichia coli K-12 and comparison with that of Salmonella typhimurium LT2.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/2185137/)\n\n---\n\n### 10. Effects of mutations in the rpoS gene on cell viability and global gene expression under nitrogen starvation in Escherichia coli.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/15289551/)\n\n---\n\n### 11. Pathway construction and metabolic engineering for fermentative production of ectoine in Escherichia coli.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/26969253/)\n\n---\n\n### 12. High Ectoine Production from Lignocellulosic Hydrolysate by <i>Escherichia coli</i> through Metabolic and Fermentation Engineering.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/39933098/)\n\n---\n\n### 13. Multi-enzyme digestion FASP and the 'Total Protein Approach'-based absolute quantification of the Escherichia coli proteome.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/25063446/)\n\n---\n\n### 14. Control of RpoS in global gene expression of Escherichia coli in minimal media.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/18843507/)\n\n---\n\n### 15. P2 growth restriction on an rpoC mutant is suppressed by alleles of the Rz1 homolog lysC.\n\n**作者**: \n\n**期刊**:  \n\n**链接**: [PubMed](https://pubmed.ncbi.nlm.nih.gov/15231796/)\n\n---\n\n## 🔬 Key Research Findings\n\nBased on comprehensive analysis of the above literature, the main functions and research findings of the lysC gene in Escherichia coli are as follows:\n\n1. Nucleotide sequence of lysC gene encoding the lysine-sensitive aspartokinase III of Escherichia coli K12. Evolutionary pathway leading to three isofunctional enzymes. - ddh involved in DAP pathway regulating lysine synthesis\n\n---\n\n## 💡 Research Significance and Application Prospects\n\n### Academic Significance\n\n- Research on this gene helps understand amino acid metabolic pathways\n\n### Application Prospects\n\n- **Industrial Biotechnology**: Metabolic engineering for improved product yield\n- **Industrial Fermentation**: Optimize production processes for amino acids like lysine\n- **Genetic Engineering**: Use as target for strain improvement\n\n---\n\n## 📖 References\n\n1. Direct and indirect control of Rho-dependent transcription termination by the <i>Escherichia coli lysC</i> riboswitch. - https://pubmed.ncbi.nlm.nih.gov/38253429/\n2. Global gene expression profiling of wild type and lysC knockout Escherichia coli W3110. - https://pubmed.ncbi.nlm.nih.gov/17956427/\n3. The leader sequence of the Escherichia coli lysC gene is involved in the regulation of LysC synthesis. - https://pubmed.ncbi.nlm.nih.gov/9851048/\n4. Nucleotide sequence of lysC gene encoding the lysine-sensitive aspartokinase III of Escherichia coli K12. Evolutionary pathway leading to three isofunctional enzymes. - https://pubmed.ncbi.nlm.nih.gov/3003049/\n5. Site-directed mutagenesis of the aspartokinase gene lysC and its characterization in Brevibacterium flavum. - https://pubmed.ncbi.nlm.nih.gov/9080702/\n6. Analysis of the regulatory region of the lysC gene of Escherichia coli. - https://pubmed.ncbi.nlm.nih.gov/9812360/\n7. Aspartokinase genes lysC alpha and lysC beta overlap and are adjacent to the aspartate beta-semialdehyde dehydrogenase gene asd in Corynebacterium glutamicum. - https://pubmed.ncbi.nlm.nih.gov/1980002/\n8. Efficient Tandem LysC/Trypsin Digestion in Detergent Conditions. - https://pubmed.ncbi.nlm.nih.gov/31536157/\n9. Nucleotide sequence of the metH gene of Escherichia coli K-12 and comparison with that of Salmonella typhimurium LT2. - https://pubmed.ncbi.nlm.nih.gov/2185137/\n10. Effects of mutations in the rpoS gene on cell viability and global gene expression under nitrogen starvation in Escherichia coli. - https://pubmed.ncbi.nlm.nih.gov/15289551/\n11. Pathway construction and metabolic engineering for fermentative production of ectoine in Escherichia coli. - https://pubmed.ncbi.nlm.nih.gov/26969253/\n12. High Ectoine Production from Lignocellulosic Hydrolysate by <i>Escherichia coli</i> through Metabolic and Fermentation Engineering. - https://pubmed.ncbi.nlm.nih.gov/39933098/\n13. Multi-enzyme digestion FASP and the 'Total Protein Approach'-based absolute quantification of the Escherichia coli proteome. - https://pubmed.ncbi.nlm.nih.gov/25063446/\n14. Control of RpoS in global gene expression of Escherichia coli in minimal media. - https://pubmed.ncbi.nlm.nih.gov/18843507/\n15. P2 growth restriction on an rpoC mutant is suppressed by alleles of the Rz1 homolog lysC. - https://pubmed.ncbi.nlm.nih.gov/15231796/\n\n---\n*Report generated: 2026-03-31T03:28:44.763Z*\n*Data sources: NCBI PubMed, Europe PMC, NCBI Gene, UniProt, bioRxiv*\n*Note: Visit original sources for complete information*\n*⚠️ This report is automatically generated and synthesized by AI*",
+    "sources": [
+      {
+        "title": "Direct and indirect control of Rho-dependent transcription termination by the <i>Escherichia coli lysC</i> riboswitch.",
+        "content": "Bacterial riboswitches are molecular structures that play a crucial role in controlling gene expression to maintain cellular balance. The <i>Escherichia coli lysC</i> riboswitch has been previously shown to regulate gene expression through translation initiation and mRNA decay. Recent research suggests that <i>lysC</i> gene expression is also influenced by Rho-dependent transcription termination. Through a series of in silico, in vitro, and in vivo experiments, we provide experimental evidence t",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/38253429/"
+      },
+      {
+        "title": "Global gene expression profiling of wild type and lysC knockout Escherichia coli W3110.",
+        "content": "Aspartokinase III, encoded by lysC, is responsible for the first step of lysine biosynthesis in Escherichia coli. In this study, a lysC knockout E. coli W3110 strain was generated to study the differential gene expression profiles of wild type and lysC knockout strains. Several significant changes were observed, including biosynthesis of lysine, oxaloacetate, alpha-ketoglutarate and glutamate genes. Genes related to transporters and heat shock proteins were also affected by lysC knockout. The re",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/17956427/"
+      },
+      {
+        "title": "The leader sequence of the Escherichia coli lysC gene is involved in the regulation of LysC synthesis.",
+        "content": "In Escherichia coli and Bacillus subtilis, long leader sequences are found upstream of the lysC coding sequences which encode lysine-sensitive aspartokinase. Highly conserved regions exist between these sequences. Mutations leading to constitutive expression of the E. coli lysC gene have been localised within these conserved regions, indicating that they participate in the lysine-mediated repression mechanism of lysC expression.",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/9851048/"
+      },
+      {
+        "title": "Nucleotide sequence of lysC gene encoding the lysine-sensitive aspartokinase III of Escherichia coli K12. Evolutionary pathway leading to three isofunctional enzymes.",
+        "content": "The lysC gene encoding the lysine-sensitive aspartokinase III of Escherichia coli K12 has been cloned and its nucleotide sequence determined. Analysis of the deduced protein sequence (449 amino acid residues) reveals that the entire sequence of aspartokinase III is homologous to the N-terminal part of the two iso- and bifunctional aspartokinase-homoserine dehydrogenases I and II of E. coli. An evolutionary pathway leading to the three molecular species present in the same organism is proposed, a",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/3003049/"
+      },
+      {
+        "title": "Site-directed mutagenesis of the aspartokinase gene lysC and its characterization in Brevibacterium flavum.",
+        "content": "Using overlap extension polymerase chain reaction (PCR), five transformants of Escherichia coli containing site-directed mutagenized lysC beta gene were generated and analysed. Exchange of C to A and C to T at nucleotide 1118 of the mutated lysC beta gene causes a substitution of serine301 in the wild-type enzyme for tyrosine301 and phenylalanine301 in the mutant enzymes, respectively. Enzyme assays showed that Brevibacterium flavum cells harbouring pSUMN18 with mutated lysC beta genes exhibited",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/9080702/"
+      },
+      {
+        "title": "Analysis of the regulatory region of the lysC gene of Escherichia coli.",
+        "content": "A lysC-lac'Z fusion plasmid was constructed to study the regulatory region of the lysC gene. Analysis by deletion mutations confirmed the existence of an alternative promoter, P2, located upstream of the previously identified promoter, P1. The transcription start site of promoter P2 was located 85 base pairs upstream the transcription start site of promoter P1. Both promoters are regulated by lysine.",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/9812360/"
+      },
+      {
+        "title": "Aspartokinase genes lysC alpha and lysC beta overlap and are adjacent to the aspartate beta-semialdehyde dehydrogenase gene asd in Corynebacterium glutamicum.",
+        "content": "A 2.1 kb DNA fragment of the recombinant plasmid pCS2, isolated from an aminoethyl cysteine (AEC)-resistant and lysine-producing Corynebacterium glutamicum mutant strain, and which confers AEC resistance and lysine production on the wild-type G. glutamicum ATCC 13032 was analysed. DNA sequence analysis of this fragment revealed three large open reading frames (ORFs). The incomplete ORF1 does not contain the 5' end of the coding region. ORF2, which uses the same reading frame as ORF1, is identica",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1980002/"
+      },
+      {
+        "title": "Efficient Tandem LysC/Trypsin Digestion in Detergent Conditions.",
+        "content": "All shotgun proteomics experiments rely on efficient proteolysis steps for sensitive peptide/protein identification and quantification. Previous reports suggest that the sequential tandem LysC/trypsin digest yields higher recovery of fully tryptic peptides than single-tryptic proteolysis. Based on the previous studies, it is assumed that the advantageous effect of tandem proteolysis requires a high sample denaturation state for the initial LysC digest. Therefore, to date, all systematic assessme",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/31536157/"
+      },
+      {
+        "title": "Nucleotide sequence of the metH gene of Escherichia coli K-12 and comparison with that of Salmonella typhimurium LT2.",
+        "content": "The Escherichia coli K-12 metH gene, encoding the vitamin B12-dependent homocysteine transmethylase, is located between iclR and lysC in the 91-min region of the chromosome. The metH gene has been sequenced and reveals an open reading frame of 3600 bp encoding a polypeptide of 1200 amino acids (aa) with a calculated Mr of 132 628. The first 414 aa of the deduced polypeptide sequence are 92% identical to the 414 aa deduced from the partially sequenced Salmonella typhimurium LT2 metH gene. In-fram",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/2185137/"
+      },
+      {
+        "title": "Effects of mutations in the rpoS gene on cell viability and global gene expression under nitrogen starvation in Escherichia coli.",
+        "content": "Escherichia coli bearing an rpoS amber or disrupted mutation exhibited a significant decrease in the number of colony-forming units (c.f.u.) when exposed to nitrogen starvation, which was not observed in cells bearing a functional rpoS allele. The decrease in the number of c.f.u. that was observed about 25 h after initiation of nitrogen starvation was prevented by the addition of nitrogen within 3 h but not by the addition of nitrogen at more than 7 h after the initiation of nitrogen starvation,",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/15289551/"
+      },
+      {
+        "title": "Pathway construction and metabolic engineering for fermentative production of ectoine in Escherichia coli.",
+        "content": "Ectoine is a protective agent and stabilizer whose synthesis pathway exclusively exists in select moderate halophiles. A novel established process called \"bacterial milking\" efficiently synthesized ectoine in moderate halophiles, however, this method places high demands on equipment and is cost prohibitive. In this study, we constructed an ectoine producing strain by introducing the ectoine synthesis pathway into Escherichia coli and improved its production capacity. Firstly, the ectABC gene clu",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/26969253/"
+      },
+      {
+        "title": "High Ectoine Production from Lignocellulosic Hydrolysate by <i>Escherichia coli</i> through Metabolic and Fermentation Engineering.",
+        "content": "Ectoine, a major compatible solute in halophilic micro-organisms, shows great potential in cosmetics and pharmaceuticals areas owing to its water-binding properties and capability to prevent oxidative damage. In this study, the <i>ectABC</i> gene cluster responsible for the ectoine synthesis originated from halophilic bacterium <i>Halomonas venusta</i> was first assembled into <i>Escherichia coli</i>. Subsequently, the <i>crr</i> gene in PTS was knocked out to further drive the metabolic flux fr",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/39933098/"
+      },
+      {
+        "title": "Multi-enzyme digestion FASP and the 'Total Protein Approach'-based absolute quantification of the Escherichia coli proteome.",
+        "content": "We describe a proteomic approach combining the multi-enzyme digestion FASP-sample processing strategy and the 'Total Protein Approach' applied to absolute quantification of proteins in Escherichia coli. Consecutive digestion of whole cell lysates with LysC and trypsin allowed the generation of two populations of peptides at a yield of 76%. Subsequent two 4-hour LC-MS/MS analyses allowed the identification of 19,000 unique peptides per sample. Notably, only 1.2 and 2.4% of the identified peptides",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/25063446/"
+      },
+      {
+        "title": "Control of RpoS in global gene expression of Escherichia coli in minimal media.",
+        "content": "RpoS, an alternative sigma factor, is critical for stress response in Escherichia coli. The RpoS regulon expression has been well characterized in rich media that support fast growth and high growth yields. In contrast, though RpoS levels are high in minimal media, how RpoS functions under such conditions has not been clearly resolved. In this study, we compared the global transcriptional profiles of wild type and an rpoS mutant of E. coli grown in glucose minimal media using microarray analyses",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/18843507/"
+      },
+      {
+        "title": "P2 growth restriction on an rpoC mutant is suppressed by alleles of the Rz1 homolog lysC.",
+        "content": "Escherichia coli strain 397c carries a temperature-sensitive mutation, rpoC397, that removes the last 50 amino acids of the RNA polymerase beta' subunit and is nonpermissive for plating of bacteriophage P2. P2 gor mutants productively infect 397c and define a new gene, lysC, encoded by a reading frame that extensively overlaps the P2 lysis accessory gene, lysB. The unusual location of lysC with respect to lysB is reminiscent of the Rz/Rz1 lysis gene pair of phage lambda. Indeed, coexpression of ",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/15231796/"
+      },
+      {
+        "title": "UltraPlex-TMT: Expanding Isobaric Hyperplexing via Orthogonal Protease Cleavage.",
+        "content": "Isobaric labeling is widely used in quantitative proteomics for its multiplexing capabilities, but scaling beyond current limits remains a challenge. Here, we introduce UltraPlex-TMT, a streamlined and scalable workflow that integrates orthogonal protease digestion with hyperplex TMT/TMTpro labeling to effectively double sample throughput. UltraPlex-TMT can be readily implemented without custom chemistry or instrumentation. We benchmarked UltraPlex-TMT using lysine- and arginine-specific proteas",
+        "url": "https://doi.org/10.1021/acs.jproteome.5c01084"
+      },
+      {
+        "title": "Oxidative Peptide Backbone Cleavage by a HEXXH Enzyme during RiPP Biosynthesis.",
+        "content": "Ribosomally synthesized and post-translationally modified peptides (RiPPs) rely on a diverse array of enzymes to tailor peptide backbones and side chains. In this study, we characterized enzymes from two different biosynthetic gene clusters (BGCs) from Pseudomonas strains (<i>pfl</i> and <i>pos</i>) that catalyze new transformations in RiPP biosynthesis. Two α-ketoglutarate-dependent HEXXH enzymes, PflC and PosC, perform hydroxylation of multiple consecutive glutamine residues and selectively re",
+        "url": "https://doi.org/10.1021/jacs.5c19246"
+      },
+      {
+        "title": "Intracellular self-assembly and metabolite analysis of key enzymes for L-lysine synthesis based on key components of cellulosomes.",
+        "content": "<h4>Introduction</h4>Cellulosome is a natural multi-enzyme complex in the extracellular space of anaerobic microorganisms, which has the advantages of small molecular weight, multiple binding sites, and strong designability. This study aimed to explore the influence of intracellular self-assembly complexes on L-lysine biosynthesis.<h4>Methods</h4>Two novel L-lysine-engineered bacteria modification strategies were designed, considering the L-lysine biosynthesis pathway using DocA-S3/Coh as an eff",
+        "url": "https://doi.org/10.3389/fmicb.2025.1596240"
+      },
+      {
+        "title": "Constructing Genetically Engineered Escherichia coli for De Novo Production of L-Threo-3-Hydroxyaspartic Acid.",
+        "content": "L-threo-3-hydroxyaspartic acid (L-THA) is a non-proteinogenic amino acid that has garnered significant attention due to its diverse biological activities. However, the synthesis of L-THA through enzymatic and whole-cell catalysis requires the expensive substrate L-aspartic acid or L-asparagine, and co-substrate α-ketoglutarate, which limits their large-scale application. Here, this is the first report of engineering E. coli as a cell factory for de novo production of L-THA from glucose by fermen",
+        "url": "https://doi.org/10.1007/s12010-025-05224-1"
+      },
+      {
+        "title": "Thyme, Oregano, and Cinnamon Essential Oils: Investigating Their Molecular Mechanism of Action for the Treatment of Bacteria-Induced Cystitis.",
+        "content": "Pathogen infections, exacerbated by emerging drug resistance, remain among the most challenging health issues, for which multitargeting approaches may offer effective solutions. In this context, medicinal plants, including essential oils, provide complex mixtures of diverse molecules that can exert therapeutic effects, either alone or synergistically with established antibiotics. Although several databases comprehensively collect information on the antibacterial properties of medicinal plants, i",
+        "url": "https://doi.org/10.1021/acsomega.5c10256"
+      },
+      {
+        "title": "Genetic make-up and regulation of the L-lysine biosynthesis pathway in &lt;i&gt;Vibrio natriegens&lt;/i&gt;.",
+        "content": "<i>Vibrio natriegens</i>, the fastest growing non-pathogenic microorganism known to date, has emerged as a highly promising chassis strain for synthetic biology and biotechnology applications. This study analysed the make-up and regulation of the biosynthetic pathway for L-lysine and related L-aspartate family amino acids (AFAAs) in <i>V. natriegens</i> DSM759 to provide a comprehensive basis for future metabolic engineering endeavours aiming at developing this strain into an amino acid overprod",
+        "url": "https://doi.org/10.15698/mic2026.02.867"
+      },
+      {
+        "title": "Live-Cell Chemoproteomic Profiling Identifies the Uncharacterised Protein YbaA as a Direct Target of Ciprofloxacin in  <i>Escherichia coli</i>",
+        "content": "Fluoroquinolone antibiotics, such as ciprofloxacin, are important broad-spectrum agents for a range of bacterial infections; however, fluoroquinolone usage is increasingly challenged by the emergence of resistance. Ciprofloxacin resistance mechanisms include mutations in the antibiotic target DNA gyrase, downregulation of porins required for bacterial cell penetration, and upregulation of efflux pumps to expel the antibiotic. However, new pathways driving bacterial tolerance to fluoroquinolones ",
+        "url": "https://doi.org/10.1101/2025.10.16.682360"
+      },
+      {
+        "title": "Direct and indirect control of Rho-dependent transcription termination by the &lt;i&gt;Escherichia coli lysC&lt;/i&gt; riboswitch.",
+        "content": "Bacterial riboswitches are molecular structures that play a crucial role in controlling gene expression to maintain cellular balance. The <i>Escherichia coli lysC</i> riboswitch has been previously shown to regulate gene expression through translation initiation and mRNA decay. Recent research suggests that <i>lysC</i> gene expression is also influenced by Rho-dependent transcription termination. Through a series of in silico, in vitro, and in vivo experiments, we provide experimental evidence t",
+        "url": "https://doi.org/10.1261/rna.079779.123"
+      },
+      {
+        "title": "Development of a lysine biosensor for the dynamic regulation of cadaverine biosynthesis in E. coli.",
+        "content": "<h4>Background</h4>As one of the most promising monomers of biobased polyamides, cadaverine has wide industrial application prospects. However, in microbial cadaverine fermentation with glucose as the sole carbon source, the impaired coordination between precursor (lysine) utilization and cytotoxic cadaverine accumulation has been identified as the primary bottleneck limiting high-yield biosynthesis. Here, we developed a lysine biosensor in Escherichia coli to dynamically regulate cadaverine bio",
+        "url": "https://doi.org/10.1186/s12934-025-02772-3"
+      },
+      {
+        "title": "High Ectoine Production from Lignocellulosic Hydrolysate by &lt;i&gt;Escherichia coli&lt;/i&gt; through Metabolic and Fermentation Engineering.",
+        "content": "Ectoine, a major compatible solute in halophilic micro-organisms, shows great potential in cosmetics and pharmaceuticals areas owing to its water-binding properties and capability to prevent oxidative damage. In this study, the <i>ectABC</i> gene cluster responsible for the ectoine synthesis originated from halophilic bacterium <i>Halomonas venusta</i> was first assembled into <i>Escherichia coli</i>. Subsequently, the <i>crr</i> gene in PTS was knocked out to further drive the metabolic flux fr",
+        "url": "https://doi.org/10.1021/acssynbio.4c00899"
+      },
+      {
+        "title": "High Throughput Screening of Transcription Factor LysG for Constructing a Better Lysine Biosensor.",
+        "content": "The biosensors based on transcription factors (TFs) are widely used in high throughput screening of metabolic overproducers. The unsatisfactory performances (narrow detection and dynamic ranges) of biosensors limit their practical application and need more improvement. In this study, using the TF LysG (sensing lysine) as an example, a biosensor optimization method was constructed by growth-coupled screening of TF random mutant libraries. The better the performance of the biosensor, the faster th",
+        "url": "https://doi.org/10.3390/bios14100455"
+      },
+      {
+        "title": "Metabolic engineering strategies for L-Homoserine production in Escherichia coli.",
+        "content": "L-Homoserine, serves as a non-essential precursor for the essential amino acids derived from L-aspartate in both animals and humans. It finds widespread applications across the food, cosmetics, pharmaceutical, and animal feed industries. Microbial fermentation, primarily utilizing Escherichia coli, is the dominant approach for L-Homoserine production. However, despite recent advancements in fermentative processes employing E. coli strains, low production efficiency remains a significant barrier ",
+        "url": "https://doi.org/10.1186/s12934-024-02623-7"
+      },
+      {
+        "title": "High-Throughput Proteomics Sample Preparation Using a 96-Channel Pipettor and Magnetic Pin Device.",
+        "content": "High-throughput proteomics requires efficient and highly reproducible sample processing, yet workflows─particularly for PTM profiling─remain complex and costly to fully automate. Here, we present a practical intermediate solution using manually operated 96-channel devices: the Gilson Platemaster P220 pipettor and VP Scientific 96-well magnetic pin device. Using this setup, we achieved robust and reproducible phosphoproteomics in a 96-well format, completing protein aggregation capture (PAC/SP3) ",
+        "url": "https://doi.org/10.1021/acs.jproteome.5c01020"
+      },
+      {
+        "title": "Residue-level determinants of the thermal stability of the extremophilic Ts2631 endolysin.",
+        "content": "Cieminska K, Kaczorowska AK, Kozlowski LP, Gorniak M, Fridjonsson OH +3 more\nUnknown Journal 2026\n\nAbstract: No abstract available",
+        "url": "https://doi.org/10.1038/s41598-026-38786-z"
+      },
+      {
+        "title": "Metabolic engineering of Bacillus licheniformis DW2 for ectoine production.",
+        "content": "Ectoine is a high-value protective agent with extensive applications in the fields of fine chemicals and biopharmaceuticals, and it is naturally synthesized by Halomonas in extreme environment, however, the current production level cannot meet the growing market demand. In this study, we aimed to develop an efficient and environmentally friendly ectoine production process using Bacillus licheniformis as the host organism. Through introducing ectoine synthetase gene cluster ectABC from Halomonas ",
+        "url": "https://doi.org/10.1007/s11274-024-04238-x"
+      }
+    ],
+    "searchMethod": "literature_database",
+    "qualityMetrics": {
+      "dataCompleteness": 0.8,
+      "literatureCoverage": 0.85,
+      "overallQuality": 0.8
+    }
+  },
+  "createdAt": "2026-03-31T03:26:39.284Z",
+  "updatedAt": "2026-03-31T03:28:44.763Z",
+  "confidence": 0.8,
+  "version": "1.0.0"
+}
