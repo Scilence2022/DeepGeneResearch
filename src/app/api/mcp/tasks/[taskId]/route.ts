@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { taskStore } from '@/services/task-store';
 import { taskQueue } from '@/services/task-queue';
+import { requireMcpAuth } from '../../auth';
 
 // GET /api/mcp/tasks/[taskId] - 获取单个任务
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
+
   const { taskId } = await params;
   try {
     const task = await taskStore.getTask(taskId);
@@ -33,6 +37,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
+
   const { taskId } = await params;
   try {
     // 尝试从队列中取消任务

@@ -91,6 +91,9 @@ export class GeneResearchEngine {
       if (this.config.enableAPIIntegration) {
         console.log('Phase 4: Integrating API data...');
         apiData = await this.integrateAPIData();
+        if (apiData) {
+          this.mergeAPIData(extractedData, apiData);
+        }
       }
       
       // Phase 5: Generate visualizations
@@ -309,6 +312,67 @@ export class GeneResearchEngine {
     } catch (error) {
       console.error('API integration error:', error);
       return null;
+    }
+  }
+
+  private mergeAPIData(extractedData: GeneDataExtractionResult, apiData: any): void {
+    const successfulSources = Object.entries(apiData || {})
+      .filter(([, result]: [string, any]) => result?.success)
+      .map(([source]) => source);
+
+    extractedData.extractionMetadata.sources = Array.from(
+      new Set([...(extractedData.extractionMetadata.sources || []), ...successfulSources])
+    );
+
+    const ncbiGene = apiData?.ncbi?.data?.gene;
+    if (apiData?.ncbi?.success && ncbiGene) {
+      extractedData.geneBasicInfo.geneID ||= ncbiGene.id || '';
+      extractedData.geneBasicInfo.description ||= ncbiGene.description || ncbiGene.summary || '';
+      extractedData.geneBasicInfo.alternativeNames = Array.from(
+        new Set([
+          ...extractedData.geneBasicInfo.alternativeNames,
+          ncbiGene.name,
+        ].filter(Boolean))
+      );
+    }
+
+    const ncbiProtein = apiData?.ncbi?.data?.protein;
+    if (ncbiProtein) {
+      extractedData.proteinInfo.proteinName ||= ncbiProtein.definition || '';
+      extractedData.proteinInfo.proteinSize ||= ncbiProtein.length || 0;
+    }
+
+    const uniProtProtein = apiData?.uniprot?.data?.protein;
+    if (apiData?.uniprot?.success && uniProtProtein) {
+      extractedData.proteinInfo.uniprotId ||= uniProtProtein.primaryAccession || uniProtProtein.uniProtkbId || '';
+      extractedData.proteinInfo.proteinName ||= uniProtProtein.proteinDescription?.recommendedName?.fullName?.value || '';
+      const functionComment = uniProtProtein.comments?.find((comment: any) => comment.commentType === 'FUNCTION');
+      const functionText = functionComment?.texts?.[0]?.value || functionComment?.text?.[0]?.value;
+      if (functionText && !extractedData.functionalData.molecularFunction.includes(functionText)) {
+        extractedData.functionalData.molecularFunction.push(functionText);
+      }
+    }
+
+    const stringInteractions = apiData?.string?.data?.interactions;
+    if (Array.isArray(stringInteractions) && stringInteractions.length > 0) {
+      extractedData.interactionData.proteinInteractions.push(
+        ...stringInteractions.slice(0, 25).map((interaction: any) => ({
+          partner: interaction.preferredNameB || interaction.stringIdB,
+          partnerSymbol: interaction.preferredNameB || interaction.stringIdB,
+          interactionType: 'functional' as const,
+          strength: Number(interaction.combinedScore || interaction.score || 0) > 0.7 ? 'strong' as const : 'medium' as const,
+          evidence: ['STRING'],
+          confidence: Number(interaction.combinedScore || interaction.score || 0) > 0.7 ? 'high' as const : 'medium' as const,
+          source: 'STRING'
+        }))
+      );
+    }
+
+    const keggPathways = apiData?.kegg?.data?.pathways;
+    if (Array.isArray(keggPathways) && keggPathways.length > 0) {
+      extractedData.functionalData.biologicalProcess.push(
+        ...keggPathways.map((pathway: any) => `KEGG pathway ${pathway.id}`).filter(Boolean)
+      );
     }
   }
 

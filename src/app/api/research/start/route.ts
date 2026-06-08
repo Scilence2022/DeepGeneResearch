@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
         // Update task status when receiving progress updates
         if (event === 'task-status') {
           historyStore.updateTaskStatus(
-            taskId, 
-            data.status, 
+            taskId,
+            data.taskStatus || data.status,
             data
           );
         } else if (event === 'progress') {

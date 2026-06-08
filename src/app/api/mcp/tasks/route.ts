@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { taskStore } from '@/services/task-store';
 import { taskQueue } from '@/services/task-queue';
 import { GeneResearchParameters } from '@/models/task';
+import { requireMcpAuth } from '../auth';
 
 // GET /api/mcp/tasks - 列出所有任务
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const tasks = await taskStore.getAllTasks();
     return NextResponse.json(tasks);
@@ -19,6 +23,9 @@ export async function GET() {
 
 // POST /api/mcp/tasks - 创建新任务
 export async function POST(request: NextRequest) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
+
   try {
     const parameters: GeneResearchParameters = await request.json();
     

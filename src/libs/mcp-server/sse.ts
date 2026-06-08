@@ -115,6 +115,7 @@ export class SSEServerTransport implements Transport {
   private _sseController?: ReadableStreamController<Uint8Array>;
   private _started: boolean = false;
   private _sessionId: string;
+  private _closed: boolean = false;
   // Counter for generating SSE event IDs (optional but good practice for SSE)
   private _messageIdCounter: number = 0;
   private _endpoint: string;
@@ -138,6 +139,15 @@ export class SSEServerTransport implements Transport {
     // The 'res' parameter from the original constructor is removed as Response is returned.
   }
 
+  private emitClose(): void {
+    if (this._closed) {
+      return;
+    }
+
+    this._closed = true;
+    this.onclose?.();
+  }
+
   get corsHeader() {
     return this._cors ? { "Access-Control-Allow-Origin": "*" } : undefined;
   }
@@ -148,6 +158,7 @@ export class SSEServerTransport implements Transport {
       return; // Or throw new Error("Transport already started"); if strict single start needed
     }
     this._started = true;
+    this._closed = false;
     // Perform any global setup if needed later
   }
 
@@ -205,6 +216,11 @@ export class SSEServerTransport implements Transport {
 
         // Optional: Send a comment or initial event to keep the connection alive if no data for a while
         // You might need a timer here to periodically send a ': comment\n\n'
+      },
+      cancel: () => {
+        this._sseController = undefined;
+        this._started = false;
+        this.emitClose();
       },
     });
 
@@ -378,7 +394,7 @@ export class SSEServerTransport implements Transport {
     // Close the SSE stream controller, triggering the 'cancel' handler
     try {
       this._sseController?.close();
-      if (this.onclose) this.onclose();
+      this.emitClose();
     } catch (error) {
       console.error(
         `[${this._sessionId}] Error during controller.close():`,

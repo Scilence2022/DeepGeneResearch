@@ -93,12 +93,13 @@ export async function searchPubMed({
     }
 
     // Fetch detailed information for each PMID
-    await fetch(
+    const detailResponse = await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=pubmed&id=${pmids.join(',')}&retmode=xml&rettype=abstract`,
       { headers }
     );
+    const xmlData = await detailResponse.text();
 
-    const sources = parsePubMedResults();
+    const sources = parsePubMedResults(xmlData, geneSymbol, organism);
 
     return {
       sources,
@@ -193,12 +194,13 @@ export async function searchNCBIGene({
     }
 
     // Fetch detailed gene information
-    await fetch(
+    const detailResponse = await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=gene&id=${geneIds.join(',')}&retmode=xml`,
       { headers }
     );
+    const xmlData = await detailResponse.text();
 
-    const sources = parseNCBIGeneResults();
+    const sources = parseNCBIGeneResults(xmlData, geneSymbol, organism);
 
     return {
       sources,
@@ -249,12 +251,13 @@ export async function searchGEO({
     }
 
     // Fetch detailed GEO information
-    await fetch(
+    const detailResponse = await fetch(
       `${GENE_DATABASE_URLS.GEO_API}efetch.fcgi?db=gds&id=${gdsIds.join(',')}&retmode=xml`,
       { headers }
     );
+    const xmlData = await detailResponse.text();
 
-    const sources = parseGEOResults();
+    const sources = parseGEOResults(xmlData, geneSymbol, organism);
 
     return {
       sources,
@@ -336,12 +339,12 @@ export async function searchKEGG({
       : query;
 
     const response = await fetch(
-      `${GENE_DATABASE_URLS.KEGG_API}search/genes/${encodeURIComponent(searchQuery)}`,
+      `${GENE_DATABASE_URLS.KEGG_API}find/genes/${encodeURIComponent(searchQuery)}`,
       { headers }
     );
 
-    await response.text();
-    const sources = parseKEGGResults();
+    const data = await response.text();
+    const sources = parseKEGGResults(data, geneSymbol, organism);
 
     return {
       sources,
@@ -384,8 +387,8 @@ export async function searchSTRING({
       { headers }
     );
 
-    await response.text();
-    const sources = parseSTRINGResults();
+    const data = await response.text();
+    const sources = parseSTRINGResults(data, geneSymbol, organism);
 
     return {
       sources,
@@ -428,8 +431,8 @@ export async function searchOMIM({
       { headers }
     );
 
-    await response.json();
-    const sources = parseOMIMResults();
+    const data = await response.json();
+    const sources = parseOMIMResults(data, geneSymbol, organism);
 
     return {
       sources,
@@ -584,15 +587,66 @@ export async function createGeneSearchProvider({
 }
 
 // Helper functions for parsing database results
-function parsePubMedResults(): GeneSource[] {
-  // Parse PubMed XML and extract relevant information
-  // This is a simplified implementation - in practice, you'd use a proper XML parser
-  const sources: GeneSource[] = [];
-  
-  // Extract PMID, title, abstract, authors, journal, year from XML
-  // This is a placeholder - implement proper XML parsing
-  
-  return sources;
+function decodeXml(value = ''): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripXmlTags(value = ''): string {
+  return decodeXml(value.replace(/<[^>]+>/g, ' '));
+}
+
+function extractTag(xml: string, tag: string): string {
+  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+  return match ? stripXmlTags(match[1]) : '';
+}
+
+function extractAllTags(xml: string, tag: string): string[] {
+  return Array.from(xml.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'gi')))
+    .map((match) => stripXmlTags(match[1]))
+    .filter(Boolean);
+}
+
+function splitXmlBlocks(xml: string, tag: string): string[] {
+  return Array.from(xml.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>[\\s\\S]*?<\\/${tag}>`, 'gi')))
+    .map((match) => match[0]);
+}
+
+function parsePubMedResults(xmlData: string, geneSymbol?: string, organism?: string): GeneSource[] {
+  return splitXmlBlocks(xmlData, 'PubmedArticle').map((article) => {
+    const pmid = extractTag(article, 'PMID');
+    const title = extractTag(article, 'ArticleTitle') || `PubMed article ${pmid || 'unknown'}`;
+    const abstract = extractAllTags(article, 'AbstractText').join(' ');
+    const journal = extractTag(article, 'ISOAbbreviation') || extractTag(article, 'Title');
+    const year = extractTag(article, 'Year');
+    const authors = splitXmlBlocks(article, 'Author')
+      .map((author) => [extractTag(author, 'ForeName'), extractTag(author, 'LastName')].filter(Boolean).join(' '))
+      .filter(Boolean)
+      .slice(0, 6);
+
+    return {
+      title,
+      content: [
+        authors.length ? `Authors: ${authors.join(', ')}` : '',
+        journal ? `Journal: ${journal}` : '',
+        year ? `Year: ${year}` : '',
+        abstract || 'No abstract available from PubMed efetch.'
+      ].filter(Boolean).join('\n'),
+      url: pmid ? `https://pubmed.ncbi.nlm.nih.gov/${pmid}/` : 'https://pubmed.ncbi.nlm.nih.gov/',
+      database: 'pubmed',
+      geneSymbol,
+      organism,
+      confidence: 0.9,
+      evidence: ['literature', pmid ? `PMID:${pmid}` : 'pubmed'],
+      type: 'literature' as const
+    };
+  });
 }
 
 function parseUniProtResults(results: any[], geneSymbol?: string, organism?: string): GeneSource[] {
@@ -613,24 +667,56 @@ Subcellular location: ${result.comments?.find((c: any) => c.commentType === 'SUB
   }));
 }
 
-function parseNCBIGeneResults(): GeneSource[] {
-  // Parse NCBI Gene XML and extract relevant information
-  const sources: GeneSource[] = [];
-  
-  // Extract gene information from XML
-  // This is a placeholder - implement proper XML parsing
-  
-  return sources;
+function parseNCBIGeneResults(xmlData: string, geneSymbol?: string, organism?: string): GeneSource[] {
+  return splitXmlBlocks(xmlData, 'Entrezgene').map((gene) => {
+    const geneId = extractTag(gene, 'Gene-track_geneid');
+    const locus = extractTag(gene, 'Gene-ref_locus') || geneSymbol || geneId || 'Unknown gene';
+    const description = extractTag(gene, 'Gene-ref_desc');
+    const summary = extractTag(gene, 'Entrezgene_summary');
+
+    return {
+      title: `${locus}${description ? ` - ${description}` : ''}`,
+      content: [
+        geneId ? `NCBI Gene ID: ${geneId}` : '',
+        description ? `Description: ${description}` : '',
+        summary ? `Summary: ${summary}` : ''
+      ].filter(Boolean).join('\n') || 'NCBI Gene record returned without a parsed summary.',
+      url: geneId ? `https://www.ncbi.nlm.nih.gov/gene/${geneId}` : 'https://www.ncbi.nlm.nih.gov/gene/',
+      database: 'ncbi_gene',
+      geneSymbol,
+      organism,
+      confidence: 0.9,
+      evidence: ['database', geneId ? `GeneID:${geneId}` : 'ncbi_gene'],
+      type: 'protein' as const
+    };
+  });
 }
 
-function parseGEOResults(): GeneSource[] {
-  // Parse GEO XML and extract relevant information
-  const sources: GeneSource[] = [];
-  
-  // Extract expression data from XML
-  // This is a placeholder - implement proper XML parsing
-  
-  return sources;
+function parseGEOResults(xmlData: string, geneSymbol?: string, organism?: string): GeneSource[] {
+  const blocks = splitXmlBlocks(xmlData, 'DocSum').length > 0
+    ? splitXmlBlocks(xmlData, 'DocSum')
+    : splitXmlBlocks(xmlData, 'DocumentSummary');
+
+  return blocks.map((record) => {
+    const id = extractTag(record, 'Id') || extractTag(record, 'Accession');
+    const title = extractTag(record, 'Title') || extractTag(record, 'title') || `GEO dataset ${id || 'unknown'}`;
+    const summary = extractTag(record, 'Summary') || extractTag(record, 'summary');
+
+    return {
+      title,
+      content: [
+        id ? `GEO ID: ${id}` : '',
+        summary || 'No GEO summary parsed from NCBI response.'
+      ].filter(Boolean).join('\n'),
+      url: id ? `https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${id}` : 'https://www.ncbi.nlm.nih.gov/geo/',
+      database: 'geo',
+      geneSymbol,
+      organism,
+      confidence: 0.75,
+      evidence: ['expression'],
+      type: 'expression' as const
+    };
+  });
 }
 
 function parsePDBResults(results: any[], geneSymbol?: string, organism?: string): GeneSource[] {
@@ -651,31 +737,75 @@ Organism: ${result.struct.entity_src_gen?.[0]?.pdbx_gene_src_scientific_name || 
   }));
 }
 
-function parseKEGGResults(): GeneSource[] {
-    // Parse KEGG results and extract pathway information
-    const sources: GeneSource[] = [];
-  
-  // Extract pathway information from KEGG response
-  // This is a placeholder - implement proper parsing
-  
-  return sources;
+function parseKEGGResults(data: string, geneSymbol?: string, organism?: string): GeneSource[] {
+  return data
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [entry, description = ''] = line.split('\t');
+      return {
+        title: `${entry}: ${description.split(';')[0] || geneSymbol || 'KEGG gene match'}`,
+        content: `KEGG entry: ${entry}\nDescription: ${description || 'No KEGG description returned.'}`,
+        url: `https://www.genome.jp/entry/${encodeURIComponent(entry)}`,
+        database: 'kegg',
+        geneSymbol,
+        organism,
+        confidence: 0.8,
+        evidence: ['pathway', 'database'],
+        type: 'pathway' as const
+      };
+    });
 }
 
-function parseOMIMResults(): GeneSource[] {
-  // Parse OMIM results and extract disease information
-  const sources: GeneSource[] = [];
-  
-  // Extract disease information from OMIM response
-  // This is a placeholder - implement proper parsing
-  
-  return sources;
+function parseOMIMResults(data: any, geneSymbol?: string, organism?: string): GeneSource[] {
+  const entries = data?.omim?.searchResponse?.entryList || data?.entryList || [];
+
+  return entries.map((item: any) => {
+    const entry = item.entry || item;
+    const mimNumber = entry.mimNumber || entry.prefix || '';
+    const title = entry.titles?.preferredTitle || entry.title || `OMIM entry ${mimNumber || ''}`.trim();
+
+    return {
+      title,
+      content: [
+        mimNumber ? `MIM number: ${mimNumber}` : '',
+        entry.geneMap?.phenotypeMapList ? `Phenotype mappings: ${entry.geneMap.phenotypeMapList.length}` : '',
+      ].filter(Boolean).join('\n') || 'OMIM search match.',
+      url: mimNumber ? `https://www.omim.org/entry/${mimNumber}` : 'https://www.omim.org/',
+      database: 'omim',
+      geneSymbol,
+      organism,
+      confidence: 0.82,
+      evidence: ['disease', 'database'],
+      type: 'disease' as const
+    };
+  });
 }
 
-function parseSTRINGResults(): GeneSource[] {
-  // Parse STRING TSV results and extract protein interaction information
-  const sources: GeneSource[] = [];
-  // This is a placeholder - implement proper parsing
-  return sources;
+function parseSTRINGResults(data: string, geneSymbol?: string, organism?: string): GeneSource[] {
+  const lines = data.split('\n').filter(Boolean);
+  const header = lines.shift()?.split('\t') || [];
+
+  return lines.map((line) => {
+    const values = line.split('\t');
+    const record = Object.fromEntries(header.map((key, index) => [key, values[index]]));
+    const preferredNameA = record.preferredName_A || values[2] || geneSymbol || 'Protein A';
+    const preferredNameB = record.preferredName_B || values[3] || 'Protein B';
+    const score = record.score || record.combined_score || values[5] || values[13] || 'unknown';
+
+    return {
+      title: `${preferredNameA} - ${preferredNameB} interaction`,
+      content: `STRING interaction: ${preferredNameA} with ${preferredNameB}\nScore: ${score}`,
+      url: 'https://string-db.org/',
+      database: 'string',
+      geneSymbol,
+      organism,
+      confidence: Number.isFinite(Number(score)) ? Math.min(Number(score), 1) : 0.75,
+      evidence: ['interaction'],
+      type: 'interaction' as const
+    };
+  });
 }
 
 

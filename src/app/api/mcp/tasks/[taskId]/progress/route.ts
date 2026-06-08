@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { taskQueue } from '@/services/task-queue';
+import { taskStore } from '@/services/task-store';
+import { requireMcpAuth } from '../../../auth';
 
 // GET /api/mcp/tasks/[taskId]/progress - 实时进度通知
 export const dynamic = 'force-dynamic';
@@ -8,7 +10,18 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
+
   const { taskId } = await params;
+  const existingTask = await taskStore.getTask(taskId);
+
+  if (!existingTask) {
+    return NextResponse.json(
+      { error: `Task ${taskId} not found` },
+      { status: 404 }
+    );
+  }
 
   // 使用 ReadableStream 实现 SSE
   const stream = new ReadableStream({
@@ -87,6 +100,7 @@ export async function GET(
       sendMessage({
         type: 'connected',
         message: `Connected to task ${taskId} progress updates`,
+        task: existingTask,
         timestamp: new Date().toISOString(),
       });
     }

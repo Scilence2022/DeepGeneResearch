@@ -3,7 +3,24 @@ import { promises as fs } from 'fs';
 import path from 'path';
 
 // 文件存储路径
-const STORAGE_FILE = path.join(process.cwd(), 'tasks.json');
+const STORAGE_FILE = process.env.MCP_TASK_STORAGE_FILE
+  ? path.resolve(process.env.MCP_TASK_STORAGE_FILE)
+  : path.join(process.cwd(), 'tasks.json');
+const STORAGE_DIR = path.dirname(STORAGE_FILE);
+const IS_EPHEMERAL_RUNTIME = Boolean(process.env.VERCEL || process.env.CF_PAGES);
+let warnedAboutEphemeralRuntime = false;
+
+function warnIfEphemeralRuntime() {
+  if (!IS_EPHEMERAL_RUNTIME || warnedAboutEphemeralRuntime) {
+    return;
+  }
+
+  warnedAboutEphemeralRuntime = true;
+  console.warn(
+    '[TaskStore] File-backed MCP task storage is ephemeral on serverless/Pages deployments. ' +
+      'Use a single long-lived Node process or provide durable storage before relying on queued MCP tasks.'
+  );
+}
 
 // ─── 内存缓存 + 文件锁 ────────────────────────────────────────────────────────
 // 问题根源：多个并发请求同时读写 tasks.json 导致 JSON 损坏
@@ -45,6 +62,7 @@ async function withFileLock<T>(operation: () => Promise<T>): Promise<T> {
 
 // 确保存储文件存在
 async function ensureStorageFile(): Promise<void> {
+  await fs.mkdir(STORAGE_DIR, { recursive: true });
   try {
     await fs.access(STORAGE_FILE);
   } catch {
@@ -86,7 +104,10 @@ async function syncToDisk(): Promise<void> {
   await withFileLock(async () => {
     try {
       const tasks = Array.from(taskCache.values());
-      await fs.writeFile(STORAGE_FILE, JSON.stringify(tasks, null, 2), 'utf8');
+      await fs.mkdir(STORAGE_DIR, { recursive: true });
+      const tempFile = `${STORAGE_FILE}.${process.pid}.${Date.now()}.tmp`;
+      await fs.writeFile(tempFile, JSON.stringify(tasks, null, 2), 'utf8');
+      await fs.rename(tempFile, STORAGE_FILE);
     } catch (error) {
       console.error('[TaskStore] Failed to sync to disk:', error);
     }
@@ -97,6 +118,7 @@ async function syncToDisk(): Promise<void> {
 class TaskStore {
   // 初始化：确保缓存加载
   private async ensureCache(): Promise<void> {
+    warnIfEphemeralRuntime();
     if (!cacheLoaded) {
       await loadFromDisk();
     }

@@ -107,10 +107,12 @@ async function performDeepResearch() {
   const client = await createMcpClient();
   
   try {
-    const result = await client.callTool({
-      name: "deep-research",
+    const queued = await client.callTool({
+      name: "deep-gene-research",
       arguments: {
-        query: "Latest applications of AI in healthcare",
+        geneSymbol: "TP53",
+        organism: "Homo sapiens",
+        researchFocus: ["general", "disease"],
         language: "en-US",
         maxResult: 10,
         enableCitationImage: true,
@@ -118,7 +120,7 @@ async function performDeepResearch() {
       }
     });
     
-    console.log("Research results:", result);
+    console.log("Queued research task:", queued);
   } catch (error) {
     console.error("Research failed:", error);
   } finally {
@@ -159,10 +161,12 @@ async def perform_deep_research():
     session = await create_mcp_client()
     
     try:
-        result = await session.call_tool(
-            name="deep-research",
+        queued = await session.call_tool(
+            name="deep-gene-research",
             arguments={
-                "query": "Latest applications of AI in healthcare",
+                "geneSymbol": "TP53",
+                "organism": "Homo sapiens",
+                "researchFocus": ["general", "disease"],
                 "language": "en-US",
                 "maxResult": 10,
                 "enableCitationImage": True,
@@ -170,7 +174,7 @@ async def perform_deep_research():
             }
         )
         
-        print("Research results:", result)
+        print("Queued research task:", queued)
     except asyncio.TimeoutError:
         print("Research timeout")
     except Exception as e:

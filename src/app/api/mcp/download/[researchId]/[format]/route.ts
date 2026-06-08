@@ -3,6 +3,7 @@ import {
     getResearchReport,
     getResearchDetails
 } from '@/utils/mcp-research-store';
+import { requireMcpAuth } from '../../../auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,9 @@ export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ researchId: string; format: string }> }
 ) {
+    const unauthorized = requireMcpAuth(req);
+    if (unauthorized) return unauthorized;
+
     try {
         const { researchId, format } = await params;
 

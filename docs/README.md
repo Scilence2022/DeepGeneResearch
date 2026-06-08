@@ -59,7 +59,8 @@ The Deep Gene Research MCP server provides tools for AI assistants:
 
 | Tool | Description |
 |------|-------------|
-| `deep-gene-research` | Complete end-to-end gene research |
+| `deep-gene-research` | Queue complete end-to-end gene research |
+| `get-task-status` | Poll queued task status/results |
 | `write-research-plan` | Generate research plans |
 | `generate-SERP-query` | Create search tasks |
 | `search-task` | Execute database searches |

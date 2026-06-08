@@ -3,6 +3,43 @@ import { GeneResearchTask, GeneResearchParameters } from '@/models/task';
 import { taskStore } from './task-store';
 import { initDeepResearchServer } from '@/app/api/mcp/server';
 import { cacheService } from './cache';
+import { storeResearchResult } from '@/utils/mcp-research-store';
+
+const MCP_SERVER_BASE_URL = (process.env.MCP_SERVER_BASE_URL || '').trim().replace(/\/+$/, '');
+const MCP_SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || 'model';
+
+function formatMcpUrl(path: string): string {
+  return MCP_SERVER_BASE_URL ? `${MCP_SERVER_BASE_URL}${path}` : path;
+}
+
+function getSourceHost(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+function summarizeSourceCoverage(searchResults: any[], finalSources: any[]) {
+  const taskSources = searchResults.flatMap((task) => task.sources || []);
+  const allSources = [...taskSources, ...(finalSources || [])];
+  const sourceDomains = Array.from(
+    new Set(
+      allSources
+        .map((source) => source?.url ? getSourceHost(source.url) : null)
+        .filter((host): host is string => Boolean(host))
+    )
+  ).sort();
+
+  return {
+    configuredSearchProvider: MCP_SEARCH_PROVIDER,
+    searchTaskCount: searchResults.length,
+    tasksWithSources: searchResults.filter((task) => (task.sources?.length || 0) > 0).length,
+    sourceCount: allSources.length,
+    uniqueSourceCount: new Set(allSources.map((source) => source?.url).filter(Boolean)).size,
+    sourceDomains,
+  };
+}
 
 // 任务队列类
 class TaskQueue extends EventEmitter {
@@ -53,6 +90,43 @@ class TaskQueue extends EventEmitter {
   // 最大重试次数
   private maxRetries = 3;
 
+  private prepareResultForTask(task: GeneResearchTask, result: any) {
+    if (!task.parameters.returnReportAsUrl && !task.parameters.returnDetailsAsUrl) {
+      return result;
+    }
+
+    const reportContent = result.finalReport || result.report?.content || '';
+    const researchId = storeResearchResult(reportContent, result);
+    const download = {
+      researchId,
+      reportUrl: task.parameters.returnReportAsUrl
+        ? formatMcpUrl(`/api/mcp/download/${researchId}/report`)
+        : undefined,
+      detailsUrl: task.parameters.returnDetailsAsUrl
+        ? formatMcpUrl(`/api/mcp/download/${researchId}/details`)
+        : undefined,
+    };
+
+    const responseResult: any = {
+      ...result,
+      download,
+    };
+
+    if (task.parameters.returnReportAsUrl) {
+      responseResult.finalReport = undefined;
+      responseResult.report = result.report
+        ? { ...result.report, content: undefined }
+        : undefined;
+    }
+
+    if (task.parameters.returnDetailsAsUrl) {
+      responseResult.workflow = undefined;
+      responseResult.searchResults = undefined;
+    }
+
+    return responseResult;
+  }
+
   // 处理单个任务（带重试机制）
   private async processTask(task: GeneResearchTask, attempt = 0) {
     try {
@@ -66,8 +140,9 @@ class TaskQueue extends EventEmitter {
         await taskStore.updateTaskStatus(task.id, 'in_progress', 100, 'cache-hit');
         this.emit('task:progress', task, 100, 'cache-hit');
         
-        await taskStore.updateTaskResult(task.id, cachedResult);
-        this.emit('task:completed', task, cachedResult);
+        const taskResult = this.prepareResultForTask(task, cachedResult);
+        await taskStore.updateTaskResult(task.id, taskResult);
+        this.emit('task:completed', task, taskResult);
         return;
       }
 
@@ -115,8 +190,13 @@ class TaskQueue extends EventEmitter {
           }
 
           // 更新任务进度
-          taskStore.updateTaskStatus(task.id, 'in_progress', progress, step);
-          this.emit('task:progress', task, progress, step);
+          void taskStore.updateTaskStatus(task.id, 'in_progress', progress, step)
+            .then((updatedTask) => {
+              this.emit('task:progress', updatedTask, progress, step);
+            })
+            .catch((error) => {
+              console.error(`Failed to update progress for task ${task.id}:`, error);
+            });
         }
       };
 
@@ -159,6 +239,7 @@ class TaskQueue extends EventEmitter {
 
       // 格式化结果
       const researchTime = Date.now() - new Date(task.createdAt).getTime();
+      const sourceCoverage = summarizeSourceCoverage(searchResults, report.sources || []);
       const result = {
         workflow: {
           geneIdentification: {
@@ -187,7 +268,8 @@ class TaskQueue extends EventEmitter {
         },
         metadata: {
           researchTime,
-          dataSources: ['searxng', 'pubmed', 'ncbi', 'kegg', 'string'],
+          dataSources: sourceCoverage.sourceDomains,
+          sourceCoverage,
           confidence: searchResults.length > 0 ? 0.75 : 0.2,
           completeness: searchResults.length > 0 ? 0.8 : 0
         },
@@ -196,18 +278,13 @@ class TaskQueue extends EventEmitter {
         images: report.images || []
       };
 
-      // 处理 URL 输出选项
-      if (task.parameters.returnReportAsUrl || task.parameters.returnDetailsAsUrl) {
-        // 这里可以添加文件存储逻辑
-        // 暂时返回原始结果
-      }
-
       // 存储结果到缓存
       await cacheService.setCachedResult(task.parameters, result);
 
       // 更新任务结果
-      await taskStore.updateTaskResult(task.id, result);
-      this.emit('task:completed', task, result);
+      const taskResult = this.prepareResultForTask(task, result);
+      await taskStore.updateTaskResult(task.id, taskResult);
+      this.emit('task:completed', task, taskResult);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
