@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SSEServerTransport } from "@/libs/mcp-server/sse";
 import { initMcpServer } from "../server";
+import { requireMcpAuth } from "../auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,10 @@ const activeTransports = new Map<string, SSEServerTransport>();
 // The API route path clients will POST messages to
 const POST_ENDPOINT_PATH = "/api/mcp/sse/messages"; // This must match your POST API route path
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const unauthorized = requireMcpAuth(req);
+  if (unauthorized) return unauthorized;
+
   // Create an MCP server
   const server = initMcpServer();
 
@@ -24,18 +28,14 @@ export async function GET(): Promise<NextResponse> {
   // Store the transport instance keyed by session ID
   activeTransports.set(sessionId, transport);
 
-  transport.onerror = (error) => {
-    return NextResponse.json(
-      { code: 500, message: error.message },
-      { status: 500 }
-    );
+  const cleanup = () => {
+    activeTransports.delete(sessionId); // Clean up the instance
   };
 
-  transport.onclose = () => {
-    activeTransports.delete(sessionId); // Clean up the instance
-    transport.close();
-    server.close();
+  server.server.onerror = (error) => {
+    console.error("[MCP SSE]", error);
   };
+  server.server.onclose = cleanup;
 
   await server.connect(transport);
   // Call the transport method to handle the GET request and return the SSE response
@@ -44,6 +44,9 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const unauthorized = requireMcpAuth(req);
+  if (unauthorized) return unauthorized;
+
   // Extract the session ID from the query parameter sent by the client
   const sessionId = req.nextUrl.searchParams.get("sessionId");
 

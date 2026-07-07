@@ -2,13 +2,14 @@
 
 ## Overview
 
-The Deep Research MCP server provides 5 main tools for automated gene research:
+The Deep Research MCP server provides 6 main tools for automated gene research:
 
-1. **`deep-gene-research`** - Complete end-to-end gene research (recommended)
-2. **`write-research-plan`** - Generate research plan from query
-3. **`generate-SERP-query`** - Generate search tasks from plan
-4. **`search-task`** - Execute search tasks and collect information
-5. **`write-final-report`** - Generate final report from collected data
+1. **`deep-gene-research`** - Queue complete end-to-end gene research (recommended)
+2. **`get-task-status`** - Poll queued task status/results
+3. **`write-research-plan`** - Generate research plan from query
+4. **`generate-SERP-query`** - Generate search tasks from plan
+5. **`search-task`** - Execute search tasks and collect information
+6. **`write-final-report`** - Generate final report from collected data
 
 ---
 
@@ -55,7 +56,7 @@ The MCP server will be available at: `http://localhost:3000/api/mcp`
 
 ---
 
-## Example 1: Complete Gene Research (Recommended)
+## Example 1: Queued Gene Research (Recommended)
 
 ### Python Client
 
@@ -66,8 +67,7 @@ import httpx
 
 async def conduct_gene_research():
     """
-    Complete end-to-end gene research using the deep-gene-research tool.
-    This is the simplest and most recommended approach.
+    Queue end-to-end gene research, then poll with get-task-status.
     """
     
     # MCP server endpoint
@@ -118,8 +118,32 @@ async def conduct_gene_research():
             print(f"❌ Error: {result['error']}")
             return None
         
-        # Parse the result
-        research_data = json.loads(result["result"]["content"][0]["text"])
+        queued = json.loads(result["result"]["content"][0]["text"])
+        task_id = queued["taskId"]
+        print(f"Queued task: {task_id}")
+
+        while True:
+            status_payload = {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "get-task-status",
+                    "arguments": {"taskId": task_id}
+                }
+            }
+            status_response = await client.post(url, json=status_payload, headers=headers)
+            status_result = status_response.json()
+            task = json.loads(status_result["result"]["content"][0]["text"])
+
+            if task["status"] == "completed":
+                research_data = task["result"]
+                break
+            if task["status"] == "failed":
+                raise RuntimeError(task.get("error", "Research task failed"))
+
+            print(f"Progress: {task.get('progress', 0)}% {task.get('step', '')}")
+            await asyncio.sleep(5)
         
         print("\n✅ Research completed!")
         print(f"📊 Quality Score: {research_data['qualityMetrics']['overallQuality']:.2%}")
@@ -148,6 +172,10 @@ import fs from 'fs/promises';
 
 async function conductGeneResearch() {
   const url = 'http://localhost:3000/api/mcp';
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer your-access-password'
+  };
   
   const payload = {
     jsonrpc: '2.0',
@@ -175,15 +203,40 @@ async function conductGeneResearch() {
   
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer your-access-password'
-    },
+    headers,
     body: JSON.stringify(payload)
   });
   
   const result = await response.json();
-  const researchData = JSON.parse(result.result.content[0].text);
+  const queued = JSON.parse(result.result.content[0].text);
+  let researchData;
+
+  while (true) {
+    const statusResponse = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: {
+          name: 'get-task-status',
+          arguments: { taskId: queued.taskId }
+        }
+      })
+    });
+    const statusResult = await statusResponse.json();
+    const task = JSON.parse(statusResult.result.content[0].text);
+
+    if (task.status === 'completed') {
+      researchData = task.result;
+      break;
+    }
+    if (task.status === 'failed') {
+      throw new Error(task.error || 'Research task failed');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
   
   console.log('\n✅ Research completed!');
   console.log(`📊 Quality Score: ${(researchData.qualityMetrics.overallQuality * 100).toFixed(2)}%`);
@@ -226,6 +279,8 @@ curl -X POST http://localhost:3000/api/mcp \
       }
     }
   }' | jq '.result.content[0].text | fromjson'
+
+# Then call get-task-status with the returned taskId until status is completed.
 ```
 
 ---

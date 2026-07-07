@@ -33,7 +33,7 @@ const MODEL_LIST = process.env.NEXT_PUBLIC_MODEL_LIST || "";
 
 // Limit the middleware to paths starting with `/api/`
 export const config = {
-  // Skip middleware for /api/mcp routes - the MCP server handles its own auth
+  // Skip /api/mcp routes: MCP route handlers perform Node-runtime auth locally.
   // This avoids Edge Runtime eval() issue with certain API routes
   matcher: ["/api/ai/:path*", "/api/search/:path*", "/api/sse/:path*", "/api/research/:path*"],
 };
@@ -770,33 +770,6 @@ export async function middleware(request: NextRequest) {
       return NextResponse.json(
         { error: ERRORS.NO_PERMISSIONS },
         { status: 403 }
-      );
-    } else {
-      const requestHeaders = new Headers();
-      requestHeaders.set(
-        "Content-Type",
-        request.headers.get("Content-Type") || "application/json"
-      );
-      requestHeaders.delete("Authorization");
-      return NextResponse.next({
-        request: {
-          headers: requestHeaders,
-        },
-      });
-    }
-  }
-  if (request.nextUrl.pathname.startsWith("/api/mcp")) {
-    const authorization = request.headers.get("authorization") || "";
-    if (authorization.substring(7) !== accessPassword) {
-      const responseHeaders = new Headers();
-      responseHeaders.set("WWW-Authenticate", ERRORS.NO_PERMISSIONS.message);
-      return NextResponse.json(
-        {
-          error: 401,
-          error_description: ERRORS.NO_PERMISSIONS.message,
-          error_uri: request.nextUrl,
-        },
-        { headers: responseHeaders, status: 401 }
       );
     } else {
       const requestHeaders = new Headers();

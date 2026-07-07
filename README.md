@@ -415,7 +415,8 @@ Deep Gene Research provides a comprehensive MCP Server for integration with AI a
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
-| `deep-gene-research` | Conduct specialized gene function research | geneSymbol, organism, researchFocus, userPrompt |
+| `deep-gene-research` | Queue specialized gene function research | geneSymbol, organism, researchFocus, userPrompt |
+| `get-task-status` | Poll queued research task status/results | taskId |
 | `write-research-plan` | Generate research plan based on query | query, language |
 | `generate-SERP-query` | Generate data collection tasks | plan, language |
 | `search-task` | Execute search queries | tasks, language, maxResult |
@@ -469,14 +470,18 @@ Deep Gene Research provides a comprehensive MCP Server for integration with AI a
 
 ##### **Response Format**
 
-The MCP Server returns comprehensive gene research data including:
+`deep-gene-research` returns a queued task descriptor first:
+
+- `taskId`: use with `get-task-status`
+- `taskUrl`: HTTP endpoint for direct polling
+- `progressUrl`: SSE endpoint for progress updates
+
+When the task completes, its result includes:
 
 - **Workflow Data**: Gene identification, functional analysis, protein info
 - **Quality Metrics**: Data completeness, literature coverage, experimental evidence
 - **Visualizations**: Mermaid diagrams for pathways, interactions, structures
 - **Research Report**: Structured sections with executive summary, molecular function, etc.
-
-##### **Example Response Structure**
 
 ```json
 {
@@ -623,10 +628,10 @@ Each database is assigned a quality score based on:
 ## 📈 **Performance & Scalability**
 
 - **Response Time**: 2-3 minutes for comprehensive reports
-- **Concurrent Users**: Supports multiple simultaneous research sessions
-- **Caching**: Intelligent caching reduces API costs
-- **Rate Limiting**: Prevents API abuse
-- **Error Recovery**: Automatic retry mechanisms
+- **Concurrent Users**: Works best in a single long-lived Node process. For horizontal/serverless deployment, use durable task storage before relying on queued MCP tasks.
+- **Caching**: In-process caching reduces repeated provider calls while the process is alive
+- **Access Control**: MCP routes require `Authorization: Bearer <ACCESS_PASSWORD>` when `ACCESS_PASSWORD` is configured
+- **Error Recovery**: Automatic retry mechanisms for queued tasks
 
 ## 🔌 **MCP Server Integration Guide**
 

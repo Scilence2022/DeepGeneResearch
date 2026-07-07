@@ -15,7 +15,20 @@ const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
 const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
 const THINKING_MODEL = process.env.MCP_THINKING_MODEL || "";
 const TASK_MODEL = process.env.MCP_TASK_MODEL || "";
-const MCP_SERVER_BASE_URL = process.env.MCP_SERVER_BASE_URL || "";
+const MCP_SERVER_BASE_URL = (process.env.MCP_SERVER_BASE_URL || "").trim().replace(/\/+$/, "");
+
+function formatMcpUrl(path: string): string {
+  return MCP_SERVER_BASE_URL ? `${MCP_SERVER_BASE_URL}${path}` : path;
+}
+
+function asJsonText(data: unknown) {
+  return {
+    content: [{
+      type: "text" as const,
+      text: JSON.stringify(data)
+    }],
+  };
+}
 
 export function initDeepResearchServer({
   language,
@@ -59,7 +72,7 @@ export function initDeepResearchServer({
 
 export function initMcpServer() {
   const geneResearchToolDescription =
-    "Conduct specialized gene function research with custom user prompts and research guidelines.";
+    "Queue specialized gene function research with custom user prompts and research guidelines.";
 
   const server = new McpServer(
     {
@@ -95,6 +108,7 @@ export function initMcpServer() {
       enableReferences: z.boolean().default(true).optional().describe("Whether to include citation links in search results and final reports."),
       returnReportAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Report as a downloadable URL instead of inline content."),
       returnDetailsAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Details (workflow, sources, metadata) as a downloadable URL instead of inline content."),
+      includeCodeXomicsAnnotationProposal: z.boolean().default(true).optional().describe("When true, include a CodeXomics-ready annotationProposal with conservative updates and evidence references."),
     },
     async (
       {
@@ -110,7 +124,8 @@ export function initMcpServer() {
         enableCitationImage = true,
         enableReferences = true,
         returnReportAsUrl = false,
-        returnDetailsAsUrl = false
+        returnDetailsAsUrl = false,
+        includeCodeXomicsAnnotationProposal = true
       },
       { signal }
     ) => {
@@ -133,21 +148,19 @@ export function initMcpServer() {
           enableCitationImage,
           enableReferences,
           returnReportAsUrl,
-          returnDetailsAsUrl
+          returnDetailsAsUrl,
+          includeCodeXomicsAnnotationProposal
         });
 
         // 返回任务 ID 和状态
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              taskId: task.id,
-              status: task.status,
-              message: "Research task has been queued. Use the task ID to check status and retrieve results.",
-              taskUrl: `${MCP_SERVER_BASE_URL}/api/mcp/tasks/${task.id}`
-            })
-          }],
-        };
+        const taskPath = `/api/mcp/tasks/${task.id}`;
+        return asJsonText({
+          taskId: task.id,
+          status: task.status,
+          message: "Research task has been queued. Use get-task-status or the task URL to retrieve results.",
+          taskUrl: formatMcpUrl(taskPath),
+          progressUrl: formatMcpUrl(`${taskPath}/progress`)
+        });
       } catch (error) {
         return {
           isError: true,
@@ -189,22 +202,17 @@ export function initMcpServer() {
           };
         }
 
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              taskId: task.id,
-              status: task.status,
-              progress: task.progress,
-              step: task.step,
-              createdAt: task.createdAt,
-              updatedAt: task.updatedAt,
-              result: task.result,
-              error: task.error,
-              parameters: task.parameters
-            })
-          }],
-        };
+        return asJsonText({
+          taskId: task.id,
+          status: task.status,
+          progress: task.progress,
+          step: task.step,
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+          result: task.result,
+          error: task.error,
+          parameters: task.parameters
+        });
       } catch (error) {
         return {
           isError: true,
@@ -217,6 +225,103 @@ export function initMcpServer() {
           ],
         };
       }
+    }
+  );
+
+  server.tool(
+    "write-research-plan",
+    "Generate a focused research plan from a gene or biology query.",
+    {
+      query: z.string().describe("The research query to plan."),
+      language: z.string().optional().describe("The response language."),
+      maxResult: z.number().optional().default(5).describe("Maximum search results to configure for downstream steps."),
+    },
+    async ({ query, language, maxResult }, { signal }) => {
+      signal.addEventListener("abort", () => {
+        throw new Error("The client closed unexpectedly!");
+      });
+
+      const deepResearch = initDeepResearchServer({ language, maxResult });
+      const reportPlan = await deepResearch.writeReportPlan(query);
+      return asJsonText({ reportPlan });
+    }
+  );
+
+  server.tool(
+    "generate-SERP-query",
+    "Generate search tasks from a research plan.",
+    {
+      plan: z.string().describe("The research plan returned by write-research-plan."),
+      language: z.string().optional().describe("The response language."),
+      maxResult: z.number().optional().default(5).describe("Maximum search results to configure for downstream steps."),
+    },
+    async ({ plan, language, maxResult }, { signal }) => {
+      signal.addEventListener("abort", () => {
+        throw new Error("The client closed unexpectedly!");
+      });
+
+      const deepResearch = initDeepResearchServer({ language, maxResult });
+      const tasks = await deepResearch.generateSERPQuery(plan);
+      return asJsonText({ tasks });
+    }
+  );
+
+  server.tool(
+    "search-task",
+    "Execute search tasks and summarize source-backed findings.",
+    {
+      tasks: z.array(z.object({
+        query: z.string(),
+        researchGoal: z.string().optional().default(""),
+      })).describe("Search tasks returned by generate-SERP-query."),
+      language: z.string().optional().describe("The response language."),
+      maxResult: z.number().optional().default(5).describe("Maximum number of search results per task."),
+      enableReferences: z.boolean().optional().default(true).describe("Whether to include source references."),
+    },
+    async ({ tasks, language, maxResult, enableReferences }, { signal }) => {
+      signal.addEventListener("abort", () => {
+        throw new Error("The client closed unexpectedly!");
+      });
+
+      const deepResearch = initDeepResearchServer({ language, maxResult });
+      const completedTasks = await deepResearch.runSearchTask(tasks, enableReferences);
+      return asJsonText({ tasks: completedTasks });
+    }
+  );
+
+  server.tool(
+    "write-final-report",
+    "Compile completed search tasks into a final research report.",
+    {
+      plan: z.string().describe("The research plan returned by write-research-plan."),
+      tasks: z.array(z.object({
+        query: z.string(),
+        researchGoal: z.string().optional().default(""),
+        learning: z.string(),
+        sources: z.array(z.any()).optional(),
+        images: z.array(z.any()).optional(),
+      })).describe("Completed tasks returned by search-task."),
+      language: z.string().optional().describe("The response language."),
+      maxResult: z.number().optional().default(5).describe("Maximum search results to configure for the research engine."),
+      enableCitationImage: z.boolean().optional().default(true).describe("Whether to include citation images."),
+      enableReferences: z.boolean().optional().default(true).describe("Whether to include source references."),
+    },
+    async (
+      { plan, tasks, language, maxResult, enableCitationImage, enableReferences },
+      { signal }
+    ) => {
+      signal.addEventListener("abort", () => {
+        throw new Error("The client closed unexpectedly!");
+      });
+
+      const deepResearch = initDeepResearchServer({ language, maxResult });
+      const report = await deepResearch.writeFinalReport(
+        plan,
+        tasks,
+        enableCitationImage,
+        enableReferences
+      );
+      return asJsonText(report);
     }
   );
 
@@ -233,7 +338,7 @@ You are an expert geneticist and research assistant powered by the Deep Gene Res
 You have access to a suite of specialized tools for conducting deep biological research. Your primary and most powerful tool is \`deep-gene-research\`.
 
 ### 1. Primary Tool: \`deep-gene-research\` (RECOMMENDED)
-Use this tool for 95% of user requests. It runs a complete, end-to-end research workflow including:
+Use this tool for 95% of user requests. It queues a complete, end-to-end research workflow including:
 - Planning
 - Searching multiple databases (PubMed, UniProt, NCBI, etc.)
 - Analyzing data
@@ -250,6 +355,7 @@ Use this tool for 95% of user requests. It runs a complete, end-to-end research 
 - \`researchFocus\`: A list of areas to prioritize (e.g., \`["molecular_function", "disease_association", "drug_targets"]\`).
 - \`specificAspects\`: Detailed questions or angles to investigate (e.g., \`["active site mechanism", "interaction with protein Y"]\`).
 - \`userPrompt\`: (Optional) The raw user query relative to the gene/organism context.
+- \`includeCodeXomicsAnnotationProposal\`: Defaults to true. Keep this enabled when the result may be merged into CodeXomics gene annotations.
 
 ### 2. Manual Workflow Tools (Advanced)
 Use these only if the user specifically requests a step-by-step breakdown or if you need to debug a research path.
@@ -257,6 +363,7 @@ Use these only if the user specifically requests a step-by-step breakdown or if 
 - \`generate-SERP-query\`: Create search queries from a plan.
 - \`search-task\`: Execute specific search queries.
 - \`write-final-report\`: Compile results.
+- \`get-task-status\`: Retrieve status and final results for a queued \`deep-gene-research\` task.
 
 ## interaction Guidelines
 
@@ -274,8 +381,9 @@ Use these only if the user specifically requests a step-by-step breakdown or if 
       - *Tool Call*: \`specificAspects=["DNA binding domain structure", "binding motif", "protein-DNA interaction mechanism"]\`
 
 3.  **Handling Results**:
-    - The tool returns a comprehensive JSON object with a marked-down report.
-    - Present the \`finalReport\` to the user clearly.
+    - \`deep-gene-research\` returns a \`taskId\` first. Use \`get-task-status\` until the task is \`completed\` or \`failed\`.
+    - When completed, present the \`finalReport\` or \`download.reportUrl\` to the user clearly.
+    - If integrating with CodeXomics, pass \`result.annotationProposal\`, \`result.finalReport\`, and \`result.sources\` to CodeXomics \`merge_gene_research_report\`.
     - Highlight key findings, then offer to show the detailed sources or quality metrics if requested.
 
 ## Example Usage

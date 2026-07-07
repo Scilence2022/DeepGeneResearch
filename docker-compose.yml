@@ -8,5 +8,9 @@ services:
     container_name: deep-research
     env_file:
       - .env
+    environment:
+      MCP_TASK_STORAGE_FILE: /app/data/tasks.json
     ports:
       - "3333:3000"
+    volumes:
+      - ./data:/app/data

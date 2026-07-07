@@ -46,3 +46,4 @@ public/swe-worker*
 README.md.backup
 Genome_AI_Studio_Manuscript.md
 tasks.json
+/data/

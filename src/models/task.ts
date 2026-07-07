@@ -18,6 +18,7 @@ export interface GeneResearchParameters {
   enableReferences?: boolean;
   returnReportAsUrl?: boolean;
   returnDetailsAsUrl?: boolean;
+  includeCodeXomicsAnnotationProposal?: boolean;
 }
 
 // 任务模型
