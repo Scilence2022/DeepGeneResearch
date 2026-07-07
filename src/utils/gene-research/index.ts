@@ -611,3 +611,4 @@ export * from './visualization-generators';
 export * from './quality-control';
 export * from './api-integrations';
 export * from './report-templates';
+export * from './codexomics-annotation';

@@ -4,6 +4,7 @@ import { taskStore } from './task-store';
 import { initDeepResearchServer } from '@/app/api/mcp/server';
 import { cacheService } from './cache';
 import { storeResearchResult } from '@/utils/mcp-research-store';
+import { buildCodeXomicsAnnotationProposal } from '@/utils/gene-research/codexomics-annotation';
 
 const MCP_SERVER_BASE_URL = (process.env.MCP_SERVER_BASE_URL || '').trim().replace(/\/+$/, '');
 const MCP_SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || 'model';
@@ -90,6 +91,23 @@ class TaskQueue extends EventEmitter {
   // 最大重试次数
   private maxRetries = 3;
 
+  private ensureCodeXomicsAnnotationProposal(task: GeneResearchTask, result: any) {
+    if (task.parameters.includeCodeXomicsAnnotationProposal === false || !result || result.annotationProposal) {
+      return result;
+    }
+
+    return {
+      ...result,
+      annotationProposal: buildCodeXomicsAnnotationProposal({
+        geneSymbol: task.parameters.geneSymbol,
+        organism: task.parameters.organism,
+        finalReport: result.finalReport || result.report?.content || '',
+        sources: result.sources || [],
+        confidence: result.metadata?.confidence ?? result.qualityMetrics?.overallQuality ?? null,
+      }),
+    };
+  }
+
   private prepareResultForTask(task: GeneResearchTask, result: any) {
     if (!task.parameters.returnReportAsUrl && !task.parameters.returnDetailsAsUrl) {
       return result;
@@ -111,6 +129,14 @@ class TaskQueue extends EventEmitter {
       ...result,
       download,
     };
+
+    if (responseResult.annotationProposal) {
+      responseResult.annotationProposal = {
+        ...responseResult.annotationProposal,
+        reportUrl: download.reportUrl || responseResult.annotationProposal.reportUrl,
+        detailsUrl: download.detailsUrl || responseResult.annotationProposal.detailsUrl,
+      };
+    }
 
     if (task.parameters.returnReportAsUrl) {
       responseResult.finalReport = undefined;
@@ -140,7 +166,8 @@ class TaskQueue extends EventEmitter {
         await taskStore.updateTaskStatus(task.id, 'in_progress', 100, 'cache-hit');
         this.emit('task:progress', task, 100, 'cache-hit');
         
-        const taskResult = this.prepareResultForTask(task, cachedResult);
+        const cachedResultWithProposal = this.ensureCodeXomicsAnnotationProposal(task, cachedResult);
+        const taskResult = this.prepareResultForTask(task, cachedResultWithProposal);
         await taskStore.updateTaskResult(task.id, taskResult);
         this.emit('task:completed', task, taskResult);
         return;
@@ -277,12 +304,13 @@ class TaskQueue extends EventEmitter {
         sources: report.sources || [],
         images: report.images || []
       };
+      const resultWithProposal = this.ensureCodeXomicsAnnotationProposal(task, result);
 
       // 存储结果到缓存
-      await cacheService.setCachedResult(task.parameters, result);
+      await cacheService.setCachedResult(task.parameters, resultWithProposal);
 
       // 更新任务结果
-      const taskResult = this.prepareResultForTask(task, result);
+      const taskResult = this.prepareResultForTask(task, resultWithProposal);
       await taskStore.updateTaskResult(task.id, taskResult);
       this.emit('task:completed', task, taskResult);
     } catch (error) {

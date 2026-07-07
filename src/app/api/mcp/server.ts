@@ -108,6 +108,7 @@ export function initMcpServer() {
       enableReferences: z.boolean().default(true).optional().describe("Whether to include citation links in search results and final reports."),
       returnReportAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Report as a downloadable URL instead of inline content."),
       returnDetailsAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Details (workflow, sources, metadata) as a downloadable URL instead of inline content."),
+      includeCodeXomicsAnnotationProposal: z.boolean().default(true).optional().describe("When true, include a CodeXomics-ready annotationProposal with conservative updates and evidence references."),
     },
     async (
       {
@@ -123,7 +124,8 @@ export function initMcpServer() {
         enableCitationImage = true,
         enableReferences = true,
         returnReportAsUrl = false,
-        returnDetailsAsUrl = false
+        returnDetailsAsUrl = false,
+        includeCodeXomicsAnnotationProposal = true
       },
       { signal }
     ) => {
@@ -146,7 +148,8 @@ export function initMcpServer() {
           enableCitationImage,
           enableReferences,
           returnReportAsUrl,
-          returnDetailsAsUrl
+          returnDetailsAsUrl,
+          includeCodeXomicsAnnotationProposal
         });
 
         // 返回任务 ID 和状态
@@ -352,6 +355,7 @@ Use this tool for 95% of user requests. It queues a complete, end-to-end researc
 - \`researchFocus\`: A list of areas to prioritize (e.g., \`["molecular_function", "disease_association", "drug_targets"]\`).
 - \`specificAspects\`: Detailed questions or angles to investigate (e.g., \`["active site mechanism", "interaction with protein Y"]\`).
 - \`userPrompt\`: (Optional) The raw user query relative to the gene/organism context.
+- \`includeCodeXomicsAnnotationProposal\`: Defaults to true. Keep this enabled when the result may be merged into CodeXomics gene annotations.
 
 ### 2. Manual Workflow Tools (Advanced)
 Use these only if the user specifically requests a step-by-step breakdown or if you need to debug a research path.
@@ -379,6 +383,7 @@ Use these only if the user specifically requests a step-by-step breakdown or if 
 3.  **Handling Results**:
     - \`deep-gene-research\` returns a \`taskId\` first. Use \`get-task-status\` until the task is \`completed\` or \`failed\`.
     - When completed, present the \`finalReport\` or \`download.reportUrl\` to the user clearly.
+    - If integrating with CodeXomics, pass \`result.annotationProposal\`, \`result.finalReport\`, and \`result.sources\` to CodeXomics \`merge_gene_research_report\`.
     - Highlight key findings, then offer to show the detailed sources or quality metrics if requested.
 
 ## Example Usage
