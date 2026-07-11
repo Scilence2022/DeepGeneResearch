@@ -511,7 +511,7 @@ export class LiteratureValidator {
       if (ref.qualityMetadata.verified) {
         stats.validated++;
       }
-      if (ref.qualityMetadata.confidenceScore >= 80) {
+      if (ref.qualityMetadata.confidenceScore >= 0.8) {
         stats.highConfidence++;
       }
       stats.warnings += ref.qualityMetadata.warningFlags.length;

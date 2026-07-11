@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || "";
+const ALLOW_INSECURE_LOCAL = process.env.DGR_ALLOW_INSECURE_LOCAL === "true";
 
 function getBearerToken(request: NextRequest): string {
   const authorization = request.headers.get("authorization") || "";
@@ -25,14 +26,21 @@ export function getMcpBaseUrl(request?: NextRequest): string {
 
 export function requireMcpAuth(request: NextRequest): NextResponse | null {
   if (!ACCESS_PASSWORD) {
-    return null;
+    if (ALLOW_INSECURE_LOCAL && process.env.NODE_ENV !== "production") {
+      return null;
+    }
+    return NextResponse.json(
+      {
+        error: 503,
+        error_description: "MCP authentication is not configured. Set ACCESS_PASSWORD or use DGR_ALLOW_INSECURE_LOCAL only for local development.",
+      },
+      { status: 503 }
+    );
   }
 
-  const token =
-    getBearerToken(request) ||
-    request.nextUrl.searchParams.get("access_token") ||
-    request.nextUrl.searchParams.get("password") ||
-    "";
+  // Secrets in query strings leak through browser history, proxy logs, and
+  // report URLs. Streamable MCP clients must use Authorization: Bearer.
+  const token = getBearerToken(request);
 
   if (token === ACCESS_PASSWORD) {
     return null;

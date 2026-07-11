@@ -586,7 +586,15 @@ class DeepResearch {
   // Gene research specific method
   async conductGeneResearch(
     query: string,
-    taskId?: string
+    taskId?: string,
+    explicitGeneInfo?: {
+      geneSymbol: string;
+      organism: string;
+      researchFocus?: string[];
+      specificAspects?: string[];
+      diseaseContext?: string;
+      experimentalApproach?: string;
+    }
   ) {
     try {
       // Update task status if taskId is provided
@@ -602,7 +610,9 @@ class DeepResearch {
       this.onMessage("progress", { step: "gene-research", status: "start" });
       
       // Extract gene information from query
-      const geneInfo = this.extractGeneInfo(query);
+      // MCP and CodeXomics provide an already resolved target. Never re-infer
+      // its gene or organism from an LLM-facing free-text query.
+      const geneInfo = explicitGeneInfo || this.extractGeneInfo(query);
       
       // Create gene research engine
       const geneEngine = createGeneResearchEngine({

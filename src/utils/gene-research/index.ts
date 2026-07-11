@@ -265,29 +265,43 @@ export class GeneResearchEngine {
   }
 
   private mergeExtractedData(target: Partial<GeneDataExtractionResult>, source: Partial<GeneDataExtractionResult>): void {
+    const mergeNonEmpty = (destination: Record<string, any>, incoming: Record<string, any>) => {
+      for (const [key, value] of Object.entries(incoming || {})) {
+        if (value === undefined || value === null || value === '') continue;
+        if (Array.isArray(value) && value.length === 0) continue;
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          const current = destination[key];
+          if (!current || typeof current !== 'object' || Array.isArray(current)) destination[key] = {};
+          mergeNonEmpty(destination[key], value as Record<string, any>);
+          continue;
+        }
+        destination[key] = value;
+      }
+    };
+
     // Merge gene basic info
     if (source.geneBasicInfo) {
-      Object.assign(target.geneBasicInfo!, source.geneBasicInfo);
+      mergeNonEmpty(target.geneBasicInfo! as Record<string, any>, source.geneBasicInfo as Record<string, any>);
     }
 
     // Merge functional data
     if (source.functionalData) {
-      Object.assign(target.functionalData!, source.functionalData);
+      mergeNonEmpty(target.functionalData! as Record<string, any>, source.functionalData as Record<string, any>);
     }
 
     // Merge protein info
     if (source.proteinInfo) {
-      Object.assign(target.proteinInfo!, source.proteinInfo);
+      mergeNonEmpty(target.proteinInfo! as Record<string, any>, source.proteinInfo as Record<string, any>);
     }
 
     // Merge expression data
     if (source.expressionData) {
-      Object.assign(target.expressionData!, source.expressionData);
+      mergeNonEmpty(target.expressionData! as Record<string, any>, source.expressionData as Record<string, any>);
     }
 
     // Merge interaction data
     if (source.interactionData) {
-      Object.assign(target.interactionData!, source.interactionData);
+      mergeNonEmpty(target.interactionData! as Record<string, any>, source.interactionData as Record<string, any>);
     }
 
     // Merge disease data
@@ -297,7 +311,7 @@ export class GeneResearchEngine {
 
     // Merge evolutionary data
     if (source.evolutionaryData) {
-      Object.assign(target.evolutionaryData!, source.evolutionaryData);
+      mergeNonEmpty(target.evolutionaryData! as Record<string, any>, source.evolutionaryData as Record<string, any>);
     }
 
     // Merge literature references

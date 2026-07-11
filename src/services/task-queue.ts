@@ -46,11 +46,27 @@ function summarizeSourceCoverage(searchResults: any[], finalSources: any[]) {
 class TaskQueue extends EventEmitter {
   private queue: GeneResearchTask[] = [];
   private isProcessing = false;
-  private maxConcurrent = 1; // 最大并发任务数
+  private maxConcurrent = Math.max(1, Number(process.env.DGR_MAX_CONCURRENT_RESEARCH || 2));
   private processingTasks = new Set<string>();
+  private cancelledTasks = new Set<string>();
+  private recoveryPromise: Promise<void> | null = null;
+
+  private async ensureRecovered() {
+    if (!this.recoveryPromise) {
+      this.recoveryPromise = taskStore.recoverInterruptedTasks().then(tasks => {
+        for (const task of tasks) {
+          if (!this.queue.some(queued => queued.id === task.id)) this.queue.push(task);
+        }
+      });
+    }
+    await this.recoveryPromise;
+  }
 
   // 添加任务到队列
   async addTask(parameters: GeneResearchParameters): Promise<GeneResearchTask> {
+    await this.ensureRecovered();
+    const existing = await taskStore.findTaskByIdempotencyKey(parameters.idempotencyKey);
+    if (existing) return existing;
     const task = await taskStore.createTask(parameters);
     this.queue.push(task);
     this.emit('task:created', task);
@@ -60,6 +76,7 @@ class TaskQueue extends EventEmitter {
 
   // 处理队列
   private async processQueue() {
+    await this.ensureRecovered();
     if (this.isProcessing || this.queue.length === 0 || this.processingTasks.size >= this.maxConcurrent) {
       return;
     }
@@ -101,6 +118,7 @@ class TaskQueue extends EventEmitter {
       annotationProposal: buildCodeXomicsAnnotationProposal({
         geneSymbol: task.parameters.geneSymbol,
         organism: task.parameters.organism,
+        target: task.parameters.target,
         finalReport: result.finalReport || result.report?.content || '',
         sources: result.sources || [],
         confidence: result.metadata?.confidence ?? result.qualityMetrics?.overallQuality ?? null,
@@ -138,17 +156,10 @@ class TaskQueue extends EventEmitter {
       };
     }
 
-    if (task.parameters.returnReportAsUrl) {
-      responseResult.finalReport = undefined;
-      responseResult.report = result.report
-        ? { ...result.report, content: undefined }
-        : undefined;
-    }
-
-    if (task.parameters.returnDetailsAsUrl) {
-      responseResult.workflow = undefined;
-      responseResult.searchResults = undefined;
-    }
+    // Keep the canonical report and workflow in the durable task record. URL
+    // download helpers are convenience views and may expire; a task result is
+    // the authoritative artifact used by CodeXomics recovery and audit.
+    responseResult.artifactUri = `dgr://runs/${task.id}/result`;
 
     return responseResult;
   }
@@ -156,6 +167,11 @@ class TaskQueue extends EventEmitter {
   // 处理单个任务（带重试机制）
   private async processTask(task: GeneResearchTask, attempt = 0) {
     try {
+      if (this.cancelledTasks.has(task.id) || task.status === 'cancel_requested') {
+        await taskStore.updateTaskStatus(task.id, 'cancelled', task.progress, 'cancelled-before-start');
+        this.emit('task:cancelled', task);
+        return;
+      }
       // 检查缓存
       const cachedResult = await cacheService.getCachedResult(task.parameters);
       if (cachedResult) {
@@ -227,7 +243,9 @@ class TaskQueue extends EventEmitter {
         }
       };
 
-      // 构建查询
+      // Build a user-facing query for the report, but pass the exact MCP
+      // target into the specialized research engine. It must never recover a
+      // gene symbol from free text when CodeXomics already resolved it.
       const { geneSymbol, organism, researchFocus = [], specificAspects = [], diseaseContext, experimentalApproach, userPrompt } = task.parameters;
       let baseQuery = `Gene research: ${geneSymbol} in ${organism}`;
 
@@ -253,56 +271,32 @@ class TaskQueue extends EventEmitter {
           }${specificAspects.length ? ` Investigate these specific aspects: ${specificAspects.join(', ')}.` : ''
           }`;
 
-      // 执行研究流程
-      const reportPlan = await deepResearch.writeReportPlan(query);
-      const queries = await deepResearch.generateSERPQuery(reportPlan);
-      const searchResults = await deepResearch.runSearchTask(queries, task.parameters.enableReferences);
-      const report = await deepResearch.writeFinalReport(
-        reportPlan,
-        searchResults,
-        task.parameters.enableCitationImage,
-        task.parameters.enableReferences
-      );
+      const specializedResult = await deepResearch.conductGeneResearch(query, task.id, {
+        geneSymbol,
+        organism,
+        researchFocus,
+        specificAspects,
+        diseaseContext,
+        experimentalApproach,
+      });
+      if (this.cancelledTasks.has(task.id)) {
+        await taskStore.updateTaskStatus(task.id, 'cancelled', 0, 'cancelled-during-research');
+        this.emit('task:cancelled', task);
+        return;
+      }
 
-      // 格式化结果
+      // Preserve the specialized engine's computed quality metrics instead of
+      // publishing synthetic constants from the generic report pipeline.
       const researchTime = Date.now() - new Date(task.createdAt).getTime();
-      const sourceCoverage = summarizeSourceCoverage(searchResults, report.sources || []);
+      const sourceCoverage = summarizeSourceCoverage([], specializedResult.sources || []);
       const result = {
-        workflow: {
-          geneIdentification: {
-            geneSymbol,
-            organism,
-            researchFocus,
-            specificAspects
-          },
-          researchPlan: reportPlan,
-          searchTasks: queries,
-          searchResults: searchResults
-        },
-        qualityMetrics: {
-          dataCompleteness: searchResults.length > 0 ? 0.8 : 0,
-          literatureCoverage: searchResults.reduce((sum, t) => sum + (t.sources?.length || 0), 0) > 0 ? 0.9 : 0,
-          experimentalEvidence: 0.7,
-          crossSpeciesValidation: 0.6,
-          databaseConsistency: 0.8,
-          overallQuality: searchResults.length > 0 ? 0.75 : 0.2
-        },
-        visualizations: [],
-        report: {
-          title: `Gene Research Report: ${geneSymbol} in ${organism}`,
-          content: report.finalReport,
-          sections: []
-        },
+        ...specializedResult,
         metadata: {
+          ...((specializedResult as any).metadata || {}),
           researchTime,
           dataSources: sourceCoverage.sourceDomains,
           sourceCoverage,
-          confidence: searchResults.length > 0 ? 0.75 : 0.2,
-          completeness: searchResults.length > 0 ? 0.8 : 0
         },
-        finalReport: report.finalReport,
-        sources: report.sources || [],
-        images: report.images || []
       };
       const resultWithProposal = this.ensureCodeXomicsAnnotationProposal(task, result);
 
@@ -353,13 +347,18 @@ class TaskQueue extends EventEmitter {
   }
 
   // 取消任务
-  cancelTask(taskId: string): boolean {
+  async cancelTask(taskId: string): Promise<boolean> {
+    this.cancelledTasks.add(taskId);
     const index = this.queue.findIndex(task => task.id === taskId);
     if (index !== -1) {
       this.queue.splice(index, 1);
+      await taskStore.updateTaskStatus(taskId, 'cancelled', 0, 'cancelled-in-queue');
       return true;
     }
-    return false;
+    const task = await taskStore.getTask(taskId);
+    if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return false;
+    await taskStore.requestCancellation(taskId);
+    return true;
   }
 
   // 设置最大并发数

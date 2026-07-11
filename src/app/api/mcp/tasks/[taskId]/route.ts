@@ -42,20 +42,18 @@ export async function DELETE(
 
   const { taskId } = await params;
   try {
-    // 尝试从队列中取消任务
-    const canceledFromQueue = taskQueue.cancelTask(taskId);
-    
-    // 从存储中删除任务
-    const deleted = await taskStore.deleteTask(taskId);
-    
-    if (!deleted && !canceledFromQueue) {
+    // DELETE is a cancellation request, not destructive task deletion. Keeping
+    // the terminal record is required for audit and client restart recovery.
+    const canceledFromQueue = await taskQueue.cancelTask(taskId);
+    if (!canceledFromQueue) {
       return NextResponse.json(
-        { error: `Task ${taskId} not found` },
+        { error: `Task ${taskId} cannot be cancelled` },
         { status: 404 }
       );
     }
-    
-    return NextResponse.json({ success: true, message: `Task ${taskId} deleted` });
+
+    const task = await taskStore.getTask(taskId);
+    return NextResponse.json({ success: true, status: task?.status || 'cancel_requested', message: `Cancellation requested for task ${taskId}` });
   } catch (error) {
     console.error(`Error deleting task ${taskId}:`, error);
     return NextResponse.json(

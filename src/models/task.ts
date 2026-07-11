@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
+import type { GenomeTargetRef } from '@/contracts/annotation-change-set';
 
 // 任务状态类型
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancel_requested' | 'cancelled';
 
 // 任务参数类型
 export interface GeneResearchParameters {
@@ -19,6 +20,10 @@ export interface GeneResearchParameters {
   returnReportAsUrl?: boolean;
   returnDetailsAsUrl?: boolean;
   includeCodeXomicsAnnotationProposal?: boolean;
+  /** Exact target returned by CodeXomics resolve_annotation_target. */
+  target?: GenomeTargetRef;
+  idempotencyKey?: string;
+  correlationId?: string;
 }
 
 // 任务模型
@@ -32,6 +37,8 @@ export interface GeneResearchTask {
   result?: any;
   error?: string;
   step?: string;
+  eventSeq: number;
+  attempts?: number;
 }
 
 // 创建新任务
@@ -44,6 +51,7 @@ export function createTask(parameters: GeneResearchParameters): GeneResearchTask
     createdAt: now,
     updatedAt: now,
     parameters,
+    eventSeq: 0,
   };
 }
 
@@ -60,6 +68,7 @@ export function updateTaskStatus(
     progress: progress ?? task.progress,
     step,
     updatedAt: new Date(),
+    eventSeq: task.eventSeq + 1,
   };
 }
 
@@ -74,6 +83,7 @@ export function updateTaskResult(
     progress: 100,
     result,
     updatedAt: new Date(),
+    eventSeq: task.eventSeq + 1,
   };
 }
 
@@ -87,5 +97,6 @@ export function updateTaskError(
     status: 'failed',
     error,
     updatedAt: new Date(),
+    eventSeq: task.eventSeq + 1,
   };
 }

@@ -14,7 +14,8 @@
     "build:standalone": "cross-env NEXT_PUBLIC_BUILD_MODE=standalone next build",
     "build:export": "cross-env NEXT_PUBLIC_BUILD_MODE=export next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.10",
@@ -104,11 +105,13 @@
     "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "15.1.7",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "ignore-loader": "^0.1.2",
     "postcss": "^8",
     "serwist": "^9.0.14",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "npm": ">= 9.8.0",

@@ -193,8 +193,11 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 TAVILY_API_KEY=your_tavily_api_key
 EXA_API_KEY=your_exa_api_key
 
-# Optional: Access Control
+# Required for MCP and crawler routes (Bearer token)
 ACCESS_PASSWORD=your_secure_password
+
+# Development-only escape hatch; never set this in production
+# DGR_ALLOW_INSECURE_LOCAL=true
 
 # Optional: Custom Model Lists
 NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
@@ -630,7 +633,7 @@ Each database is assigned a quality score based on:
 - **Response Time**: 2-3 minutes for comprehensive reports
 - **Concurrent Users**: Works best in a single long-lived Node process. For horizontal/serverless deployment, use durable task storage before relying on queued MCP tasks.
 - **Caching**: In-process caching reduces repeated provider calls while the process is alive
-- **Access Control**: MCP routes require `Authorization: Bearer <ACCESS_PASSWORD>` when `ACCESS_PASSWORD` is configured
+- **Access Control**: MCP and crawler routes require `Authorization: Bearer <ACCESS_PASSWORD>`. They fail closed when the password is absent, except for explicit non-production `DGR_ALLOW_INSECURE_LOCAL=true` development mode.
 - **Error Recovery**: Automatic retry mechanisms for queued tasks
 
 ## 🔌 **MCP Server Integration Guide**

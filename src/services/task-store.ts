@@ -82,18 +82,33 @@ async function loadFromDisk(): Promise<void> {
       const tasks: GeneResearchTask[] = JSON.parse(data);
       taskCache.clear();
       for (const task of tasks) {
-        taskCache.set(task.id, task);
+        taskCache.set(task.id, {
+          ...task,
+          createdAt: new Date(task.createdAt),
+          updatedAt: new Date(task.updatedAt),
+          eventSeq: Number.isInteger(task.eventSeq) ? task.eventSeq : 0,
+        });
       }
       cacheLoaded = true;
       console.log(`[TaskStore] Loaded ${tasks.length} tasks from disk`);
     } catch (error) {
       console.error('[TaskStore] Failed to load from disk:', error);
-      // 如果文件损坏，尝试重建
+      // Preserve a corrupt ledger for forensic recovery rather than silently
+      // destroying every queued research task.
       if ((error as any).message?.includes('Unexpected')) {
-        console.log('[TaskStore] Detected corrupted tasks.json, rebuilding...');
+        const quarantinePath = `${STORAGE_FILE}.corrupt.${Date.now()}`;
+        console.log(`[TaskStore] Detected corrupted task store; moving it to ${quarantinePath}`);
+        try {
+          await fs.rename(STORAGE_FILE, quarantinePath);
+        } catch (renameError) {
+          console.error('[TaskStore] Failed to quarantine corrupt task store:', renameError);
+          throw error;
+        }
         taskCache.clear();
         await fs.writeFile(STORAGE_FILE, JSON.stringify([]), 'utf8');
         cacheLoaded = true;
+      } else {
+        throw error;
       }
     }
   });
@@ -110,6 +125,7 @@ async function syncToDisk(): Promise<void> {
       await fs.rename(tempFile, STORAGE_FILE);
     } catch (error) {
       console.error('[TaskStore] Failed to sync to disk:', error);
+      throw error;
     }
   });
 }
@@ -138,6 +154,47 @@ class TaskStore {
     const task = taskCache.get(taskId) || null;
     console.log(`[TaskStore] Getting task ${taskId}: ${task ? 'found' : 'not found'}`);
     return task;
+  }
+
+  async findTaskByIdempotencyKey(idempotencyKey?: string): Promise<GeneResearchTask | null> {
+    if (!idempotencyKey) return null;
+    await this.ensureCache();
+    return Array.from(taskCache.values()).find(task => task.parameters.idempotencyKey === idempotencyKey) || null;
+  }
+
+  /**
+   * Convert work interrupted by a process restart into resumable pending work.
+   * A durable worker can safely call this at startup; completed and terminal
+   * tasks are never re-enqueued.
+   */
+  async recoverInterruptedTasks(): Promise<GeneResearchTask[]> {
+    await this.ensureCache();
+    const recovered: GeneResearchTask[] = [];
+    await withFileLock(async () => {
+      for (const [taskId, task] of taskCache.entries()) {
+        if (task.status === 'cancel_requested') {
+          taskCache.set(taskId, {
+            ...task,
+            status: 'cancelled',
+            step: 'cancelled-before-recovery',
+            updatedAt: new Date(),
+            eventSeq: task.eventSeq + 1,
+          });
+        } else if (task.status === 'pending' || task.status === 'in_progress') {
+          const resumable = {
+            ...task,
+            status: 'pending' as const,
+            step: task.status === 'in_progress' ? 'recovered-after-restart' : task.step,
+            updatedAt: new Date(),
+            eventSeq: task.eventSeq + 1,
+          };
+          taskCache.set(taskId, resumable);
+          recovered.push(resumable);
+        }
+      }
+    });
+    if (recovered.length > 0) await syncToDisk();
+    return recovered;
   }
 
   // 创建任务
@@ -229,6 +286,10 @@ class TaskStore {
     // Sync to disk AFTER releasing the lock to avoid deadlock
     await syncToDisk();
     return updatedTask!;
+  }
+
+  async requestCancellation(taskId: string): Promise<GeneResearchTask> {
+    return this.updateTaskStatus(taskId, 'cancel_requested', undefined, 'cancel-requested');
   }
 
   // 删除任务

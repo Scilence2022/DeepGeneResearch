@@ -122,7 +122,7 @@ export class EnhancedQualityControl {
       }
 
       // Identify potentially fabricated references
-      if (!ref.qualityMetadata?.verified && ref.qualityMetadata?.confidenceScore < 30) {
+      if (!ref.qualityMetadata?.verified && ref.qualityMetadata?.confidenceScore < 0.3) {
         statistics.potentiallyFabricated++;
       }
     });

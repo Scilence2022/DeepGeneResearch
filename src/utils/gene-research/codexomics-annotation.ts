@@ -1,3 +1,11 @@
+import { createHash } from 'crypto';
+import type {
+  AnnotationChangeSetProposal,
+  AnnotationOperation,
+  EvidenceRecord,
+  GenomeTargetRef,
+} from '@/contracts/annotation-change-set';
+
 type SourceLike = string | Record<string, any>;
 
 export interface CodeXomicsEvidenceDetail {
@@ -9,12 +17,9 @@ export interface CodeXomicsEvidenceDetail {
   database?: string;
 }
 
-export interface CodeXomicsAnnotationProposal {
-  schema: 'codexomics.gene_annotation_merge.v1';
-  target: {
-    geneSymbol: string;
-    organism: string;
-  };
+export type CodeXomicsAnnotationProposal = Omit<AnnotationChangeSetProposal, 'target'> & {
+  /** Compatibility fields retained for older report viewers. They are not a commit API. */
+  target: Partial<GenomeTargetRef> & { geneSymbol?: string | null; organism?: string };
   summary: string;
   confidence: number | null;
   evidence: string[];
@@ -34,11 +39,12 @@ export interface CodeXomicsAnnotationProposal {
     overwriteProduct: false;
     preserveExistingProduct: true;
   };
-}
+};
 
 interface BuildProposalInput {
   geneSymbol: string;
   organism: string;
+  target?: GenomeTargetRef;
   finalReport?: string;
   sources?: SourceLike[];
   confidence?: number | null;
@@ -264,12 +270,59 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
   if (dbXrefs.length > 0) updates.db_xref = dbXrefs;
   if (evidence.length > 0) updates.codexomics_research_evidence = evidence;
 
+  const generatedAt = new Date().toISOString();
+  const sourceRecords: EvidenceRecord[] = evidenceDetails.map((detail, index) => {
+    const type = detail.type === 'source' ? 'citation' : detail.type;
+    const sourceId = detail.id || detail.url || detail.label;
+    return {
+      id: `evidence_${index + 1}`,
+      type,
+      label: detail.label,
+      sourceId,
+      url: detail.url,
+      database: detail.database,
+      retrievedAt: generatedAt,
+      sourceHash: createHash('sha256').update(JSON.stringify(detail)).digest('hex'),
+      supporting: true,
+    };
+  });
+  const evidenceIds = sourceRecords.map(record => record.id);
+  const claims: AnnotationChangeSetProposal['claims'] = [];
+  const operations: AnnotationOperation[] = [];
+  for (const [field, value] of Object.entries(updates)) {
+    const claim = {
+      id: `claim_${claims.length + 1}`,
+      field,
+      value,
+      evidenceIds,
+      confidence: input.confidence ?? null,
+    };
+    claims.push(claim);
+    operations.push({
+      op: field === 'db_xref' ? 'addDbxref' : field === 'codexomics_research_evidence' ? 'addEvidenceLink' : 'addQualifier',
+      field,
+      value,
+      claimIds: [claim.id],
+    });
+  }
+
   return {
-    schema: 'codexomics.gene_annotation_merge.v1',
+    schema: 'codexomics.annotation-change-set.v2',
+    status: input.target ? 'ready_for_validation' : 'draft_requires_target',
     target: {
+      ...(input.target || {}),
       geneSymbol: input.geneSymbol,
       organism: input.organism,
     },
+    baseRevision: input.target?.annotationRevision,
+    evidenceManifest: {
+      schema: 'dgr.evidence-manifest.v1',
+      generatedAt,
+      pipelineVersion: process.env.npm_package_version || '0.22.0',
+      sourceRecords,
+    },
+    claims,
+    operations,
     summary,
     confidence: input.confidence ?? null,
     evidence,
@@ -283,7 +336,7 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
     dbXrefs,
     reportUrl: input.reportUrl,
     detailsUrl: input.detailsUrl,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     mergeHints: {
       conservative: true,
       overwriteProduct: false,
