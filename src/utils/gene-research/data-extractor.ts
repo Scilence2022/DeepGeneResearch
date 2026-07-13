@@ -49,11 +49,11 @@ export class GeneDataExtractor {
   private extractionRules: GeneExtractionRules;
   private literatureValidator: LiteratureValidator;
 
-  constructor(geneSymbol: string, organism: string) {
+  constructor(geneSymbol: string, organism: string, signal?: AbortSignal) {
     this.geneSymbol = geneSymbol;
     this.organism = organism;
     this.extractionRules = new GeneExtractionRules();
-    this.literatureValidator = new LiteratureValidator();
+    this.literatureValidator = new LiteratureValidator(signal);
   }
 
   async extractFromContent(content: string, source: string): Promise<Partial<GeneDataExtractionResult>> {
@@ -96,7 +96,7 @@ export class GeneDataExtractor {
         evolutionaryData: this.extractEvolutionaryData(content),
         // Convert enhanced references back to standard format for compatibility
         literatureReferences: uniqueReferences
-          .filter(ref => ref.qualityMetadata?.verified || ref.qualityMetadata?.confidenceScore > 50)
+          .filter(ref => ref.qualityMetadata?.verified || ref.qualityMetadata?.confidenceScore > 0.5)
           .map(ref => ({
           pmid: ref.pmid,
           title: ref.title,

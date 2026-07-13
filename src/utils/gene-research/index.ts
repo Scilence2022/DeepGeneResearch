@@ -31,6 +31,7 @@ export interface GeneResearchConfig {
   maxSearchResults?: number;
   searchProviders?: string[];
   language?: string;
+  signal?: AbortSignal;
 }
 
 export interface GeneResearchResult {
@@ -64,33 +65,42 @@ export class GeneResearchEngine {
       diseaseContext: config.diseaseContext,
       experimentalApproach: config.experimentalApproach
     });
-    this.dataExtractor = new GeneDataExtractor(config.geneSymbol, config.organism);
+    this.dataExtractor = new GeneDataExtractor(config.geneSymbol, config.organism, config.signal);
     this.visualizationGenerator = createGeneVisualizationGenerator(config.geneSymbol, config.organism);
     this.qualityControl = createGeneQualityControl(config.geneSymbol, config.organism);
-    this.apiIntegrations = createGeneAPIIntegrations(config.geneSymbol, config.organism);
+    this.apiIntegrations = createGeneAPIIntegrations(config.geneSymbol, config.organism, undefined, config.signal);
+  }
+
+  private assertNotCancelled(): void {
+    this.config.signal?.throwIfAborted();
   }
 
   async conductResearch(): Promise<GeneResearchResult> {
     const startTime = Date.now();
     
     try {
+      this.assertNotCancelled();
       // Phase 1: Generate research queries
       console.log('Phase 1: Generating research queries...');
       const queries = this.generateResearchQueries();
+      this.assertNotCancelled();
       
       // Phase 2: Execute searches
       console.log('Phase 2: Executing searches...');
       const searchResults = await this.executeSearches(queries);
+      this.assertNotCancelled();
       
       // Phase 3: Extract and process data
       console.log('Phase 3: Extracting and processing data...');
       const extractedData = await this.extractAndProcessData(searchResults);
+      this.assertNotCancelled();
       
       // Phase 4: API integration (if enabled)
       let apiData = null;
       if (this.config.enableAPIIntegration) {
         console.log('Phase 4: Integrating API data...');
         apiData = await this.integrateAPIData();
+        this.assertNotCancelled();
         if (apiData) {
           this.mergeAPIData(extractedData, apiData);
         }
@@ -115,6 +125,7 @@ export class GeneResearchEngine {
       // Phase 7: Generate report
       console.log('Phase 7: Generating research report...');
       const report = this.generateReport(extractedData, visualizations, qualityMetrics);
+      this.assertNotCancelled();
       
       // Phase 8: Compile workflow
       const workflow = this.compileWorkflow(extractedData);
@@ -151,6 +162,7 @@ export class GeneResearchEngine {
     const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'];
 
     for (const query of queries) {
+      this.assertNotCancelled();
       try {
         const provider = query.database || 'pubmed';
         if (searchProviders.includes(provider)) {
@@ -159,10 +171,12 @@ export class GeneResearchEngine {
             query: query.query,
             geneSymbol: this.config.geneSymbol,
             organism: this.config.organism,
-            maxResult: this.config.maxSearchResults || 10
+            maxResult: this.config.maxSearchResults || 10,
+            signal: this.config.signal,
           });
           
           searchResults.set(query.query, result);
+          this.assertNotCancelled();
         }
       } catch (error) {
         console.error(`Search error for query "${query.query}":`, error);
@@ -250,10 +264,13 @@ export class GeneResearchEngine {
 
     // Process each search result
     for (const [, result] of searchResults) {
+      this.assertNotCancelled();
       if (result.sources && result.sources.length > 0) {
         for (const source of result.sources) {
+          this.assertNotCancelled();
           const content = `${source.title}\n${source.content}`;
           const partialData = await this.dataExtractor.extractFromContent(content, source.database || 'unknown');
+          this.assertNotCancelled();
           
           // Merge extracted data
           this.mergeExtractedData(extractedData, partialData);
@@ -625,4 +642,3 @@ export * from './visualization-generators';
 export * from './quality-control';
 export * from './api-integrations';
 export * from './report-templates';
-export * from './codexomics-annotation';

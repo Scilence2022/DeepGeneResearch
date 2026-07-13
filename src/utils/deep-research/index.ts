@@ -505,7 +505,7 @@ class DeepResearch {
     try {
       // Check if this is a gene research query
       if (isGeneResearchQuery(query)) {
-        return await this.conductGeneResearch(query, taskId);
+        return await this.conductGeneResearch(query, taskId, undefined, undefined, enableCitationImage);
       }
 
       // Update task status if taskId is provided
@@ -594,9 +594,12 @@ class DeepResearch {
       specificAspects?: string[];
       diseaseContext?: string;
       experimentalApproach?: string;
-    }
+    },
+    signal?: AbortSignal,
+    enableVisualization = true
   ) {
     try {
+      signal?.throwIfAborted();
       // Update task status if taskId is provided
       if (taskId) {
         this.onMessage("task-status", {
@@ -626,16 +629,18 @@ class DeepResearch {
         reportType: 'comprehensive',
         enableAPIIntegration: true,
         enableQualityControl: true,
-        enableVisualization: true,
-        maxSearchResults: 20,
+        enableVisualization,
+        maxSearchResults: Math.min(20, Math.max(1, this.options.searchProvider.maxResult ?? 5)),
         searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'],
-        language: this.options.language
+        language: this.options.language,
+        signal,
       });
 
       this.onMessage("progress", { step: "gene-research", status: "processing" });
       
       // Conduct gene research
       const result = await geneEngine.conductResearch();
+      signal?.throwIfAborted();
 
       this.onMessage("progress", { step: "gene-research", status: "end" });
 
@@ -655,10 +660,10 @@ class DeepResearch {
         };
       });
 
-      const images = result.visualizations.map(viz => ({
+      const images = enableVisualization ? result.visualizations.map(viz => ({
         url: `data:image/svg+xml;base64,${Buffer.from(viz.content).toString('base64')}`,
         description: viz.title
-      }));
+      })) : [];
 
       const finalReport = result.report.title + '\n\n' + result.report.sections.map((s: any) => s.content).join('\n\n');
 
@@ -670,7 +675,7 @@ class DeepResearch {
         images,
         geneResearch: {
           qualityMetrics: result.qualityMetrics,
-          visualizations: result.visualizations,
+          visualizations: enableVisualization ? result.visualizations : [],
           workflow: result.workflow
         }
       };

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { taskStore } from '@/services/task-store';
-import { taskQueue } from '@/services/task-queue';
+import { IdempotencyConflictError, taskStore } from '@/services/task-store';
+import { TaskValidationError, taskQueue } from '@/services/task-queue';
 import { GeneResearchParameters } from '@/models/task';
 import { requireMcpAuth } from '../auth';
 
@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   if (unauthorized) return unauthorized;
 
   try {
+    await taskQueue.start();
     const tasks = await taskStore.getAllTasks();
     return NextResponse.json(tasks);
   } catch (error) {
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     console.error('Error creating task:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
+      { status: error instanceof IdempotencyConflictError ? 409 : error instanceof TaskValidationError ? 400 : 500 }
     );
   }
 }

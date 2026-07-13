@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { taskStore } from '@/services/task-store';
 import { taskQueue } from '@/services/task-queue';
 import { requireMcpAuth } from '../../auth';
+import { projectTaskResult, type TaskResultMode } from '@/services/task-result-projection';
 
 // GET /api/mcp/tasks/[taskId] - 获取单个任务
 export async function GET(
@@ -13,6 +14,7 @@ export async function GET(
 
   const { taskId } = await params;
   try {
+    await taskQueue.start();
     const task = await taskStore.getTask(taskId);
     
     if (!task) {
@@ -22,7 +24,19 @@ export async function GET(
       );
     }
     
-    return NextResponse.json(task);
+    const requestedMode = request.nextUrl.searchParams.get('resultMode') || 'full';
+    if (requestedMode !== 'full' && requestedMode !== 'annotation') {
+      return NextResponse.json(
+        { error: 'resultMode must be full or annotation' },
+        { status: 400 }
+      );
+    }
+    const resultMode = requestedMode as TaskResultMode;
+    return NextResponse.json({
+      ...task,
+      resultMode,
+      result: projectTaskResult(task.result, resultMode),
+    });
   } catch (error) {
     console.error(`Error getting task ${taskId}:`, error);
     return NextResponse.json(

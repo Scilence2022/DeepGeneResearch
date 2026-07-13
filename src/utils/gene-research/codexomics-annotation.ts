@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { assertAnnotationChangeSetProposalIntegrity } from '@/contracts/annotation-change-set';
 import type {
   AnnotationChangeSetProposal,
   AnnotationOperation,
@@ -19,7 +20,7 @@ export interface CodeXomicsEvidenceDetail {
 
 export type CodeXomicsAnnotationProposal = Omit<AnnotationChangeSetProposal, 'target'> & {
   /** Compatibility fields retained for older report viewers. They are not a commit API. */
-  target: Partial<GenomeTargetRef> & { geneSymbol?: string | null; organism?: string };
+  target: Partial<GenomeTargetRef> & { geneSymbol?: string | null; organism?: string | null };
   summary: string;
   confidence: number | null;
   evidence: string[];
@@ -86,6 +87,12 @@ function stripMarkdown(text: string): string {
 function truncate(text: string, maxLength: number): string {
   const clean = stripMarkdown(text);
   return clean.length > maxLength ? `${clean.slice(0, maxLength - 3).trim()}...` : clean;
+}
+
+function normalizeConfidence(confidence?: number | null): number | null {
+  return typeof confidence === 'number' && Number.isFinite(confidence) && confidence >= 0 && confidence <= 1
+    ? confidence
+    : null;
 }
 
 function extractSummary(reportText: string): string {
@@ -226,6 +233,33 @@ function extractEvidenceFromSources(sources: SourceLike[]): CodeXomicsEvidenceDe
   return details.slice(0, 30);
 }
 
+function findEvidenceSourcePayload(detail: CodeXomicsEvidenceDetail, sources: SourceLike[]): string {
+  const identifiers = dedupe([detail.id, detail.url, detail.label]).map(value => value.toLowerCase());
+  for (const source of sources) {
+    const sourceText = sourceToText(source);
+    if (!sourceText) continue;
+
+    if (source && typeof source === 'object') {
+      const sourceIdentifiers = dedupe([
+        source.pmid ? `PMID:${source.pmid}` : null,
+        source.pmid ? String(source.pmid) : null,
+        source.doi ? `DOI:${source.doi}` : null,
+        source.doi ? String(source.doi) : null,
+        source.url,
+      ]).map(value => value.toLowerCase());
+      if (identifiers.some(identifier => sourceIdentifiers.includes(identifier))) {
+        return sourceText;
+      }
+    }
+
+    const lowerSourceText = sourceText.toLowerCase();
+    if (identifiers.some(identifier => lowerSourceText.includes(identifier))) {
+      return sourceText;
+    }
+  }
+  return '';
+}
+
 function extractAnnotationTerms(reportText: string, sources: SourceLike[]) {
   const text = [reportText, ...sources.map(sourceToText)].join('\n');
 
@@ -257,20 +291,21 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
   const evidence = dedupe(evidenceDetails.map((detail) => detail.label)).slice(0, 30);
   const terms = extractAnnotationTerms(finalReport, sources);
   const dbXrefs = dedupe(evidence.filter((item) => /^(PMID|DOI):/i.test(item)));
-  const updates: Record<string, string | string[]> = {};
+  const candidateUpdates: Record<string, string | string[]> = {};
 
-  if (summary) {
-    updates.function_research_summary = summary;
-    updates.note = `Deep Gene Research summary: ${summary}`;
-  }
-  if (terms.ecNumbers.length > 0) updates.EC_number = terms.ecNumbers;
-  if (terms.goTerms.length > 0) updates.go_terms = terms.goTerms;
-  if (terms.koTerms.length > 0) updates.ko = terms.koTerms;
-  if (terms.pathwayTerms.length > 0) updates.pathway = terms.pathwayTerms;
-  if (dbXrefs.length > 0) updates.db_xref = dbXrefs;
-  if (evidence.length > 0) updates.codexomics_research_evidence = evidence;
+  // Narrative text remains proposal/report metadata. It is not a mutating
+  // qualifier until DGR can provide sentence-level cited spans or entailment
+  // evidence for every clause.
+  if (terms.ecNumbers.length > 0) candidateUpdates.EC_number = terms.ecNumbers;
+  if (terms.goTerms.length > 0) candidateUpdates.go_terms = terms.goTerms;
+  if (terms.koTerms.length > 0) candidateUpdates.ko = terms.koTerms;
+  if (terms.pathwayTerms.length > 0) candidateUpdates.pathway = terms.pathwayTerms;
+  if (dbXrefs.length > 0) candidateUpdates.db_xref = dbXrefs;
+  if (evidence.length > 0) candidateUpdates.codexomics_research_evidence = evidence;
 
   const generatedAt = new Date().toISOString();
+  const confidence = normalizeConfidence(input.confidence);
+  const evidenceSourcePayloads = evidenceDetails.map(detail => findEvidenceSourcePayload(detail, sources));
   const sourceRecords: EvidenceRecord[] = evidenceDetails.map((detail, index) => {
     const type = detail.type === 'source' ? 'citation' : detail.type;
     const sourceId = detail.id || detail.url || detail.label;
@@ -282,38 +317,72 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
       url: detail.url,
       database: detail.database,
       retrievedAt: generatedAt,
-      sourceHash: createHash('sha256').update(JSON.stringify(detail)).digest('hex'),
-      supporting: true,
+      // Bind the manifest to the retrieved source payload when available, not
+      // merely to its citation label. This lets downstream audit detect source
+      // content changes while retaining citation-only evidence records.
+      sourceHash: createHash('sha256')
+        .update(JSON.stringify({ detail, sourcePayload: evidenceSourcePayloads[index] }))
+        .digest('hex'),
+      supporting: Boolean(evidenceSourcePayloads[index]),
     };
   });
-  const evidenceIds = sourceRecords.map(record => record.id);
   const claims: AnnotationChangeSetProposal['claims'] = [];
   const operations: AnnotationOperation[] = [];
-  for (const [field, value] of Object.entries(updates)) {
-    const claim = {
-      id: `claim_${claims.length + 1}`,
-      field,
-      value,
-      evidenceIds,
-      confidence: input.confidence ?? null,
-    };
-    claims.push(claim);
-    operations.push({
-      op: field === 'db_xref' ? 'addDbxref' : field === 'codexomics_research_evidence' ? 'addEvidenceLink' : 'addQualifier',
-      field,
-      value,
-      claimIds: [claim.id],
-    });
+  const updates: Record<string, string | string[]> = {};
+  for (const [field, value] of Object.entries(candidateUpdates)) {
+    const candidateValues = Array.isArray(value) ? value : [value];
+    const supportedValues: string[] = [];
+
+    for (const candidateValue of candidateValues) {
+      const normalizedValue = String(candidateValue).toLowerCase();
+      const evidenceIds = sourceRecords
+        .filter((record, index) => {
+          if (!record.supporting) return false;
+          if (field === 'codexomics_research_evidence' || field === 'db_xref') {
+            return record.label.toLowerCase().includes(normalizedValue);
+          }
+          if (['EC_number', 'go_terms', 'ko', 'pathway'].includes(field)) {
+            const payload = evidenceSourcePayloads[index].toLowerCase();
+            return Boolean(payload) && payload.includes(normalizedValue);
+          }
+          return false;
+        })
+        .map(record => record.id);
+      if (evidenceIds.length === 0) continue;
+
+      const supportedValue = String(candidateValue);
+      supportedValues.push(supportedValue);
+      const claim = {
+        id: `claim_${claims.length + 1}`,
+        field,
+        value: supportedValue,
+        evidenceIds,
+        confidence,
+      };
+      claims.push(claim);
+      operations.push({
+        op: field === 'db_xref' ? 'addDbxref' : field === 'codexomics_research_evidence' ? 'addEvidenceLink' : 'addQualifier',
+        field,
+        value: supportedValue,
+        claimIds: [claim.id],
+      });
+    }
+
+    if (supportedValues.length > 0) {
+      updates[field] = Array.isArray(value) ? supportedValues : supportedValues[0];
+    }
   }
 
-  return {
+  const proposal: CodeXomicsAnnotationProposal = {
     schema: 'codexomics.annotation-change-set.v2',
-    status: input.target ? 'ready_for_validation' : 'draft_requires_target',
-    target: {
-      ...(input.target || {}),
-      geneSymbol: input.geneSymbol,
-      organism: input.organism,
-    },
+    status: !input.target
+      ? 'draft_requires_target'
+      : operations.length > 0
+        ? 'ready_for_validation'
+        : 'draft_requires_evidence',
+    // An exact CodeXomics target is immutable provenance. The research query's
+    // display symbol must never overwrite the symbol resolved by CodeXomics.
+    target: input.target ? { ...input.target } : { geneSymbol: input.geneSymbol, organism: input.organism },
     baseRevision: input.target?.annotationRevision,
     evidenceManifest: {
       schema: 'dgr.evidence-manifest.v1',
@@ -324,7 +393,7 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
     claims,
     operations,
     summary,
-    confidence: input.confidence ?? null,
+    confidence,
     evidence,
     evidenceDetails,
     sources: evidence,
@@ -343,4 +412,6 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
       preserveExistingProduct: true,
     },
   };
+  assertAnnotationChangeSetProposalIntegrity(proposal);
+  return proposal;
 }

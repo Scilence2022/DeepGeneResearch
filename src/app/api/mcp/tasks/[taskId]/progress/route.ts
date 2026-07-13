@@ -14,6 +14,7 @@ export async function GET(
   if (unauthorized) return unauthorized;
 
   const { taskId } = await params;
+  await taskQueue.start();
   const existingTask = await taskStore.getTask(taskId);
 
   if (!existingTask) {
@@ -25,14 +26,34 @@ export async function GET(
 
   // 使用 ReadableStream 实现 SSE
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       const encoder = new TextEncoder();
+      let closed = false;
       
       const sendMessage = (data: any) => {
+        if (closed) return;
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         } catch (e) {
           // Connection might be closed
+        }
+      };
+
+      const cleanup = () => {
+        taskQueue.off('task:progress', progressHandler);
+        taskQueue.off('task:completed', completedHandler);
+        taskQueue.off('task:failed', failedHandler);
+        taskQueue.off('task:cancelled', cancelledHandler);
+      };
+
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        cleanup();
+        try {
+          controller.close();
+        } catch {
+          // Stream may already have been closed by the client.
         }
       };
 
@@ -45,6 +66,7 @@ export async function GET(
             progress,
             step,
             status: task.status,
+            eventSeq: task.eventSeq,
             updatedAt: new Date().toISOString(),
           });
         }
@@ -59,9 +81,10 @@ export async function GET(
             status: 'completed',
             progress: 100,
             result,
+            eventSeq: task.eventSeq,
             updatedAt: new Date().toISOString(),
           });
-          controller.close();
+          close();
         }
       };
 
@@ -73,9 +96,25 @@ export async function GET(
             taskId: task.id,
             status: 'failed',
             error,
+            eventSeq: task.eventSeq,
             updatedAt: new Date().toISOString(),
           });
-          controller.close();
+          close();
+        }
+      };
+
+      const cancelledHandler = (task: any) => {
+        if (task.id === taskId) {
+          sendMessage({
+            type: 'cancelled',
+            taskId: task.id,
+            status: 'cancelled',
+            progress: task.progress,
+            step: task.step,
+            eventSeq: task.eventSeq,
+            updatedAt: new Date().toISOString(),
+          });
+          close();
         }
       };
 
@@ -83,26 +122,33 @@ export async function GET(
       taskQueue.on('task:progress', progressHandler);
       taskQueue.on('task:completed', completedHandler);
       taskQueue.on('task:failed', failedHandler);
+      taskQueue.on('task:cancelled', cancelledHandler);
 
       // 处理连接关闭
       request.signal.addEventListener('abort', () => {
-        taskQueue.off('task:progress', progressHandler);
-        taskQueue.off('task:completed', completedHandler);
-        taskQueue.off('task:failed', failedHandler);
-        try {
-          controller.close();
-        } catch (e) {
-          // Already closed
-        }
+        close();
       });
+
+      // Re-read only after listeners are installed so a terminal transition
+      // cannot be lost between the initial existence check and subscription.
+      const currentTask = await taskStore.getTask(taskId);
+      if (!currentTask || closed) return;
 
       // 发送连接确认消息
       sendMessage({
         type: 'connected',
         message: `Connected to task ${taskId} progress updates`,
-        task: existingTask,
+        task: currentTask,
         timestamp: new Date().toISOString(),
       });
+
+      if (currentTask.status === 'completed') {
+        completedHandler(currentTask, currentTask.result);
+      } else if (currentTask.status === 'failed') {
+        failedHandler(currentTask, currentTask.error || 'Research task failed');
+      } else if (currentTask.status === 'cancelled') {
+        cancelledHandler(currentTask);
+      }
     }
   });
 

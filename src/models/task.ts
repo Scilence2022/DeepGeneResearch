@@ -4,6 +4,25 @@ import type { GenomeTargetRef } from '@/contracts/annotation-change-set';
 // 任务状态类型
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancel_requested' | 'cancelled';
 
+export const TERMINAL_TASK_STATUSES: ReadonlySet<TaskStatus> = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+]);
+
+const ALLOWED_TASK_TRANSITIONS: Record<TaskStatus, ReadonlySet<TaskStatus>> = {
+  pending: new Set(['pending', 'in_progress', 'failed', 'cancel_requested', 'cancelled']),
+  in_progress: new Set(['in_progress', 'completed', 'failed', 'cancel_requested', 'cancelled']),
+  cancel_requested: new Set(['cancel_requested', 'cancelled']),
+  completed: new Set(),
+  failed: new Set(),
+  cancelled: new Set(),
+};
+
+export function canTransitionTaskStatus(from: TaskStatus, to: TaskStatus): boolean {
+  return ALLOWED_TASK_TRANSITIONS[from].has(to);
+}
+
 // 任务参数类型
 export interface GeneResearchParameters {
   geneSymbol: string;
@@ -52,6 +71,7 @@ export function createTask(parameters: GeneResearchParameters): GeneResearchTask
     updatedAt: now,
     parameters,
     eventSeq: 0,
+    attempts: 0,
   };
 }
 
@@ -62,11 +82,15 @@ export function updateTaskStatus(
   progress?: number,
   step?: string
 ): GeneResearchTask {
+  if (!canTransitionTaskStatus(task.status, status)) {
+    return task;
+  }
+
   return {
     ...task,
     status,
-    progress: progress ?? task.progress,
-    step,
+    progress: progress === undefined ? task.progress : Math.max(0, Math.min(100, progress)),
+    step: step ?? task.step,
     updatedAt: new Date(),
     eventSeq: task.eventSeq + 1,
   };
@@ -77,6 +101,10 @@ export function updateTaskResult(
   task: GeneResearchTask,
   result: any
 ): GeneResearchTask {
+  if (!canTransitionTaskStatus(task.status, 'completed')) {
+    return task;
+  }
+
   return {
     ...task,
     status: 'completed',
@@ -92,6 +120,10 @@ export function updateTaskError(
   task: GeneResearchTask,
   error: string
 ): GeneResearchTask {
+  if (!canTransitionTaskStatus(task.status, 'failed')) {
+    return task;
+  }
+
   return {
     ...task,
     status: 'failed',

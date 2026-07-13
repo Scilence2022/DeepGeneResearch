@@ -311,7 +311,7 @@ export class EnhancedQualityControl {
     }
     
     if (warnings.some(w => w.includes('fabricated'))) {
-      recommendations.push('Implement manual review of all references with confidence scores below 50');
+      recommendations.push('Implement manual review of all references with confidence scores below 0.5');
       recommendations.push('Use reference management software to detect potential fabrication');
     }
     

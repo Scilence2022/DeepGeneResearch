@@ -172,7 +172,7 @@ Visit [http://localhost:3000](http://localhost:3000) to access the application.
 
 ## 📋 **Prerequisites**
 
-- **Node.js**: Version 18.18.0 or later
+- **Node.js**: Version 18.18.0 or later (Node 20 or 22 LTS recommended)
 - **Package Manager**: pnpm (recommended), npm, or yarn
 - **API Keys**: At least one AI provider API key
 - **Browser**: Modern browser with JavaScript enabled
@@ -193,11 +193,19 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 TAVILY_API_KEY=your_tavily_api_key
 EXA_API_KEY=your_exa_api_key
 
-# Required for MCP and crawler routes (Bearer token)
-ACCESS_PASSWORD=your_secure_password
+# Required for MCP and crawler routes (at least 16 characters)
+ACCESS_PASSWORD=replace_with_a_long_random_shared_secret
 
-# Development-only escape hatch; never set this in production
-# DGR_ALLOW_INSECURE_LOCAL=true
+# Development-only global auth bypass; never use on a shared host
+# DGR_ALLOW_UNAUTHENTICATED_DEV=true
+# Development-only file storage override for a detected ephemeral runtime
+# DGR_ALLOW_EPHEMERAL_TASK_STORAGE=true
+
+# Durable queue settings for a long-lived, single-process Node deployment
+# MCP_TASK_STORAGE_FILE=/var/lib/deep-gene-research/tasks.json
+# DGR_MAX_CONCURRENT_RESEARCH=2
+# DGR_WORKER_COUNT=1
+# MCP_SERVER_BASE_URL=https://dgr.example.org
 
 # Optional: Custom Model Lists
 NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
@@ -368,6 +376,7 @@ flowchart TB
 - Automatic HTTPS
 - Global CDN
 - Serverless functions
+- Suitable for the interactive stateless UI; durable queued MCP research is intentionally disabled because the function filesystem is ephemeral
 
 ### **Cloudflare Pages**
 - Edge computing
@@ -419,7 +428,8 @@ Deep Gene Research provides a comprehensive MCP Server for integration with AI a
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `deep-gene-research` | Queue specialized gene function research | geneSymbol, organism, researchFocus, userPrompt |
-| `get-task-status` | Poll queued research task status/results | taskId |
+| `get-task-status` | Poll queued research task status/results | taskId, resultMode |
+| `cancel-research-run` | Request cancellation without deleting the audit record | taskId |
 | `write-research-plan` | Generate research plan based on query | query, language |
 | `generate-SERP-query` | Generate data collection tasks | plan, language |
 | `search-task` | Execute search queries | tasks, language, maxResult |
@@ -479,6 +489,8 @@ Deep Gene Research provides a comprehensive MCP Server for integration with AI a
 - `taskUrl`: HTTP endpoint for direct polling
 - `progressUrl`: SSE endpoint for progress updates
 
+Task status is one of `pending`, `in_progress`, `completed`, `failed`, `cancel_requested`, or `cancelled`. Poll `get-task-status` until a terminal status is returned. Use `resultMode: "annotation"` when an agent only needs the bounded CodeXomics proposal and compact metadata; `full` is the default and retains the complete research result. The equivalent HTTP projection is `GET /api/mcp/tasks/{taskId}?resultMode=annotation`.
+
 When the task completes, its result includes:
 
 - **Workflow Data**: Gene identification, functional analysis, protein info
@@ -504,12 +516,17 @@ When the task completes, its result includes:
 {
   "mcpServers": {
     "deep-gene-research": {
-      "url": "https://deep-gene-research.vercel.app/api/mcp",
-      "transportType": "streamable-http"
+      "url": "http://127.0.0.1:3000/api/mcp",
+      "transportType": "streamable-http",
+      "headers": {
+        "Authorization": "Bearer YOUR_ACCESS_PASSWORD"
+      }
     }
   }
 }
 ```
+
+Queued MCP research requires this URL to point to a long-lived Node deployment with durable storage. The public Vercel UI is not a durable task worker.
 
 **Custom Application Integration:**
 ```typescript
@@ -536,6 +553,15 @@ const response = await fetch('https://your-domain.com/api/mcp', {
   })
 });
 ```
+
+##### **CodeXomics Integration**
+
+There are two supported integration paths:
+
+1. An external agent connects to DGR directly, passes the exact object returned by CodeXomics `resolve_annotation_target` as `target`, polls with `resultMode: "annotation"`, and passes `result.annotationProposal` to CodeXomics `create_annotation_changeset`.
+2. The CodeXomics ChatBox calls its built-in `start_annotation_research` workflow. CodeXomics' Electron main process sends DGR requests through a credential-holding proxy configured with `DGR_MCP_URL` and `DGR_MCP_TOKEN`; the renderer never receives the bearer secret.
+
+A target-bound proposal is not a commit. CodeXomics validates the evidence and target again, creates a reviewable diff, requires a separate curator approval, and applies the ChangeSet only while its target hash and revision still match.
 
 ### **Custom Model Configuration**
 
@@ -631,29 +657,36 @@ Each database is assigned a quality score based on:
 ## 📈 **Performance & Scalability**
 
 - **Response Time**: 2-3 minutes for comprehensive reports
-- **Concurrent Users**: Works best in a single long-lived Node process. For horizontal/serverless deployment, use durable task storage before relying on queued MCP tasks.
+- **Concurrent Users**: Durable MCP research currently requires a single long-lived Node process. Known ephemeral runtimes fail closed; `DGR_ALLOW_EPHEMERAL_TASK_STORAGE=true` is a non-production development override only and cannot enable ephemeral storage in production.
+- **Worker Topology**: Independently launched Node processes must not share the JSON task file. `DGR_WORKER_COUNT=1` (or `WEB_CONCURRENCY=1`) is enforced when declared, but the value cannot detect a separately launched second process. Horizontal deployment requires a database queue with cross-process leases.
 - **Caching**: In-process caching reduces repeated provider calls while the process is alive
-- **Access Control**: MCP and crawler routes require `Authorization: Bearer <ACCESS_PASSWORD>`. They fail closed when the password is absent, except for explicit non-production `DGR_ALLOW_INSECURE_LOCAL=true` development mode.
-- **Error Recovery**: Automatic retry mechanisms for queued tasks
+- **Access Control**: MCP routes require `Authorization: Bearer <ACCESS_PASSWORD>` with a shared secret of at least 16 characters; the browser crawler uses a short-lived signature derived from the same secret. Routes fail closed when the secret is absent or weak. `DGR_ALLOW_UNAUTHENTICATED_DEV=true` is an explicit global bypass for isolated non-production environments—not a loopback check.
+- **Error Recovery**: Interrupted `pending` and `in_progress` tasks are re-queued after restart. The durable retry budget is four total execution attempts, including attempts before a restart. Cancellation and terminal records are retained for audit.
+
+If the task ledger cannot be parsed or violates its invariants, DGR renames it to a `.corrupt.*` quarantine and locks task storage. Restore a verified ledger or reconcile the quarantined task and idempotency records before reopening the queue. Starting from an empty file without reconciliation can duplicate research work.
 
 ## 🔌 **MCP Server Integration Guide**
 
 ### **Quick Start with Claude Desktop**
 
 1. **Download Claude Desktop** from [Anthropic's website](https://claude.ai/download)
-2. **Configure MCP Server** in Claude Desktop settings:
+2. **Run a long-lived DGR Node service** with `ACCESS_PASSWORD`, `MCP_TASK_STORAGE_FILE`, and `DGR_WORKER_COUNT=1` configured.
+3. **Configure MCP Server** in Claude Desktop settings:
    ```json
    {
      "mcpServers": {
        "deep-gene-research": {
-         "url": "https://deep-gene-research.vercel.app/api/mcp",
+         "url": "http://127.0.0.1:3000/api/mcp",
          "transportType": "streamable-http",
-         "timeout": 600
+         "timeout": 600,
+         "headers": {
+           "Authorization": "Bearer YOUR_ACCESS_PASSWORD"
+         }
        }
      }
    }
    ```
-3. **Start Research**: Ask Claude to research any gene using the MCP tools
+4. **Start Research**: Ask Claude to research any gene using the MCP tools
 
 ### **Example Claude Prompts**
 
@@ -791,8 +824,16 @@ Test MCP Server connectivity:
 ```bash
 curl -X POST https://your-domain.com/api/mcp \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_PASSWORD" \
   -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}'
 ```
+
+### **Current Production Boundaries**
+
+- `ACCESS_PASSWORD` is one service-wide bearer secret, not a user identity or scope system. Multi-tenant operation requires an identity-aware reverse proxy and task ownership checks.
+- The JSON task ledger has atomic single-process writes but no cross-process or distributed lease. Do not place it on shared storage for multiple workers.
+- Static provider and MCP secrets need an external secret manager and rotation process in production.
+- An evidence-linked annotation proposal is a research artifact, not an automatically trusted biological annotation. CodeXomics curator review remains mandatory.
 
 ## 🛠️ **Development**
 

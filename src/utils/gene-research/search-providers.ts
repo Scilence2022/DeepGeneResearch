@@ -1,6 +1,8 @@
 // Gene-specific search providers and database integrations
 // Specialized search capabilities for molecular biology databases
 
+import { createFetchSignal } from '@/utils/fetch-signal';
+
 // Database URLs and configurations
 const GENE_DATABASE_URLS = {
   NCBI_EUTILS: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
@@ -24,6 +26,7 @@ export interface GeneSearchProviderOptions {
   organism?: string;
   maxResult?: number;
   scope?: string;
+  signal?: AbortSignal;
 }
 
 export interface GeneSearchResult {
@@ -67,7 +70,8 @@ export async function searchPubMed({
   geneSymbol,
   organism,
   maxResult = 20,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -82,7 +86,7 @@ export async function searchPubMed({
 
     const searchResponse = await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?db=pubmed&term=${encodeURIComponent(searchQuery)}&retmax=${maxResult}&retmode=json`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
     
     const searchData = await searchResponse.json();
@@ -95,7 +99,7 @@ export async function searchPubMed({
     // Fetch detailed information for each PMID
     const detailResponse = await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=pubmed&id=${pmids.join(',')}&retmode=xml&rettype=abstract`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
     const xmlData = await detailResponse.text();
 
@@ -114,6 +118,7 @@ export async function searchPubMed({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('PubMed search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'pubmed', searchTime: 0 } };
   }
@@ -125,7 +130,8 @@ export async function searchUniProt({
   geneSymbol,
   organism,
   maxResult = 10,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -139,7 +145,7 @@ export async function searchUniProt({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.UNIPROT_API}uniprotkb/search?query=${encodeURIComponent(searchQuery)}&format=json&size=${maxResult}`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.json();
@@ -158,6 +164,7 @@ export async function searchUniProt({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('UniProt search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'uniprot', searchTime: 0 } };
   }
@@ -169,7 +176,8 @@ export async function searchNCBIGene({
   geneSymbol,
   organism,
   maxResult = 10,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -183,7 +191,7 @@ export async function searchNCBIGene({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?db=gene&term=${encodeURIComponent(searchQuery)}&retmax=${maxResult}&retmode=json`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.json();
@@ -196,7 +204,7 @@ export async function searchNCBIGene({
     // Fetch detailed gene information
     const detailResponse = await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=gene&id=${geneIds.join(',')}&retmode=xml`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
     const xmlData = await detailResponse.text();
 
@@ -215,6 +223,7 @@ export async function searchNCBIGene({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('NCBI Gene search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'ncbi_gene', searchTime: 0 } };
   }
@@ -226,7 +235,8 @@ export async function searchGEO({
   geneSymbol,
   organism,
   maxResult = 15,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -240,7 +250,7 @@ export async function searchGEO({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.GEO_API}esearch.fcgi?db=gds&term=${encodeURIComponent(searchQuery)}&retmax=${maxResult}&retmode=json`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.json();
@@ -253,7 +263,7 @@ export async function searchGEO({
     // Fetch detailed GEO information
     const detailResponse = await fetch(
       `${GENE_DATABASE_URLS.GEO_API}efetch.fcgi?db=gds&id=${gdsIds.join(',')}&retmode=xml`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
     const xmlData = await detailResponse.text();
 
@@ -272,6 +282,7 @@ export async function searchGEO({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('GEO search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'geo', searchTime: 0 } };
   }
@@ -283,7 +294,8 @@ export async function searchPDB({
   geneSymbol,
   organism,
   maxResult = 10,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -297,7 +309,7 @@ export async function searchPDB({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.PDB_API}search?q=${encodeURIComponent(searchQuery)}&rows=${maxResult}&format=json`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.json();
@@ -316,6 +328,7 @@ export async function searchPDB({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('PDB search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'pdb', searchTime: 0 } };
   }
@@ -326,7 +339,8 @@ export async function searchKEGG({
   query,
   geneSymbol,
   organism,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -340,7 +354,7 @@ export async function searchKEGG({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.KEGG_API}find/genes/${encodeURIComponent(searchQuery)}`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.text();
@@ -359,6 +373,7 @@ export async function searchKEGG({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('KEGG search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'kegg', searchTime: 0 } };
   }
@@ -370,7 +385,8 @@ export async function searchSTRING({
   geneSymbol,
   organism,
   maxResult = 10,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -384,7 +400,7 @@ export async function searchSTRING({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.STRING_API}tsv/network?identifiers=${encodeURIComponent(searchQuery)}&species=${organism || '9606'}&limit=${maxResult}`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.text();
@@ -403,6 +419,7 @@ export async function searchSTRING({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('STRING search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'string', searchTime: 0 } };
   }
@@ -414,7 +431,8 @@ export async function searchOMIM({
   geneSymbol,
   organism,
   maxResult = 10,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -428,7 +446,7 @@ export async function searchOMIM({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.OMIM_API}entry/search?search=${encodeURIComponent(searchQuery)}&limit=${maxResult}&format=json`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.json();
@@ -447,6 +465,7 @@ export async function searchOMIM({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('OMIM search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'omim', searchTime: 0 } };
   }
@@ -457,7 +476,8 @@ export async function searchEnsembl({
   query,
   geneSymbol,
   organism,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -471,7 +491,7 @@ export async function searchEnsembl({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.ENSEMBL_API}lookup/symbol/homo_sapiens/${encodeURIComponent(searchQuery)}?expand=1`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.json();
@@ -490,6 +510,7 @@ export async function searchEnsembl({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('Ensembl search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'ensembl', searchTime: 0 } };
   }
@@ -500,7 +521,8 @@ export async function searchReactome({
   query,
   geneSymbol,
   organism,
-  apiKey
+  apiKey,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -514,7 +536,7 @@ export async function searchReactome({
 
     const response = await fetch(
       `${GENE_DATABASE_URLS.REACTOME_API}search/query?query=${encodeURIComponent(searchQuery)}&species=${organism || 'Homo sapiens'}`,
-      { headers }
+      { headers, signal: createFetchSignal(signal) }
     );
 
     const data = await response.json();
@@ -533,6 +555,7 @@ export async function searchReactome({
       }
     };
   } catch (error) {
+    signal?.throwIfAborted();
     console.error('Reactome search error:', error);
     return { sources: [], images: [], metadata: { totalResults: 0, database: 'reactome', searchTime: 0 } };
   }
@@ -547,7 +570,8 @@ export async function createGeneSearchProvider({
   geneSymbol,
   organism,
   maxResult = 10,
-  scope
+  scope,
+  signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
   const searchOptions = {
     provider,
@@ -557,7 +581,8 @@ export async function createGeneSearchProvider({
     geneSymbol,
     organism,
     maxResult,
-    scope
+    scope,
+    signal,
   };
 
   switch (provider) {

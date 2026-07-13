@@ -3,6 +3,7 @@
 
 import { LiteratureReference } from '@/types/gene-research';
 import { EnhancedQualityControl, LiteratureQualityReport } from './enhanced-quality-control';
+import { createFetchSignal } from '@/utils/fetch-signal';
 
 /**
  * Interface for PubMed API response
@@ -30,7 +31,7 @@ interface PubMedResponse {
 export interface ReferenceQualityMetadata {
   verified: boolean;
   verificationMethod: 'pubmed_api' | 'pattern_validation' | 'manual_review' | 'unknown';
-  confidenceScore: number;
+  confidenceScore: number; // Normalized 0-1 confidence.
   warningFlags: string[];
   isDuplicate?: boolean;
   duplicateOf?: string;
@@ -47,7 +48,7 @@ export interface EnhancedLiteratureReference extends LiteratureReference {
   sourceTracking?: {
     extractedFrom?: string; // The source where this reference was extracted from
     extractionMethod?: string; // How the reference was extracted (PMID pattern, DOI, reference section, etc.)
-    extractionConfidence?: number; // Confidence in the extraction process (0-100)
+    extractionConfidence?: number; // Confidence in the extraction process (0-1)
     processingTimestamp?: number; // When the reference was processed
   };
   volume?: string;
@@ -78,9 +79,11 @@ export class LiteratureValidator {
   private cache = new Map<string, EnhancedLiteratureReference>();
   private qualityControl: EnhancedQualityControl;
   private readonly FABRICATION_CONFIDENCE_THRESHOLD = 0.3; // 0-1 scale
+  private signal?: AbortSignal;
   
-  constructor() {
+  constructor(signal?: AbortSignal) {
     this.qualityControl = new EnhancedQualityControl();
+    this.signal = signal;
   }
 
   /**
@@ -114,6 +117,7 @@ export class LiteratureValidator {
       try {
         enhancedReference = await this.validateByPMID(reference, organism);
       } catch (error) {
+        this.signal?.throwIfAborted();
         console.error(`Error validating PMID ${reference.pmid}:`, error);
         enhancedReference.qualityMetadata.warningFlags.push(
           `Failed to validate PMID via API: ${(error as Error).message}`
@@ -171,7 +175,9 @@ export class LiteratureValidator {
         retmode: 'json',
       });
 
-      const response = await fetch(`${this.apiEndpoint}?${params.toString()}`);
+      const response = await fetch(`${this.apiEndpoint}?${params.toString()}`, {
+        signal: createFetchSignal(this.signal),
+      });
       if (!response.ok) {
         throw new Error(`API request failed with status ${response.status}`);
       }
@@ -566,12 +572,13 @@ export class LiteratureValidator {
           validatedRef.sourceTracking = {
             extractedFrom: ref.source || 'unknown',
             extractionMethod: ref.extractionMethod || 'unknown',
-            extractionConfidence: ref.extractionMethod === 'pmid_pattern' ? 90 : 70,
+            extractionConfidence: ref.extractionMethod === 'pmid_pattern' ? 0.9 : 0.7,
             processingTimestamp: Date.now()
           };
           
           return validatedRef;
         } catch (error) {
+          this.signal?.throwIfAborted();
           console.error('Error processing reference:', error);
           // Create a minimal validated reference for failed validation
           const failedRef: EnhancedLiteratureReference = {
