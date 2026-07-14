@@ -505,7 +505,7 @@ class DeepResearch {
     try {
       // Check if this is a gene research query
       if (isGeneResearchQuery(query)) {
-        return await this.conductGeneResearch(query, taskId);
+        return await this.conductGeneResearch(query, taskId, undefined, undefined, enableCitationImage);
       }
 
       // Update task status if taskId is provided
@@ -586,9 +586,20 @@ class DeepResearch {
   // Gene research specific method
   async conductGeneResearch(
     query: string,
-    taskId?: string
+    taskId?: string,
+    explicitGeneInfo?: {
+      geneSymbol: string;
+      organism: string;
+      researchFocus?: string[];
+      specificAspects?: string[];
+      diseaseContext?: string;
+      experimentalApproach?: string;
+    },
+    signal?: AbortSignal,
+    enableVisualization = true
   ) {
     try {
+      signal?.throwIfAborted();
       // Update task status if taskId is provided
       if (taskId) {
         this.onMessage("task-status", {
@@ -602,7 +613,9 @@ class DeepResearch {
       this.onMessage("progress", { step: "gene-research", status: "start" });
       
       // Extract gene information from query
-      const geneInfo = this.extractGeneInfo(query);
+      // MCP and CodeXomics provide an already resolved target. Never re-infer
+      // its gene or organism from an LLM-facing free-text query.
+      const geneInfo = explicitGeneInfo || this.extractGeneInfo(query);
       
       // Create gene research engine
       const geneEngine = createGeneResearchEngine({
@@ -616,21 +629,24 @@ class DeepResearch {
         reportType: 'comprehensive',
         enableAPIIntegration: true,
         enableQualityControl: true,
-        enableVisualization: true,
-        maxSearchResults: 20,
+        enableVisualization,
+        maxSearchResults: Math.min(20, Math.max(1, this.options.searchProvider.maxResult ?? 5)),
         searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'],
-        language: this.options.language
+        fallbackSearchProvider: this.options.searchProvider,
+        language: this.options.language,
+        signal,
       });
 
       this.onMessage("progress", { step: "gene-research", status: "processing" });
       
       // Conduct gene research
       const result = await geneEngine.conductResearch();
+      signal?.throwIfAborted();
 
       this.onMessage("progress", { step: "gene-research", status: "end" });
 
       // Convert gene research result to standard format
-      const sources = result.workflow.literatureReview.map(ref => {
+      const literatureSources = result.workflow.literatureReview.map(ref => {
         // Create a simple formatted citation string
         const formattedCitation = ref.authors && ref.year
           ? `${ref.authors.slice(0, 3).join(', ')}${ref.authors.length > 3 ? ' et al.' : ''}. (${ref.year}). ${ref.title}. ${ref.journal || ''}.`
@@ -644,11 +660,26 @@ class DeepResearch {
           formattedCitation // Add the formatted citation
         };
       });
+      const requestedGene = geneInfo.geneSymbol.trim().toLowerCase();
+      const sourceMatchesRequestedGene = (source: { title?: string; content?: string; url?: string }) =>
+        [source.title, source.content, source.url]
+          .filter(Boolean)
+          .join('\n')
+          .toLowerCase()
+          .includes(requestedGene);
+      const sources = Array.from(
+        new Map(
+          [...literatureSources, ...(result.sources || [])]
+            .filter(source => sourceMatchesRequestedGene(source))
+            .filter(source => source?.url)
+            .map(source => [source.url, source])
+        ).values()
+      );
 
-      const images = result.visualizations.map(viz => ({
+      const images = enableVisualization ? result.visualizations.map(viz => ({
         url: `data:image/svg+xml;base64,${Buffer.from(viz.content).toString('base64')}`,
         description: viz.title
-      }));
+      })) : [];
 
       const finalReport = result.report.title + '\n\n' + result.report.sections.map((s: any) => s.content).join('\n\n');
 
@@ -660,7 +691,7 @@ class DeepResearch {
         images,
         geneResearch: {
           qualityMetrics: result.qualityMetrics,
-          visualizations: result.visualizations,
+          visualizations: enableVisualization ? result.visualizations : [],
           workflow: result.workflow
         }
       };

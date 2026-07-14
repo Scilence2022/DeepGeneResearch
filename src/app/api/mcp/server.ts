@@ -10,6 +10,7 @@ import {
 } from "../utils";
 import { taskQueue } from "@/services/task-queue";
 import { taskStore } from "@/services/task-store";
+import { projectTaskResult } from "@/services/task-result-projection";
 
 const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
 const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
@@ -71,6 +72,12 @@ export function initDeepResearchServer({
 }
 
 export function initMcpServer() {
+  // Loading an MCP route is also the durable worker's restart signal. The
+  // singleton makes this safe across the stateless MCP server instances.
+  void taskQueue.start().catch(error => {
+    console.error('[TaskQueue] Failed to recover durable research tasks:', error);
+  });
+
   const geneResearchToolDescription =
     "Queue specialized gene function research with custom user prompts and research guidelines.";
 
@@ -95,20 +102,41 @@ export function initMcpServer() {
     "deep-gene-research",
     geneResearchToolDescription,
     {
-      geneSymbol: z.string().describe("The gene symbol to research (e.g., 'lysC', 'BRCA1')."),
-      organism: z.string().describe("The organism name (e.g., 'Escherichia coli', 'Homo sapiens')."),
-      researchFocus: z.array(z.string()).optional().describe("Specific research focus areas."),
-      specificAspects: z.array(z.string()).optional().describe("Specific aspects to investigate."),
-      diseaseContext: z.string().optional().describe("Disease context for the research."),
-      experimentalApproach: z.string().optional().describe("Experimental approach or methodology."),
-      userPrompt: z.string().optional().describe("Custom user research question with {geneSymbol} and {organism} placeholders."),
-      language: z.string().optional().describe("The final report text language."),
-      maxResult: z.number().optional().default(5).describe("Maximum number of search results."),
+      geneSymbol: z.string().min(1).max(128).describe("The gene symbol to research (e.g., 'lysC', 'BRCA1')."),
+      organism: z.string().min(1).max(256).describe("The organism name (e.g., 'Escherichia coli', 'Homo sapiens')."),
+      researchFocus: z.array(z.string().min(1).max(128)).max(20).optional().describe("Specific research focus areas."),
+      specificAspects: z.array(z.string().min(1).max(256)).max(30).optional().describe("Specific aspects to investigate."),
+      diseaseContext: z.string().max(1000).optional().describe("Disease context for the research."),
+      experimentalApproach: z.string().max(1000).optional().describe("Experimental approach or methodology."),
+      userPrompt: z.string().max(8000).optional().describe("Custom user research question with {geneSymbol} and {organism} placeholders."),
+      language: z.string().max(64).optional().describe("The final report text language."),
+      maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum number of search results."),
       enableCitationImage: z.boolean().default(true).optional().describe("Whether to include content-related images in the final report."),
       enableReferences: z.boolean().default(true).optional().describe("Whether to include citation links in search results and final reports."),
       returnReportAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Report as a downloadable URL instead of inline content."),
       returnDetailsAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Details (workflow, sources, metadata) as a downloadable URL instead of inline content."),
       includeCodeXomicsAnnotationProposal: z.boolean().default(true).optional().describe("When true, include a CodeXomics-ready annotationProposal with conservative updates and evidence references."),
+      target: z.object({
+        workspaceId: z.string().min(1).max(512),
+        genomeId: z.string().min(1).max(512),
+        annotationRevision: z.number().int().nonnegative(),
+        featureId: z.string().min(1).max(512),
+        featureHash: z.string().min(1).max(512),
+        annotationId: z.string().max(512).nullable().optional(),
+        featureType: z.string().max(128).nullable().optional(),
+        chromosome: z.string().min(1).max(512),
+        organism: z.string().max(256).nullable().optional(),
+        locusTag: z.string().max(256).nullable().optional(),
+        geneSymbol: z.string().max(128).nullable().optional(),
+        proteinId: z.string().max(256).nullable().optional(),
+        coordinates: z.object({ start: z.number(), end: z.number(), strand: z.union([z.string(), z.number()]).nullable().optional() }).optional(),
+        assemblyAccession: z.string().max(256).nullable().optional(),
+        assemblySha256: z.string().max(128).nullable().optional(),
+        taxonId: z.union([z.string(), z.number()]).nullable().optional(),
+        proteinSha256: z.string().max(128).nullable().optional(),
+      }).optional().describe("Exact immutable target returned by CodeXomics resolve_annotation_target. Required for a proposal that can be committed."),
+      idempotencyKey: z.string().min(1).max(256).optional().describe("Stable key preventing duplicate logical research runs."),
+      correlationId: z.string().min(1).max(256).optional().describe("Cross-service trace ID."),
     },
     async (
       {
@@ -125,15 +153,15 @@ export function initMcpServer() {
         enableReferences = true,
         returnReportAsUrl = false,
         returnDetailsAsUrl = false,
-        includeCodeXomicsAnnotationProposal = true
+        includeCodeXomicsAnnotationProposal = true,
+        target,
+        idempotencyKey,
+        correlationId,
       },
       { signal }
     ) => {
-      signal.addEventListener("abort", () => {
-        throw new Error("The client closed unexpectedly!");
-      });
-
       try {
+        signal.throwIfAborted();
         // 创建异步任务
         const task = await taskQueue.addTask({
           geneSymbol,
@@ -149,7 +177,10 @@ export function initMcpServer() {
           enableReferences,
           returnReportAsUrl,
           returnDetailsAsUrl,
-          includeCodeXomicsAnnotationProposal
+          includeCodeXomicsAnnotationProposal,
+          target,
+          idempotencyKey,
+          correlationId,
         });
 
         // 返回任务 ID 和状态
@@ -157,6 +188,8 @@ export function initMcpServer() {
         return asJsonText({
           taskId: task.id,
           status: task.status,
+          eventSeq: task.eventSeq,
+          correlationId: task.parameters.correlationId || null,
           message: "Research task has been queued. Use get-task-status or the task URL to retrieve results.",
           taskUrl: formatMcpUrl(taskPath),
           progressUrl: formatMcpUrl(`${taskPath}/progress`)
@@ -181,14 +214,15 @@ export function initMcpServer() {
     "get-task-status",
     "Get the status and result of a gene research task.",
     {
-      taskId: z.string().describe("The ID of the task to query."),
+      taskId: z.string().min(1).max(128).describe("The ID of the task to query."),
+      resultMode: z.enum(["full", "annotation"]).optional().default("full").describe(
+        "Use annotation for a bounded projection containing the annotation proposal and compact metadata; full preserves the complete research result."
+      ),
     },
-    async ({ taskId }, { signal }) => {
-      signal.addEventListener("abort", () => {
-        throw new Error("The client closed unexpectedly!");
-      });
-
+    async ({ taskId, resultMode }, { signal }) => {
       try {
+        signal.throwIfAborted();
+        await taskQueue.start();
         const task = await taskStore.getTask(taskId);
         if (!task) {
           return {
@@ -207,9 +241,11 @@ export function initMcpServer() {
           status: task.status,
           progress: task.progress,
           step: task.step,
+          eventSeq: task.eventSeq,
           createdAt: task.createdAt,
           updatedAt: task.updatedAt,
-          result: task.result,
+          resultMode,
+          result: projectTaskResult(task.result, resultMode),
           error: task.error,
           parameters: task.parameters
         });
@@ -229,20 +265,35 @@ export function initMcpServer() {
   );
 
   server.tool(
+    "cancel-research-run",
+    "Request cancellation of a queued or running gene research run. The task record remains available for audit and recovery.",
+    { taskId: z.string().describe("The research run/task ID to cancel.") },
+    async ({ taskId }) => {
+      const cancelled = await taskQueue.cancelTask(taskId);
+      if (!cancelled) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Error: Task ${taskId} cannot be cancelled` }],
+        };
+      }
+      const task = await taskStore.getTask(taskId);
+      return asJsonText({ taskId, status: task?.status || 'cancel_requested', eventSeq: task?.eventSeq || 0 });
+    }
+  );
+
+  server.tool(
     "write-research-plan",
     "Generate a focused research plan from a gene or biology query.",
     {
       query: z.string().describe("The research query to plan."),
       language: z.string().optional().describe("The response language."),
-      maxResult: z.number().optional().default(5).describe("Maximum search results to configure for downstream steps."),
+      maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum search results to configure for downstream steps."),
     },
     async ({ query, language, maxResult }, { signal }) => {
-      signal.addEventListener("abort", () => {
-        throw new Error("The client closed unexpectedly!");
-      });
-
+      signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const reportPlan = await deepResearch.writeReportPlan(query);
+      signal.throwIfAborted();
       return asJsonText({ reportPlan });
     }
   );
@@ -253,15 +304,13 @@ export function initMcpServer() {
     {
       plan: z.string().describe("The research plan returned by write-research-plan."),
       language: z.string().optional().describe("The response language."),
-      maxResult: z.number().optional().default(5).describe("Maximum search results to configure for downstream steps."),
+      maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum search results to configure for downstream steps."),
     },
     async ({ plan, language, maxResult }, { signal }) => {
-      signal.addEventListener("abort", () => {
-        throw new Error("The client closed unexpectedly!");
-      });
-
+      signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const tasks = await deepResearch.generateSERPQuery(plan);
+      signal.throwIfAborted();
       return asJsonText({ tasks });
     }
   );
@@ -275,16 +324,14 @@ export function initMcpServer() {
         researchGoal: z.string().optional().default(""),
       })).describe("Search tasks returned by generate-SERP-query."),
       language: z.string().optional().describe("The response language."),
-      maxResult: z.number().optional().default(5).describe("Maximum number of search results per task."),
+      maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum number of search results per task."),
       enableReferences: z.boolean().optional().default(true).describe("Whether to include source references."),
     },
     async ({ tasks, language, maxResult, enableReferences }, { signal }) => {
-      signal.addEventListener("abort", () => {
-        throw new Error("The client closed unexpectedly!");
-      });
-
+      signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const completedTasks = await deepResearch.runSearchTask(tasks, enableReferences);
+      signal.throwIfAborted();
       return asJsonText({ tasks: completedTasks });
     }
   );
@@ -302,7 +349,7 @@ export function initMcpServer() {
         images: z.array(z.any()).optional(),
       })).describe("Completed tasks returned by search-task."),
       language: z.string().optional().describe("The response language."),
-      maxResult: z.number().optional().default(5).describe("Maximum search results to configure for the research engine."),
+      maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum search results to configure for the research engine."),
       enableCitationImage: z.boolean().optional().default(true).describe("Whether to include citation images."),
       enableReferences: z.boolean().optional().default(true).describe("Whether to include source references."),
     },
@@ -310,10 +357,7 @@ export function initMcpServer() {
       { plan, tasks, language, maxResult, enableCitationImage, enableReferences },
       { signal }
     ) => {
-      signal.addEventListener("abort", () => {
-        throw new Error("The client closed unexpectedly!");
-      });
-
+      signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const report = await deepResearch.writeFinalReport(
         plan,
@@ -321,6 +365,7 @@ export function initMcpServer() {
         enableCitationImage,
         enableReferences
       );
+      signal.throwIfAborted();
       return asJsonText(report);
     }
   );
@@ -383,7 +428,7 @@ Use these only if the user specifically requests a step-by-step breakdown or if 
 3.  **Handling Results**:
     - \`deep-gene-research\` returns a \`taskId\` first. Use \`get-task-status\` until the task is \`completed\` or \`failed\`.
     - When completed, present the \`finalReport\` or \`download.reportUrl\` to the user clearly.
-    - If integrating with CodeXomics, pass \`result.annotationProposal\`, \`result.finalReport\`, and \`result.sources\` to CodeXomics \`merge_gene_research_report\`.
+    - If integrating with CodeXomics, pass \`result.annotationProposal\` to \`create_annotation_changeset\`, show the resulting diff to a curator, and only then use the approval and apply ChangeSet tools. Never ask CodeXomics to merge a Markdown report directly.
     - Highlight key findings, then offer to show the detailed sources or quality metrics if requested.
 
 ## Example Usage

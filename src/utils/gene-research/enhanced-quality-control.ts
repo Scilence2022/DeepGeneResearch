@@ -122,7 +122,7 @@ export class EnhancedQualityControl {
       }
 
       // Identify potentially fabricated references
-      if (!ref.qualityMetadata?.verified && ref.qualityMetadata?.confidenceScore < 30) {
+      if (!ref.qualityMetadata?.verified && ref.qualityMetadata?.confidenceScore < 0.3) {
         statistics.potentiallyFabricated++;
       }
     });
@@ -311,7 +311,7 @@ export class EnhancedQualityControl {
     }
     
     if (warnings.some(w => w.includes('fabricated'))) {
-      recommendations.push('Implement manual review of all references with confidence scores below 50');
+      recommendations.push('Implement manual review of all references with confidence scores below 0.5');
       recommendations.push('Use reference management software to detect potential fabrication');
     }
     

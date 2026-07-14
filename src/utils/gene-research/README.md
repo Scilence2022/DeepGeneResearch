@@ -23,7 +23,7 @@ interface EnhancedLiteratureReference extends LiteratureReference {
   qualityMetadata: {
     verified: boolean;
     verificationMethod: 'pubmed_api' | 'pattern_validation' | 'manual_review' | 'unknown';
-    confidenceScore: number; // 0-100 scale
+    confidenceScore: number; // Normalized 0-1 scale
     warningFlags: string[];
     isDuplicate?: boolean;
     duplicateOf?: string;
@@ -31,7 +31,7 @@ interface EnhancedLiteratureReference extends LiteratureReference {
   sourceTracking: {
     extractedFrom: string;
     extractionMethod: string;
-    extractionConfidence: number;
+    extractionConfidence: number; // Normalized 0-1 scale
     processingTimestamp: number;
   };
 }
@@ -70,7 +70,7 @@ Each extraction includes comprehensive quality statistics:
 
 - `validatedReferences`: Number of successfully validated references
 - `duplicateReferences`: Number of duplicate references removed
-- `highConfidenceReferences`: Number of references with confidence score ≥ 80
+- `highConfidenceReferences`: Number of references with confidence score ≥ 0.8
 - `warnings`: Number of validation warnings generated
 
 ## Implementation Details
@@ -118,3 +118,15 @@ console.log('Reference quality:', results.extractionMetadata?.referenceQuality);
 - Access to PubMed API (requires internet connection)
 - Node.js with TypeScript support
 - Dependencies as specified in package.json
+
+## CodeXomics Annotation Proposal Contract
+
+Queued `deep-gene-research` tasks include `annotationProposal` by default. The proposal uses the `codexomics.annotation-change-set.v2` wire contract and is a research artifact, not a mutation command.
+
+- Pass the exact object returned by CodeXomics `resolve_annotation_target` as the DGR `target`. Without it, the proposal is `draft_requires_target`.
+- Only database identifiers and qualifier values found in a supporting retrieved source become claims and operations. If no safe evidence-backed operations remain, the proposal is `draft_requires_evidence`.
+- Narrative summaries remain report metadata. They are not written into an annotation qualifier because a citation that overlaps part of a paragraph does not support every clause.
+- Every operation is bound to one or more claims, and every claim is bound to evidence records marked `supporting: true` with source-content hashes.
+- `ready_for_validation` means CodeXomics can validate and preview the proposal. It does not mean approved or committed. CodeXomics remains the sole commit authority and requires curator review.
+
+For a bounded agent response, call DGR `get-task-status` with `resultMode: "annotation"`; use `full` when the complete report and workflow are needed.

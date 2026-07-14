@@ -8,6 +8,7 @@ import { GeneVisualizationGenerator, createGeneVisualizationGenerator } from './
 import { GeneResearchQualityControl, createGeneQualityControl } from './quality-control';
 import { GeneAPIIntegrations, createGeneAPIIntegrations } from './api-integrations';
 import { generateGeneReportTemplate } from './report-templates';
+import { createSearchProvider } from '@/utils/deep-research/search';
 import { 
   GeneResearchWorkflow, 
   GeneSearchTask, 
@@ -30,7 +31,14 @@ export interface GeneResearchConfig {
   enableVisualization?: boolean;
   maxSearchResults?: number;
   searchProviders?: string[];
+  fallbackSearchProvider?: {
+    provider: string;
+    baseURL?: string;
+    apiKey?: string;
+    maxResult?: number;
+  };
   language?: string;
+  signal?: AbortSignal;
 }
 
 export interface GeneResearchResult {
@@ -38,6 +46,7 @@ export interface GeneResearchResult {
   qualityMetrics: GeneResearchQualityMetrics;
   visualizations: any[];
   report: any;
+  sources: any[];
   metadata: {
     researchTime: number;
     dataSources: string[];
@@ -64,33 +73,49 @@ export class GeneResearchEngine {
       diseaseContext: config.diseaseContext,
       experimentalApproach: config.experimentalApproach
     });
-    this.dataExtractor = new GeneDataExtractor(config.geneSymbol, config.organism);
+    this.dataExtractor = new GeneDataExtractor(config.geneSymbol, config.organism, config.signal);
     this.visualizationGenerator = createGeneVisualizationGenerator(config.geneSymbol, config.organism);
     this.qualityControl = createGeneQualityControl(config.geneSymbol, config.organism);
-    this.apiIntegrations = createGeneAPIIntegrations(config.geneSymbol, config.organism);
+    this.apiIntegrations = createGeneAPIIntegrations(config.geneSymbol, config.organism, undefined, config.signal);
+  }
+
+  private assertNotCancelled(): void {
+    this.config.signal?.throwIfAborted();
+  }
+
+  private sourceMatchesGene(source: { title?: string; content?: string; url?: string }): boolean {
+    const geneSymbol = this.config.geneSymbol.trim().toLowerCase();
+    if (!geneSymbol) return false;
+    const searchable = [source.title, source.content, source.url].filter(Boolean).join('\n').toLowerCase();
+    return searchable.includes(geneSymbol);
   }
 
   async conductResearch(): Promise<GeneResearchResult> {
     const startTime = Date.now();
     
     try {
+      this.assertNotCancelled();
       // Phase 1: Generate research queries
       console.log('Phase 1: Generating research queries...');
       const queries = this.generateResearchQueries();
+      this.assertNotCancelled();
       
       // Phase 2: Execute searches
       console.log('Phase 2: Executing searches...');
       const searchResults = await this.executeSearches(queries);
+      this.assertNotCancelled();
       
       // Phase 3: Extract and process data
       console.log('Phase 3: Extracting and processing data...');
       const extractedData = await this.extractAndProcessData(searchResults);
+      this.assertNotCancelled();
       
       // Phase 4: API integration (if enabled)
       let apiData = null;
       if (this.config.enableAPIIntegration) {
         console.log('Phase 4: Integrating API data...');
         apiData = await this.integrateAPIData();
+        this.assertNotCancelled();
         if (apiData) {
           this.mergeAPIData(extractedData, apiData);
         }
@@ -115,6 +140,7 @@ export class GeneResearchEngine {
       // Phase 7: Generate report
       console.log('Phase 7: Generating research report...');
       const report = this.generateReport(extractedData, visualizations, qualityMetrics);
+      this.assertNotCancelled();
       
       // Phase 8: Compile workflow
       const workflow = this.compileWorkflow(extractedData);
@@ -126,6 +152,7 @@ export class GeneResearchEngine {
         qualityMetrics,
         visualizations,
         report,
+        sources: Array.from(searchResults.values()).flatMap((result: any) => result?.sources || []),
         metadata: {
           researchTime,
           dataSources: this.getDataSources(searchResults, apiData),
@@ -151,18 +178,64 @@ export class GeneResearchEngine {
     const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'];
 
     for (const query of queries) {
+      this.assertNotCancelled();
       try {
         const provider = query.database || 'pubmed';
+        let result: any = null;
         if (searchProviders.includes(provider)) {
-          const result = await createGeneSearchProvider({
-            provider,
+          try {
+            result = await createGeneSearchProvider({
+              provider,
+              query: query.query,
+              geneSymbol: this.config.geneSymbol,
+              organism: this.config.organism,
+              maxResult: this.config.maxSearchResults || 10,
+              signal: this.config.signal,
+            });
+          } catch (error) {
+            console.error(`Primary ${provider} search failed for query "${query.query}":`, error);
+          }
+        }
+
+        // The MCP-configured provider (for example a local SearxNG instance)
+        // supplies web/literature evidence when a curated database returns no
+        // records. This keeps specialist APIs preferred while ensuring the
+        // global DGR search configuration is actually honoured.
+        const fallback = this.config.fallbackSearchProvider;
+        if (!result?.sources?.length && fallback && fallback.provider !== 'model') {
+          const fallbackResult = await createSearchProvider({
+            provider: fallback.provider,
+            baseURL: fallback.baseURL,
+            apiKey: fallback.apiKey,
             query: query.query,
-            geneSymbol: this.config.geneSymbol,
-            organism: this.config.organism,
-            maxResult: this.config.maxSearchResults || 10
+            maxResult: fallback.maxResult || this.config.maxSearchResults || 10,
           });
-          
+          result = {
+            sources: fallbackResult.sources.filter(source => this.sourceMatchesGene(source)).map(source => ({
+              title: source.title || query.query,
+              content: source.content || '',
+              url: source.url,
+              database: fallback.provider,
+              geneSymbol: this.config.geneSymbol,
+              organism: this.config.organism,
+              confidence: 0.6,
+              evidence: ['search-result'],
+              type: 'literature',
+            })),
+            images: fallbackResult.images || [],
+            metadata: {
+              totalResults: fallbackResult.sources.length,
+              database: fallback.provider,
+              searchTime: Date.now(),
+              geneSymbol: this.config.geneSymbol,
+              organism: this.config.organism,
+            },
+          };
+        }
+
+        if (result) {
           searchResults.set(query.query, result);
+          this.assertNotCancelled();
         }
       } catch (error) {
         console.error(`Search error for query "${query.query}":`, error);
@@ -250,10 +323,13 @@ export class GeneResearchEngine {
 
     // Process each search result
     for (const [, result] of searchResults) {
+      this.assertNotCancelled();
       if (result.sources && result.sources.length > 0) {
         for (const source of result.sources) {
+          this.assertNotCancelled();
           const content = `${source.title}\n${source.content}`;
           const partialData = await this.dataExtractor.extractFromContent(content, source.database || 'unknown');
+          this.assertNotCancelled();
           
           // Merge extracted data
           this.mergeExtractedData(extractedData, partialData);
@@ -265,29 +341,43 @@ export class GeneResearchEngine {
   }
 
   private mergeExtractedData(target: Partial<GeneDataExtractionResult>, source: Partial<GeneDataExtractionResult>): void {
+    const mergeNonEmpty = (destination: Record<string, any>, incoming: Record<string, any>) => {
+      for (const [key, value] of Object.entries(incoming || {})) {
+        if (value === undefined || value === null || value === '') continue;
+        if (Array.isArray(value) && value.length === 0) continue;
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          const current = destination[key];
+          if (!current || typeof current !== 'object' || Array.isArray(current)) destination[key] = {};
+          mergeNonEmpty(destination[key], value as Record<string, any>);
+          continue;
+        }
+        destination[key] = value;
+      }
+    };
+
     // Merge gene basic info
     if (source.geneBasicInfo) {
-      Object.assign(target.geneBasicInfo!, source.geneBasicInfo);
+      mergeNonEmpty(target.geneBasicInfo! as Record<string, any>, source.geneBasicInfo as Record<string, any>);
     }
 
     // Merge functional data
     if (source.functionalData) {
-      Object.assign(target.functionalData!, source.functionalData);
+      mergeNonEmpty(target.functionalData! as Record<string, any>, source.functionalData as Record<string, any>);
     }
 
     // Merge protein info
     if (source.proteinInfo) {
-      Object.assign(target.proteinInfo!, source.proteinInfo);
+      mergeNonEmpty(target.proteinInfo! as Record<string, any>, source.proteinInfo as Record<string, any>);
     }
 
     // Merge expression data
     if (source.expressionData) {
-      Object.assign(target.expressionData!, source.expressionData);
+      mergeNonEmpty(target.expressionData! as Record<string, any>, source.expressionData as Record<string, any>);
     }
 
     // Merge interaction data
     if (source.interactionData) {
-      Object.assign(target.interactionData!, source.interactionData);
+      mergeNonEmpty(target.interactionData! as Record<string, any>, source.interactionData as Record<string, any>);
     }
 
     // Merge disease data
@@ -297,7 +387,7 @@ export class GeneResearchEngine {
 
     // Merge evolutionary data
     if (source.evolutionaryData) {
-      Object.assign(target.evolutionaryData!, source.evolutionaryData);
+      mergeNonEmpty(target.evolutionaryData! as Record<string, any>, source.evolutionaryData as Record<string, any>);
     }
 
     // Merge literature references
@@ -611,4 +701,3 @@ export * from './visualization-generators';
 export * from './quality-control';
 export * from './api-integrations';
 export * from './report-templates';
-export * from './codexomics-annotation';

@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { requireCrawlerAuth } from "../mcp/auth";
+import { fetchPublicText } from "@/utils/safe-public-fetch";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const preferredRegion = [
   "cle1",
   "iad1",
@@ -14,10 +16,11 @@ export const preferredRegion = [
 
 export async function POST(req: NextRequest) {
   try {
+    const unauthorized = requireCrawlerAuth(req);
+    if (unauthorized) return unauthorized;
     const { url } = await req.json();
     if (!url) throw new Error("Missing parameters!");
-    const response = await fetch(url, { next: { revalidate: 60 } });
-    const result = await response.text();
+    const { body: result } = await fetchPublicText(url);
 
     const titleRegex = /<title>(.*?)<\/title>/i;
     const titleMatch = result.match(titleRegex);

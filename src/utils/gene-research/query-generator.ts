@@ -23,10 +23,23 @@ export class GeneQueryGenerator {
   constructor(context: GeneQueryContext) {
     this.geneSymbol = context.geneSymbol;
     this.organism = context.organism;
-    this.researchFocus = context.researchFocus || ['general'];
-    this.specificAspects = context.specificAspects || [];
+    this.researchFocus = (context.researchFocus || ['general']).map(aspect => this.normalizeAspect(aspect));
+    this.specificAspects = (context.specificAspects || []).map(aspect => this.normalizeAspect(aspect));
     this.diseaseContext = context.diseaseContext;
     this.experimentalApproach = context.experimentalApproach;
+  }
+
+  private normalizeAspect(aspect: string): string {
+    const normalized = String(aspect || '').trim().toLowerCase();
+    if (/(function|functional|annotation|catalytic|protein)/.test(normalized)) return 'function';
+    if (/(structure|domain|motif|fold)/.test(normalized)) return 'structure';
+    if (/(expression|transcript|rna[- ]?seq)/.test(normalized)) return 'expression';
+    if (/(regulation|regulatory|promoter|operon)/.test(normalized)) return 'regulation';
+    if (/(interaction|complex|binding)/.test(normalized)) return 'interactions';
+    if (/(pathway|metabolic|biosynth)/.test(normalized)) return 'pathway';
+    if (/(evolution|ortholog|homolog|conservation)/.test(normalized)) return 'evolution';
+    if (/(disease|phenotype|clinical)/.test(normalized)) return 'disease';
+    return normalized || 'general';
   }
 
   generateComprehensiveQueries(): GeneSearchTask[] {
@@ -380,7 +393,7 @@ export class GeneQueryGenerator {
   generateFocusedQueries(aspects: string[]): GeneSearchTask[] {
     const queries: GeneSearchTask[] = [];
     
-    aspects.forEach(aspect => {
+    aspects.map(aspect => this.normalizeAspect(aspect)).forEach(aspect => {
       switch (aspect.toLowerCase()) {
         case 'structure':
           queries.push(...this.generateStructureQueries());

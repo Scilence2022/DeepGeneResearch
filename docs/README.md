@@ -48,9 +48,14 @@ Welcome to the Deep Gene Research documentation. This index provides an overview
 3. See [examples/README.md](../examples/README.md) for client implementations
 
 ### For Deployment
-1. **Vercel**: One-click deploy (see [Main README](../README.md#option-1-one-click-deployment-recommended))
-2. **Cloudflare**: Follow [Cloudflare Deployment Guide](./How-to-deploy-to-Cloudflare-Pages.md)
-3. **Self-hosted**: Use Docker (see [Main README](../README.md#self-hosted))
+
+| Target | Supported workload |
+| --- | --- |
+| Vercel | Stateless interactive UI; not durable queued MCP research |
+| Cloudflare Pages | Stateless interactive UI; see the [Cloudflare Deployment Guide](./How-to-deploy-to-Cloudflare-Pages.md) |
+| Self-hosted long-lived Node process | UI plus durable queued MCP research; use one worker and persistent `MCP_TASK_STORAGE_FILE` |
+
+Use Docker or another persistent Node host for MCP (see [Main README](../README.md#self-hosted)). Vercel and Cloudflare Pages production filesystems are ephemeral, so the task store intentionally fails closed there. Horizontal MCP deployment is not yet supported by the JSON ledger; it requires a database-backed queue and cross-process leases.
 
 ## API Integration
 
@@ -60,7 +65,8 @@ The Deep Gene Research MCP server provides tools for AI assistants:
 | Tool | Description |
 |------|-------------|
 | `deep-gene-research` | Queue complete end-to-end gene research |
-| `get-task-status` | Poll queued task status/results |
+| `get-task-status` | Poll full or annotation-only task status/results |
+| `cancel-research-run` | Request cancellation while retaining the audit record |
 | `write-research-plan` | Generate research plans |
 | `generate-SERP-query` | Create search tasks |
 | `search-task` | Execute database searches |
@@ -85,6 +91,8 @@ See [env.tpl](../env.tpl) for all available environment variables including:
 - Search provider configuration (Tavily, SearXNG, etc.)
 - MCP server settings
 - Timeout configurations
+
+Protected crawler and MCP routes require `ACCESS_PASSWORD` with at least 16 characters. Durable MCP deployments also require one long-lived Node process and a persistent `MCP_TASK_STORAGE_FILE`; do not configure their task ledger on an ephemeral Pages or function filesystem.
 
 ## Contributing to Documentation
 

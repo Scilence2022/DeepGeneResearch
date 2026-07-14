@@ -1,6 +1,8 @@
 // Gene-specific API integrations
 // Comprehensive API integration for molecular biology databases
 
+import { createFetchSignal } from '@/utils/fetch-signal';
+
 export interface APIIntegrationResult {
   success: boolean;
   data: any;
@@ -17,11 +19,22 @@ export class GeneAPIIntegrations {
   private geneSymbol: string;
   private organism: string;
   private apiKeys: Map<string, string>;
+  private signal?: AbortSignal;
 
-  constructor(geneSymbol: string, organism: string, apiKeys: Map<string, string> = new Map()) {
+  constructor(
+    geneSymbol: string,
+    organism: string,
+    apiKeys: Map<string, string> = new Map(),
+    signal?: AbortSignal
+  ) {
     this.geneSymbol = geneSymbol;
     this.organism = organism;
     this.apiKeys = apiKeys;
+    this.signal = signal;
+  }
+
+  private fetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+    return fetch(input, { ...init, signal: createFetchSignal(this.signal) });
   }
 
   // NCBI Gene API integration
@@ -78,7 +91,7 @@ export class GeneAPIIntegrations {
   private async searchGeneId(): Promise<string | null> {
     const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gene&term=${this.geneSymbol}[Gene Name] AND ${this.organism}[Organism]&retmode=json`;
     
-    const response = await fetch(searchUrl);
+    const response = await this.fetch(searchUrl);
     const data = await response.json();
     
     const geneIds = data.esearchresult?.idlist;
@@ -88,7 +101,7 @@ export class GeneAPIIntegrations {
   private async fetchGeneDetails(geneId: string): Promise<any> {
     const fetchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=gene&id=${geneId}&retmode=xml`;
     
-    const response = await fetch(fetchUrl);
+    const response = await this.fetch(fetchUrl);
     const xmlData = await response.text();
     
     // Parse XML and extract gene information
@@ -98,7 +111,7 @@ export class GeneAPIIntegrations {
   private async fetchProteinData(geneId: string): Promise<any> {
     const proteinUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=gene&id=${geneId}&db=protein&retmode=json`;
     
-    const response = await fetch(proteinUrl);
+    const response = await this.fetch(proteinUrl);
     const data = await response.json();
     
     const proteinIds = data.linksets?.[0]?.linksetdbs?.[0]?.links;
@@ -107,7 +120,7 @@ export class GeneAPIIntegrations {
     const proteinId = proteinIds[0];
     const proteinFetchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=protein&id=${proteinId}&retmode=xml`;
     
-    const proteinResponse = await fetch(proteinFetchUrl);
+    const proteinResponse = await this.fetch(proteinFetchUrl);
     const proteinXmlData = await proteinResponse.text();
     
     return this.parseNCBIProteinXML(proteinXmlData);
@@ -116,7 +129,7 @@ export class GeneAPIIntegrations {
   private async fetchExpressionData(geneId: string): Promise<any> {
     const expressionUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=gene&id=${geneId}&db=gds&retmode=json`;
     
-    const response = await fetch(expressionUrl);
+    const response = await this.fetch(expressionUrl);
     const data = await response.json();
     
     return data;
@@ -176,7 +189,7 @@ export class GeneAPIIntegrations {
   private async searchUniProtId(): Promise<string | null> {
     const searchUrl = `https://rest.uniprot.org/uniprotkb/search?query=gene:${this.geneSymbol} AND organism:${this.organism}&format=json&size=1`;
     
-    const response = await fetch(searchUrl);
+    const response = await this.fetch(searchUrl);
     const data = await response.json();
     
     const results = data.results;
@@ -186,7 +199,7 @@ export class GeneAPIIntegrations {
   private async fetchUniProtProtein(uniprotId: string): Promise<any> {
     const proteinUrl = `https://rest.uniprot.org/uniprotkb/${uniprotId}`;
     
-    const response = await fetch(proteinUrl);
+    const response = await this.fetch(proteinUrl);
     const data = await response.json();
     
     return data;
@@ -195,7 +208,7 @@ export class GeneAPIIntegrations {
   private async fetchUniProtFunctional(uniprotId: string): Promise<any> {
     const functionalUrl = `https://rest.uniprot.org/uniprotkb/${uniprotId}?fields=function,ec,keywords,pathway`;
     
-    const response = await fetch(functionalUrl);
+    const response = await this.fetch(functionalUrl);
     const data = await response.json();
     
     return data;
@@ -204,7 +217,7 @@ export class GeneAPIIntegrations {
   private async fetchUniProtInteractions(uniprotId: string): Promise<any> {
     const interactionUrl = `https://rest.uniprot.org/uniprotkb/${uniprotId}?fields=interactions`;
     
-    const response = await fetch(interactionUrl);
+    const response = await this.fetch(interactionUrl);
     const data = await response.json();
     
     return data;
@@ -215,7 +228,7 @@ export class GeneAPIIntegrations {
     try {
       const searchUrl = `https://data.rcsb.org/search?q=${this.geneSymbol}&rows=10&format=json`;
       
-      const response = await fetch(searchUrl);
+      const response = await this.fetch(searchUrl);
       const data = await response.json();
       
       const structures = data.result?.docs || [];
@@ -236,7 +249,7 @@ export class GeneAPIIntegrations {
       const structureData = await Promise.all(
         structures.map(async (struct: any) => {
           const structureUrl = `https://data.rcsb.org/rest/v1/core/entry/${struct.pdbx_descriptor}`;
-          const structResponse = await fetch(structureUrl);
+          const structResponse = await this.fetch(structureUrl);
           return structResponse.json();
         })
       );
@@ -274,7 +287,7 @@ export class GeneAPIIntegrations {
     try {
       const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=gds&term=${this.geneSymbol}[Gene Symbol] AND ${this.organism}[Organism]&retmode=json&retmax=20`;
       
-      const response = await fetch(searchUrl);
+      const response = await this.fetch(searchUrl);
       const data = await response.json();
       
       const gdsIds = data.esearchresult?.idlist;
@@ -295,7 +308,7 @@ export class GeneAPIIntegrations {
       const expressionData = await Promise.all(
         gdsIds.slice(0, 5).map(async (gdsId: string) => {
           const fetchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=gds&id=${gdsId}&retmode=xml`;
-          const gdsResponse = await fetch(fetchUrl);
+          const gdsResponse = await this.fetch(fetchUrl);
           const gdsXmlData = await gdsResponse.text();
           return this.parseGEOXML(gdsXmlData);
         })
@@ -334,7 +347,7 @@ export class GeneAPIIntegrations {
     try {
       const searchUrl = `https://rest.kegg.jp/search/genes/${this.geneSymbol}`;
       
-      const response = await fetch(searchUrl);
+      const response = await this.fetch(searchUrl);
       const data = await response.text();
       
       if (!data || data.trim() === '') {
@@ -393,7 +406,7 @@ export class GeneAPIIntegrations {
         const pathwayUrl = `https://rest.kegg.jp/get/${pathwayId}`;
         
         try {
-          const response = await fetch(pathwayUrl);
+          const response = await this.fetch(pathwayUrl);
           const pathwayData = await response.text();
           pathways.push({
             id: pathwayId,
@@ -419,7 +432,7 @@ export class GeneAPIIntegrations {
         const koUrl = `https://rest.kegg.jp/get/${koId}`;
         
         try {
-          const response = await fetch(koUrl);
+          const response = await this.fetch(koUrl);
           const koData = await response.text();
           orthologs.push({
             id: koId,
@@ -454,7 +467,7 @@ export class GeneAPIIntegrations {
 
       const interactionUrl = `https://string-db.org/api/tsv/network?identifiers=${stringId}&species=${this.getSTRINGSpecies()}`;
       
-      const response = await fetch(interactionUrl);
+      const response = await this.fetch(interactionUrl);
       const data = await response.text();
       
       const interactions = this.parseSTRINGData(data);
@@ -490,7 +503,7 @@ export class GeneAPIIntegrations {
   private async getSTRINGId(): Promise<string | null> {
     const mappingUrl = `https://string-db.org/api/tsv/get_string_ids?identifiers=${this.geneSymbol}&species=${this.getSTRINGSpecies()}`;
     
-    const response = await fetch(mappingUrl);
+    const response = await this.fetch(mappingUrl);
     const data = await response.text();
     
     const lines = data.split('\n');
@@ -615,9 +628,10 @@ export class GeneAPIIntegrations {
 export function createGeneAPIIntegrations(
   geneSymbol: string,
   organism: string,
-  apiKeys?: Map<string, string>
+  apiKeys?: Map<string, string>,
+  signal?: AbortSignal
 ): GeneAPIIntegrations {
-  return new GeneAPIIntegrations(geneSymbol, organism, apiKeys);
+  return new GeneAPIIntegrations(geneSymbol, organism, apiKeys, signal);
 }
 
 // API rate limiting and error handling
