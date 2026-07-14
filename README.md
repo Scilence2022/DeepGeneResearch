@@ -665,6 +665,16 @@ Each database is assigned a quality score based on:
 
 If the task ledger cannot be parsed or violates its invariants, DGR renames it to a `.corrupt.*` quarantine and locks task storage. Restore a verified ledger or reconcile the quarantined task and idempotency records before reopening the queue. Starting from an empty file without reconciliation can duplicate research work.
 
+For the narrowly recoverable legacy form where a ledger is otherwise valid JSON but has one extra trailing `]`, use the explicit recovery utility. It validates every task, never overwrites the quarantined source, and requires `--write`. Add `--cancel-interrupted` when old pending or in-progress tasks must not resume automatically:
+
+```bash
+npm run tasks:recover -- \
+  --source /durable/path/tasks.json.corrupt.TIMESTAMP \
+  --destination /durable/path/tasks.json \
+  --cancel-interrupted \
+  --write
+```
+
 ## 🔌 **MCP Server Integration Guide**
 
 ### **Quick Start with Claude Desktop**

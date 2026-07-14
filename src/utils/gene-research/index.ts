@@ -8,6 +8,7 @@ import { GeneVisualizationGenerator, createGeneVisualizationGenerator } from './
 import { GeneResearchQualityControl, createGeneQualityControl } from './quality-control';
 import { GeneAPIIntegrations, createGeneAPIIntegrations } from './api-integrations';
 import { generateGeneReportTemplate } from './report-templates';
+import { createSearchProvider } from '@/utils/deep-research/search';
 import { 
   GeneResearchWorkflow, 
   GeneSearchTask, 
@@ -30,6 +31,12 @@ export interface GeneResearchConfig {
   enableVisualization?: boolean;
   maxSearchResults?: number;
   searchProviders?: string[];
+  fallbackSearchProvider?: {
+    provider: string;
+    baseURL?: string;
+    apiKey?: string;
+    maxResult?: number;
+  };
   language?: string;
   signal?: AbortSignal;
 }
@@ -39,6 +46,7 @@ export interface GeneResearchResult {
   qualityMetrics: GeneResearchQualityMetrics;
   visualizations: any[];
   report: any;
+  sources: any[];
   metadata: {
     researchTime: number;
     dataSources: string[];
@@ -73,6 +81,13 @@ export class GeneResearchEngine {
 
   private assertNotCancelled(): void {
     this.config.signal?.throwIfAborted();
+  }
+
+  private sourceMatchesGene(source: { title?: string; content?: string; url?: string }): boolean {
+    const geneSymbol = this.config.geneSymbol.trim().toLowerCase();
+    if (!geneSymbol) return false;
+    const searchable = [source.title, source.content, source.url].filter(Boolean).join('\n').toLowerCase();
+    return searchable.includes(geneSymbol);
   }
 
   async conductResearch(): Promise<GeneResearchResult> {
@@ -137,6 +152,7 @@ export class GeneResearchEngine {
         qualityMetrics,
         visualizations,
         report,
+        sources: Array.from(searchResults.values()).flatMap((result: any) => result?.sources || []),
         metadata: {
           researchTime,
           dataSources: this.getDataSources(searchResults, apiData),
@@ -165,16 +181,59 @@ export class GeneResearchEngine {
       this.assertNotCancelled();
       try {
         const provider = query.database || 'pubmed';
+        let result: any = null;
         if (searchProviders.includes(provider)) {
-          const result = await createGeneSearchProvider({
-            provider,
+          try {
+            result = await createGeneSearchProvider({
+              provider,
+              query: query.query,
+              geneSymbol: this.config.geneSymbol,
+              organism: this.config.organism,
+              maxResult: this.config.maxSearchResults || 10,
+              signal: this.config.signal,
+            });
+          } catch (error) {
+            console.error(`Primary ${provider} search failed for query "${query.query}":`, error);
+          }
+        }
+
+        // The MCP-configured provider (for example a local SearxNG instance)
+        // supplies web/literature evidence when a curated database returns no
+        // records. This keeps specialist APIs preferred while ensuring the
+        // global DGR search configuration is actually honoured.
+        const fallback = this.config.fallbackSearchProvider;
+        if (!result?.sources?.length && fallback && fallback.provider !== 'model') {
+          const fallbackResult = await createSearchProvider({
+            provider: fallback.provider,
+            baseURL: fallback.baseURL,
+            apiKey: fallback.apiKey,
             query: query.query,
-            geneSymbol: this.config.geneSymbol,
-            organism: this.config.organism,
-            maxResult: this.config.maxSearchResults || 10,
-            signal: this.config.signal,
+            maxResult: fallback.maxResult || this.config.maxSearchResults || 10,
           });
-          
+          result = {
+            sources: fallbackResult.sources.filter(source => this.sourceMatchesGene(source)).map(source => ({
+              title: source.title || query.query,
+              content: source.content || '',
+              url: source.url,
+              database: fallback.provider,
+              geneSymbol: this.config.geneSymbol,
+              organism: this.config.organism,
+              confidence: 0.6,
+              evidence: ['search-result'],
+              type: 'literature',
+            })),
+            images: fallbackResult.images || [],
+            metadata: {
+              totalResults: fallbackResult.sources.length,
+              database: fallback.provider,
+              searchTime: Date.now(),
+              geneSymbol: this.config.geneSymbol,
+              organism: this.config.organism,
+            },
+          };
+        }
+
+        if (result) {
           searchResults.set(query.query, result);
           this.assertNotCancelled();
         }

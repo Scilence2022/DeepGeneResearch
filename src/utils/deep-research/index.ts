@@ -632,6 +632,7 @@ class DeepResearch {
         enableVisualization,
         maxSearchResults: Math.min(20, Math.max(1, this.options.searchProvider.maxResult ?? 5)),
         searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'],
+        fallbackSearchProvider: this.options.searchProvider,
         language: this.options.language,
         signal,
       });
@@ -645,7 +646,7 @@ class DeepResearch {
       this.onMessage("progress", { step: "gene-research", status: "end" });
 
       // Convert gene research result to standard format
-      const sources = result.workflow.literatureReview.map(ref => {
+      const literatureSources = result.workflow.literatureReview.map(ref => {
         // Create a simple formatted citation string
         const formattedCitation = ref.authors && ref.year
           ? `${ref.authors.slice(0, 3).join(', ')}${ref.authors.length > 3 ? ' et al.' : ''}. (${ref.year}). ${ref.title}. ${ref.journal || ''}.`
@@ -659,6 +660,21 @@ class DeepResearch {
           formattedCitation // Add the formatted citation
         };
       });
+      const requestedGene = geneInfo.geneSymbol.trim().toLowerCase();
+      const sourceMatchesRequestedGene = (source: { title?: string; content?: string; url?: string }) =>
+        [source.title, source.content, source.url]
+          .filter(Boolean)
+          .join('\n')
+          .toLowerCase()
+          .includes(requestedGene);
+      const sources = Array.from(
+        new Map(
+          [...literatureSources, ...(result.sources || [])]
+            .filter(source => sourceMatchesRequestedGene(source))
+            .filter(source => source?.url)
+            .map(source => [source.url, source])
+        ).values()
+      );
 
       const images = enableVisualization ? result.visualizations.map(viz => ({
         url: `data:image/svg+xml;base64,${Buffer.from(viz.content).toString('base64')}`,
