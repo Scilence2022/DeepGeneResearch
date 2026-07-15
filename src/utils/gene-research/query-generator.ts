@@ -20,6 +20,10 @@ export class GeneQueryGenerator {
   private diseaseContext?: string;
   private experimentalApproach?: string;
 
+  private isProkaryoticOrganism(): boolean {
+    return /(?:Escherichia|Corynebacterium|Bacillus|Pseudomonas|Salmonella|Staphylococcus|Streptococcus|Mycobacterium)/i.test(this.organism);
+  }
+
   constructor(context: GeneQueryContext) {
     this.geneSymbol = context.geneSymbol;
     this.organism = context.organism;
@@ -31,9 +35,10 @@ export class GeneQueryGenerator {
 
   private normalizeAspect(aspect: string): string {
     const normalized = String(aspect || '').trim().toLowerCase();
-    if (/(function|functional|annotation|catalytic|protein)/.test(normalized)) return 'function';
+    if (/(gene name|nomenclature|alias|synonym|locus)/.test(normalized)) return 'basic_info';
     if (/(structure|domain|motif|fold)/.test(normalized)) return 'structure';
-    if (/(expression|transcript|rna[- ]?seq)/.test(normalized)) return 'expression';
+    if (/(function|functional|annotation|catalytic|protein family|enzyme|ec number|go term|product)/.test(normalized)) return 'function';
+    if (/(expression|transcript|rna[- ]?seq|localization|cellular component)/.test(normalized)) return 'expression';
     if (/(regulation|regulatory|promoter|operon)/.test(normalized)) return 'regulation';
     if (/(interaction|complex|binding)/.test(normalized)) return 'interactions';
     if (/(pathway|metabolic|biosynth)/.test(normalized)) return 'pathway';
@@ -61,7 +66,7 @@ export class GeneQueryGenerator {
       queries.push(...this.generateExpressionQueries());
     }
     
-    if (this.researchFocus.includes('general') || this.researchFocus.includes('interaction')) {
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('interaction') || this.researchFocus.includes('interactions')) {
       queries.push(...this.generateInteractionQueries());
     }
     
@@ -73,7 +78,7 @@ export class GeneQueryGenerator {
       queries.push(...this.generateEvolutionaryQueries());
     }
     
-    if (this.researchFocus.includes('general') || this.researchFocus.includes('therapeutic')) {
+    if (this.researchFocus.includes('general') || this.researchFocus.includes('therapeutic') || this.researchFocus.includes('pathway')) {
       queries.push(...this.generatePathwayQueries());
     }
     
@@ -179,6 +184,25 @@ export class GeneQueryGenerator {
   }
 
   private generateExpressionQueries(): GeneSearchTask[] {
+    if (this.isProkaryoticOrganism()) {
+      return [
+        {
+          query: `${this.geneSymbol} expression growth condition stress response ${this.organism}`,
+          researchGoal: `Determine condition-dependent expression and stress responses of ${this.geneSymbol} in ${this.organism}.`,
+          database: 'pubmed', priority: 'medium', category: 'expression', status: 'pending'
+        },
+        {
+          query: `${this.geneSymbol} transcriptomics RNA-seq ${this.organism}`,
+          researchGoal: `Find transcriptomic evidence for ${this.geneSymbol} expression in ${this.organism}.`,
+          database: 'geo', priority: 'medium', category: 'expression', status: 'pending'
+        },
+        {
+          query: `${this.geneSymbol} subcellular localization ${this.organism}`,
+          researchGoal: `Determine the experimentally supported cellular localization of the ${this.geneSymbol} product.`,
+          database: 'uniprot', priority: 'high', category: 'expression', status: 'pending'
+        }
+      ];
+    }
     return [
       {
         query: `${this.geneSymbol} expression pattern tissue specific ${this.organism}`,
@@ -216,6 +240,20 @@ export class GeneQueryGenerator {
   }
 
   private generateRegulatoryQueries(): GeneSearchTask[] {
+    if (this.isProkaryoticOrganism()) {
+      return [
+        {
+          query: `${this.geneSymbol} operon promoter transcription regulation ${this.organism}`,
+          researchGoal: `Identify operon context, promoter control, and transcriptional regulators of ${this.geneSymbol}.`,
+          database: 'pubmed', priority: 'high', category: 'interactions', status: 'pending'
+        },
+        {
+          query: `${this.geneSymbol} attenuation feedback regulation ${this.organism}`,
+          researchGoal: `Investigate attenuation, feedback, and metabolic regulation affecting ${this.geneSymbol}.`,
+          database: 'pubmed', priority: 'medium', category: 'interactions', status: 'pending'
+        }
+      ];
+    }
     return [
       {
         query: `${this.geneSymbol} transcription regulation promoter enhancer ${this.organism}`,
@@ -361,7 +399,7 @@ export class GeneQueryGenerator {
   }
 
   private generatePathwayQueries(): GeneSearchTask[] {
-    return [
+    const queries: GeneSearchTask[] = [
       {
         query: `${this.geneSymbol} metabolic pathway KEGG ${this.organism}`,
         researchGoal: `Identify metabolic pathways involving ${this.geneSymbol} and analyze its role in cellular metabolism.`,
@@ -378,23 +416,31 @@ export class GeneQueryGenerator {
         category: 'pathway',
         status: 'pending'
       },
-      {
-        query: `${this.geneSymbol} disease pathway mechanism ${this.organism}`,
-        researchGoal: `Analyze disease-related pathways and mechanisms involving ${this.geneSymbol} dysfunction.`,
-        database: 'pubmed',
-        priority: 'medium',
-        category: 'pathway',
-        status: 'pending'
-      }
     ];
+    queries.push(this.isProkaryoticOrganism() ? {
+      query: `${this.geneSymbol} knockout phenotype metabolic flux ${this.organism}`,
+      researchGoal: `Determine pathway consequences and metabolic phenotypes caused by perturbing ${this.geneSymbol}.`,
+      database: 'pubmed', priority: 'medium', category: 'pathway', status: 'pending'
+    } : {
+      query: `${this.geneSymbol} disease pathway mechanism ${this.organism}`,
+      researchGoal: `Analyze disease-related pathways and mechanisms involving ${this.geneSymbol} dysfunction.`,
+      database: 'pubmed', priority: 'medium', category: 'pathway', status: 'pending'
+    });
+    return queries;
   }
 
   // Generate focused queries based on specific research aspects
   generateFocusedQueries(aspects: string[]): GeneSearchTask[] {
-    const queries: GeneSearchTask[] = [];
+    // Focused research still needs an identity baseline. Otherwise requests
+    // such as "refine product and EC number" skip NCBI Gene entirely and may
+    // never establish which record the functional evidence belongs to.
+    const queries: GeneSearchTask[] = [...this.generateBasicInfoQueries()];
     
     aspects.map(aspect => this.normalizeAspect(aspect)).forEach(aspect => {
       switch (aspect.toLowerCase()) {
+        case 'basic_info':
+          queries.push(...this.generateBasicInfoQueries());
+          break;
         case 'structure':
           queries.push(...this.generateStructureQueries());
           break;
@@ -422,7 +468,13 @@ export class GeneQueryGenerator {
       }
     });
 
-    return queries;
+    const seen = new Set<string>();
+    return queries.filter(query => {
+      const key = `${query.database}:${query.query}`.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   // Generate follow-up queries based on initial findings
@@ -431,6 +483,17 @@ export class GeneQueryGenerator {
     
     // Analyze initial findings to generate targeted follow-up queries
     initialFindings.forEach(finding => {
+      if (/function|catalytic activity|enzyme|protein:/i.test(finding)) {
+        queries.push({
+          query: `${this.geneSymbol} biochemical characterization catalytic mechanism ${this.organism}`,
+          researchGoal: `Find experimental biochemical evidence for the molecular function and catalytic mechanism of ${this.geneSymbol}.`,
+          database: 'pubmed',
+          priority: 'high',
+          category: 'function',
+          status: 'pending'
+        });
+      }
+
       if (finding.toLowerCase().includes('mutation')) {
         queries.push({
           query: `${this.geneSymbol} mutation functional effect mechanism ${this.organism}`,
@@ -465,7 +528,13 @@ export class GeneQueryGenerator {
       }
     });
 
-    return queries;
+    const seen = new Set<string>();
+    return queries.filter(query => {
+      const key = `${query.database}:${query.query}`.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   // Generate comparative analysis queries

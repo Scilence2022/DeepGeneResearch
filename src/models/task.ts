@@ -39,6 +39,8 @@ export interface GeneResearchParameters {
   returnReportAsUrl?: boolean;
   returnDetailsAsUrl?: boolean;
   includeCodeXomicsAnnotationProposal?: boolean;
+  /** Bypass and invalidate an otherwise matching semantic research cache entry. */
+  forceRefresh?: boolean;
   /** Exact target returned by CodeXomics resolve_annotation_target. */
   target?: GenomeTargetRef;
   idempotencyKey?: string;

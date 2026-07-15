@@ -299,7 +299,16 @@ export class GeneResearchQualityControl {
     functionalData: FunctionalData,
     issues: QualityIssue[]
   ): number {
-    let score = 0.5; // Base score
+    const hasDatabaseData = Boolean(
+      geneInfo.geneID
+      || proteinInfo.uniprotId
+      || proteinInfo.proteinSize
+      || functionalData.molecularFunction?.length
+      || functionalData.catalyticActivity
+    );
+    if (!hasDatabaseData) return 0;
+
+    let score = 0.2;
     let inconsistencies = 0;
 
     // Check gene ID consistency
@@ -340,7 +349,8 @@ export class GeneResearchQualityControl {
     literatureReferences: LiteratureReference[],
     issues: QualityIssue[]
   ): number {
-    let score = 0.5; // Base score
+    if (literatureReferences.length === 0) return 0;
+    let score = 0.3;
 
     // Check for review articles
     const reviewRefs = literatureReferences.filter(ref => 

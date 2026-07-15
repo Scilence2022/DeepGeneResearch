@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { GeneResearchTask, GeneResearchParameters } from '@/models/task';
 import { taskStore } from './task-store';
 import { initDeepResearchServer } from '@/app/api/mcp/server';
-import { cacheService } from './cache';
+import { cacheService, isReusableResearchResult } from './cache';
 import { storeResearchResult } from '@/utils/mcp-research-store';
 import { buildCodeXomicsAnnotationProposal } from '@/utils/gene-research/codexomics-annotation';
 import { enforceTaskMediaPolicy } from './task-result-projection';
@@ -48,6 +48,13 @@ function summarizeSourceCoverage(searchResults: any[], finalSources: any[]) {
     uniqueSourceCount: new Set(allSources.map((source) => source?.url).filter(Boolean)).size,
     sourceDomains,
   };
+}
+
+export function isSubstantiveResearchResult(
+  result: any,
+  parameters?: GeneResearchParameters
+): boolean {
+  return Boolean(parameters) && isReusableResearchResult(parameters!, result);
 }
 
 // 任务队列类
@@ -96,6 +103,9 @@ export class TaskQueue extends EventEmitter {
     boundedString(parameters.language, 'language', 64);
     boundedString(parameters.idempotencyKey, 'idempotencyKey', 256);
     boundedString(parameters.correlationId, 'correlationId', 256);
+    if (parameters.forceRefresh !== undefined && typeof parameters.forceRefresh !== 'boolean') {
+      throw new TaskValidationError('forceRefresh must be a boolean');
+    }
     if (
       parameters.maxResult !== undefined &&
       (!Number.isInteger(parameters.maxResult) || parameters.maxResult < 1 || parameters.maxResult > 20)
@@ -300,8 +310,18 @@ export class TaskQueue extends EventEmitter {
       }
       this.emit('task:started', startedTask);
 
-      // 检查缓存
-      const cachedResult = await cacheService.getCachedResult(task.parameters);
+      // A refresh request invalidates the semantic cache entry before any read.
+      // forceRefresh itself is deliberately excluded from the cache key.
+      let cachedResult: any | null = null;
+      if (task.parameters.forceRefresh) {
+        await cacheService.deleteCachedResult(task.parameters);
+      } else {
+        cachedResult = await cacheService.getCachedResult(task.parameters);
+      }
+      if (cachedResult && !isSubstantiveResearchResult(cachedResult, task.parameters)) {
+        await cacheService.deleteCachedResult(task.parameters);
+        cachedResult = null;
+      }
       if (cachedResult) {
         if (await this.isCancellationRequested(task.id)) {
           await this.finishCancellation(task, 'cancelled-during-cache-check');
@@ -370,6 +390,9 @@ export class TaskQueue extends EventEmitter {
             case 'gene-research':
               progress = 50;
               break;
+            case 'gene-search':
+              progress = 60;
+              break;
           }
 
           if (data.status === 'end') {
@@ -420,6 +443,7 @@ export class TaskQueue extends EventEmitter {
       const specializedResult = await deepResearch.conductGeneResearch(query, task.id, {
         geneSymbol,
         organism,
+        target: task.parameters.target,
         researchFocus,
         specificAspects,
         diseaseContext,
@@ -434,6 +458,13 @@ export class TaskQueue extends EventEmitter {
       // publishing synthetic constants from the generic report pipeline.
       const researchTime = Date.now() - new Date(task.createdAt).getTime();
       const sourceCoverage = summarizeSourceCoverage([], specializedResult.sources || []);
+      const searchDiagnostics = (specializedResult as any).metadata?.searchDiagnostics;
+      if (searchDiagnostics) {
+        sourceCoverage.searchTaskCount = searchDiagnostics.queryCount;
+        sourceCoverage.tasksWithSources = searchDiagnostics.successfulSearches;
+        sourceCoverage.sourceCount = searchDiagnostics.sourceCount;
+        sourceCoverage.uniqueSourceCount = searchDiagnostics.uniqueSourceCount;
+      }
       const result = enforceTaskMediaPolicy(task.parameters, {
         ...specializedResult,
         metadata: {
@@ -446,7 +477,9 @@ export class TaskQueue extends EventEmitter {
       const resultWithProposal = this.ensureCodeXomicsAnnotationProposal(task, result);
 
       // 存储结果到缓存
-      await cacheService.setCachedResult(task.parameters, resultWithProposal);
+      if (isSubstantiveResearchResult(resultWithProposal, task.parameters)) {
+        await cacheService.setCachedResult(task.parameters, resultWithProposal);
+      }
 
       if (await this.isCancellationRequested(task.id)) {
         await this.finishCancellation(task, 'cancelled-before-result-commit');

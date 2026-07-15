@@ -52,6 +52,7 @@ export function initDeepResearchServer({
       apiKey: multiApiKeyPolling(getSearchProviderApiKey(SEARCH_PROVIDER)),
       provider: SEARCH_PROVIDER,
       maxResult,
+      scope: process.env.MCP_SEARXNG_SCOPE || undefined,
     },
     onMessage: (event, data) => {
       if (event === "progress") {
@@ -116,6 +117,7 @@ export function initMcpServer() {
       returnReportAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Report as a downloadable URL instead of inline content."),
       returnDetailsAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Details (workflow, sources, metadata) as a downloadable URL instead of inline content."),
       includeCodeXomicsAnnotationProposal: z.boolean().default(true).optional().describe("When true, include a CodeXomics-ready annotationProposal with conservative updates and evidence references."),
+      forceRefresh: z.boolean().default(false).optional().describe("Bypass and invalidate a matching cached research result before running this task."),
       target: z.object({
         workspaceId: z.string().min(1).max(512),
         genomeId: z.string().min(1).max(512),
@@ -154,6 +156,7 @@ export function initMcpServer() {
         returnReportAsUrl = false,
         returnDetailsAsUrl = false,
         includeCodeXomicsAnnotationProposal = true,
+        forceRefresh = false,
         target,
         idempotencyKey,
         correlationId,
@@ -178,6 +181,7 @@ export function initMcpServer() {
           returnReportAsUrl,
           returnDetailsAsUrl,
           includeCodeXomicsAnnotationProposal,
+          forceRefresh,
           target,
           idempotencyKey,
           correlationId,
