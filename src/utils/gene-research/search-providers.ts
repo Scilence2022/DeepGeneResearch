@@ -24,6 +24,9 @@ export interface GeneSearchProviderOptions {
   query: string;
   geneSymbol?: string;
   organism?: string;
+  locusTag?: string;
+  proteinId?: string;
+  taxonId?: string | number;
   maxResult?: number;
   scope?: string;
   signal?: AbortSignal;
@@ -40,10 +43,35 @@ export interface GeneSource {
   content: string;
   url: string;
   database: string;
+  sourceId?: string;
+  authoritative?: boolean;
+  target?: Record<string, any>;
   geneSymbol?: string;
   organism?: string;
+  /** True only when the returned record itself can be tied to the requested target. */
+  targetMatch?: boolean;
+  provenance?: {
+    provider: string;
+    recordId?: string;
+    matchedBy: string[];
+    actualGeneSymbol?: string;
+    actualOrganism?: string;
+    actualTaxonId?: string | number;
+    locusTags?: string[];
+    proteinIds?: string[];
+  };
   confidence?: number;
   evidence?: string[];
+  /** Machine-readable fields copied from an authoritative database record. */
+  annotation?: {
+    product?: string;
+    ecNumbers?: string[];
+    goTerms?: string[];
+    pathwayTerms?: string[];
+    dbXrefs?: string[];
+    reviewed?: boolean;
+  };
+  structuredData?: Record<string, any>;
   type: 'literature' | 'protein' | 'expression' | 'interaction' | 'disease' | 'pathway' | 'structure';
 }
 
@@ -62,6 +90,109 @@ export interface GeneSearchMetadata {
   geneSymbol?: string;
   organism?: string;
   qualityScore?: number;
+  error?: string;
+  attempts?: string[];
+  targetMatch?: boolean;
+  disabled?: boolean;
+}
+
+async function requireOk(response: Response, provider: string): Promise<Response> {
+  if (response.ok) return response;
+  const body = (await response.text()).replace(/\s+/g, ' ').slice(0, 300);
+  throw new Error(`${provider} returned HTTP ${response.status}${body ? `: ${body}` : ''}`);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function emptyProviderResult(
+  database: string,
+  options: Pick<GeneSearchProviderOptions, 'geneSymbol' | 'organism'>,
+  error?: string,
+  extra: Partial<GeneSearchMetadata> = {}
+): GeneSearchResult {
+  return {
+    sources: [],
+    images: [],
+    metadata: {
+      totalResults: 0,
+      database,
+      searchTime: 0,
+      geneSymbol: options.geneSymbol,
+      organism: options.organism,
+      ...(error ? { error } : {}),
+      ...extra,
+    },
+  };
+}
+
+function normalizeIdentifier(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeProteinIdentifier(value: unknown): string {
+  return normalizeIdentifier(value).replace(/\.\d+$/, '');
+}
+
+function identifiersEqual(left: unknown, right: unknown, stripVersion = false): boolean {
+  const normalize = stripVersion ? normalizeProteinIdentifier : normalizeIdentifier;
+  return Boolean(normalize(left)) && normalize(left) === normalize(right);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function containsIdentifier(text: string, identifier?: string): boolean {
+  const clean = String(identifier || '').trim();
+  if (!clean) return false;
+  return new RegExp(`(^|[^A-Za-z0-9_])${escapeRegExp(clean)}(?=$|[^A-Za-z0-9_])`, 'i').test(text);
+}
+
+function organismAliases(organism?: string): string[] {
+  const clean = String(organism || '').trim();
+  if (!clean) return [];
+  const words = clean.split(/\s+/);
+  const aliases = [clean];
+  if (words.length >= 2) aliases.push(`${words[0][0]}. ${words[1]}`);
+  return Array.from(new Set(aliases.map(alias => alias.toLowerCase())));
+}
+
+function textMentionsOrganism(text: string, organism?: string): boolean {
+  const lower = text.toLowerCase();
+  return organismAliases(organism).some(alias => lower.includes(alias));
+}
+
+function organismNamesCompatible(actual?: string, requested?: string): boolean {
+  const actualName = normalizeIdentifier(actual).replace(/\s+/g, ' ');
+  const requestedName = normalizeIdentifier(requested).replace(/\s+/g, ' ');
+  if (!requestedName) return true;
+  return actualName === requestedName
+    || actualName.startsWith(`${requestedName} (`)
+    || actualName.startsWith(`${requestedName} str.`)
+    || actualName.startsWith(`${requestedName} subsp.`);
+}
+
+function targetTextMatch(
+  text: string,
+  options: Pick<GeneSearchProviderOptions, 'geneSymbol' | 'organism' | 'locusTag' | 'proteinId'>
+): { targetMatch: boolean; matchedBy: string[]; exactIdentifierMatch: boolean } {
+  const matchedBy: string[] = [];
+  const proteinMatch = containsIdentifier(text, options.proteinId);
+  const locusMatch = containsIdentifier(text, options.locusTag);
+  const geneMatch = containsIdentifier(text, options.geneSymbol);
+  const organismMatch = textMentionsOrganism(text, options.organism);
+  if (proteinMatch) matchedBy.push('protein_id');
+  if (locusMatch) matchedBy.push('locus_tag');
+  if (geneMatch) matchedBy.push('gene_symbol');
+  if (organismMatch) matchedBy.push('organism_text');
+  const identifierMatch = proteinMatch || locusMatch || geneMatch;
+  return {
+    targetMatch: identifierMatch && (!options.organism || organismMatch),
+    matchedBy,
+    exactIdentifierMatch: proteinMatch || locusMatch,
+  };
 }
 
 // PubMed search provider for literature
@@ -69,6 +200,8 @@ export async function searchPubMed({
   query,
   geneSymbol,
   organism,
+  locusTag,
+  proteinId,
   maxResult = 20,
   apiKey,
   signal,
@@ -79,31 +212,65 @@ export async function searchPubMed({
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
   try {
-    // Search for gene-related publications
-    const searchQuery = geneSymbol && organism 
-      ? `${geneSymbol}[Gene Name] AND ${organism}[Organism] AND ${query}`
-      : `${query}`;
-
-    const searchResponse = await fetch(
-      `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?db=pubmed&term=${encodeURIComponent(searchQuery)}&retmax=${maxResult}&retmode=json`,
-      { headers, signal: createFetchSignal(signal) }
-    );
-    
-    const searchData = await searchResponse.json();
-    const pmids = searchData.esearchresult?.idlist || [];
+    // PubMed does not have reliable Gene Name / Organism fields for all
+    // articles. The previous query also appended an entire natural-language
+    // prompt with AND semantics, which routinely forced valid genes to zero
+    // results. Search narrowly first, then broaden while retaining both gene
+    // and organism identity terms.
+    const topicVocabulary = [
+      'function', 'catalytic', 'enzyme', 'substrate', 'structure', 'domain',
+      'pathway', 'biosynthesis', 'regulation', 'expression', 'localization',
+      'interaction', 'ortholog', 'conservation', 'biochemical', 'mechanism',
+    ];
+    const topicTerms = topicVocabulary.filter(term => query.toLowerCase().includes(term)).slice(0, 4);
+    const topicClause = topicTerms.length
+      ? ` AND (${topicTerms.map(term => `"${term}"[Title/Abstract]`).join(' OR ')})`
+      : '';
+    const organismTitleAbstractClause = organismAliases(organism)
+      .map(alias => `"${alias}"[Title/Abstract]`)
+      .join(' OR ');
+    const exactIdentifiers = Array.from(new Set([proteinId, locusTag].filter(Boolean) as string[]));
+    const exactIdentityQuery = exactIdentifiers.length && organismTitleAbstractClause
+      ? `(${exactIdentifiers.map(identifier => `"${identifier}"[Title/Abstract]`).join(' OR ')}) AND (${organismTitleAbstractClause})`
+      : null;
+    const searchQueries = geneSymbol && organism
+      ? [
+          exactIdentityQuery,
+          `"${geneSymbol}"[Title/Abstract] AND (${organismTitleAbstractClause})${topicClause}`,
+          `"${geneSymbol}"[Title/Abstract] AND (${organismTitleAbstractClause})`,
+          `${geneSymbol}[All Fields] AND "${organism}"[All Fields]`,
+        ].filter((searchQuery): searchQuery is string => Boolean(searchQuery))
+      : [query];
+    let pmids: string[] = [];
+    const attempts: string[] = [];
+    for (const searchQuery of searchQueries) {
+      attempts.push(searchQuery);
+      const searchResponse = await requireOk(await fetch(
+        `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?db=pubmed&term=${encodeURIComponent(searchQuery)}&retmax=${maxResult}&retmode=json`,
+        { headers, signal: createFetchSignal(signal) }
+      ), 'PubMed esearch');
+      const searchData = await searchResponse.json();
+      pmids = searchData.esearchresult?.idlist || [];
+      if (pmids.length > 0) break;
+    }
 
     if (pmids.length === 0) {
-      return { sources: [], images: [], metadata: { totalResults: 0, database: 'pubmed', searchTime: 0 } };
+      return { sources: [], images: [], metadata: { totalResults: 0, database: 'pubmed', searchTime: 0, attempts } };
     }
 
     // Fetch detailed information for each PMID
-    const detailResponse = await fetch(
+    const detailResponse = await requireOk(await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=pubmed&id=${pmids.join(',')}&retmode=xml&rettype=abstract`,
       { headers, signal: createFetchSignal(signal) }
-    );
+    ), 'PubMed efetch');
     const xmlData = await detailResponse.text();
 
-    const sources = parsePubMedResults(xmlData, geneSymbol, organism);
+    const parsedSources = parsePubMedResults(xmlData, { geneSymbol, organism, locusTag, proteinId });
+    // PubMed articles can describe the exact protein/product without naming
+    // the locus tag in title/abstract. Keep those literature records for
+    // discovery and synthesis, but never treat them as exact-target
+    // annotation evidence unless targetMatch is true.
+    const sources = parsedSources;
 
     return {
       sources,
@@ -114,13 +281,15 @@ export async function searchPubMed({
         searchTime: Date.now(),
         geneSymbol,
         organism,
-        qualityScore: calculateQualityScore(sources)
+        qualityScore: calculateQualityScore(sources),
+        attempts,
+        targetMatch: sources.length > 0,
       }
     };
   } catch (error) {
     signal?.throwIfAborted();
     console.error('PubMed search error:', error);
-    return { sources: [], images: [], metadata: { totalResults: 0, database: 'pubmed', searchTime: 0 } };
+    return emptyProviderResult('pubmed', { geneSymbol, organism }, errorMessage(error));
   }
 }
 
@@ -129,6 +298,9 @@ export async function searchUniProt({
   query,
   geneSymbol,
   organism,
+  locusTag,
+  proteinId,
+  taxonId,
   maxResult = 10,
   apiKey,
   signal,
@@ -139,17 +311,42 @@ export async function searchUniProt({
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
   try {
+    const organismClause = taxonId ? `organism_id:${taxonId}` : `organism_name:"${organism}"`;
     const searchQuery = geneSymbol && organism 
-      ? `gene:${geneSymbol} AND organism:${organism} AND ${query}`
+      ? `gene_exact:${geneSymbol} AND ${organismClause}`
       : query;
 
-    const response = await fetch(
+    const response = await requireOk(await fetch(
       `${GENE_DATABASE_URLS.UNIPROT_API}uniprotkb/search?query=${encodeURIComponent(searchQuery)}&format=json&size=${maxResult}`,
       { headers, signal: createFetchSignal(signal) }
-    );
+    ), 'UniProt search');
 
     const data = await response.json();
-    const sources = parseUniProtResults(data.results || [], geneSymbol, organism);
+    const rankedResults = [...(data.results || [])].sort((left: any, right: any) => {
+      const score = (entry: any) => {
+        const locusNames = (entry.genes || []).flatMap((gene: any) => gene.orderedLocusNames || []).map((item: any) => item.value);
+        return (locusTag && locusNames.includes(locusTag) ? 4 : 0)
+          + (entry.entryType === 'UniProtKB reviewed (Swiss-Prot)' ? 2 : 0)
+          + (entry.genes?.some((gene: any) => gene.geneName?.value?.toLowerCase() === geneSymbol?.toLowerCase()) ? 1 : 0);
+      };
+      return score(right) - score(left);
+    });
+    const exactLocusResults = locusTag
+      ? rankedResults.filter((entry: any) => (entry.genes || [])
+          .flatMap((gene: any) => gene.orderedLocusNames || [])
+          .some((item: any) => item.value === locusTag))
+      : [];
+    const exactProteinResults = proteinId
+      ? rankedResults.filter((entry: any) => (entry.primaryAccession || entry.uniProtkbId) === proteinId)
+      : [];
+    const exactTargetResults = [...exactProteinResults, ...exactLocusResults]
+      .filter((entry: any, index: number, entries: any[]) => entries.indexOf(entry) === index);
+    // An immutable CDS target must fail closed. Never turn a missing exact
+    // locus/accession match into an unrelated strain-wide gene-symbol hit.
+    const selectedResults = proteinId || locusTag
+      ? exactTargetResults.slice(0, 1)
+      : rankedResults;
+    const sources = parseUniProtResults(selectedResults, geneSymbol, organism, locusTag, proteinId, taxonId);
 
     return {
       sources,
@@ -166,7 +363,7 @@ export async function searchUniProt({
   } catch (error) {
     signal?.throwIfAborted();
     console.error('UniProt search error:', error);
-    return { sources: [], images: [], metadata: { totalResults: 0, database: 'uniprot', searchTime: 0 } };
+    return { sources: [], images: [], metadata: { totalResults: 0, database: 'uniprot', searchTime: 0, error: error instanceof Error ? error.message : String(error) } };
   }
 }
 
@@ -175,6 +372,7 @@ export async function searchNCBIGene({
   query,
   geneSymbol,
   organism,
+  locusTag,
   maxResult = 10,
   apiKey,
   signal,
@@ -186,13 +384,13 @@ export async function searchNCBIGene({
 
   try {
     const searchQuery = geneSymbol && organism 
-      ? `${geneSymbol}[Gene Name] AND ${organism}[Organism]`
+      ? `${locusTag || geneSymbol}[${locusTag ? 'Locus Tag' : 'Gene Name'}] AND ${organism}[Organism]`
       : query;
 
-    const response = await fetch(
+    const response = await requireOk(await fetch(
       `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?db=gene&term=${encodeURIComponent(searchQuery)}&retmax=${maxResult}&retmode=json`,
       { headers, signal: createFetchSignal(signal) }
-    );
+    ), 'NCBI Gene esearch');
 
     const data = await response.json();
     const geneIds = data.esearchresult?.idlist || [];
@@ -202,10 +400,10 @@ export async function searchNCBIGene({
     }
 
     // Fetch detailed gene information
-    const detailResponse = await fetch(
-      `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=gene&id=${geneIds.join(',')}&retmode=xml`,
+    const detailResponse = await requireOk(await fetch(
+      `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=gene&id=${(locusTag ? geneIds.slice(0, 1) : geneIds).join(',')}&retmode=xml`,
       { headers, signal: createFetchSignal(signal) }
-    );
+    ), 'NCBI Gene efetch');
     const xmlData = await detailResponse.text();
 
     const sources = parseNCBIGeneResults(xmlData, geneSymbol, organism);
@@ -225,7 +423,7 @@ export async function searchNCBIGene({
   } catch (error) {
     signal?.throwIfAborted();
     console.error('NCBI Gene search error:', error);
-    return { sources: [], images: [], metadata: { totalResults: 0, database: 'ncbi_gene', searchTime: 0 } };
+    return { sources: [], images: [], metadata: { totalResults: 0, database: 'ncbi_gene', searchTime: 0, error: error instanceof Error ? error.message : String(error) } };
   }
 }
 
@@ -339,6 +537,7 @@ export async function searchKEGG({
   query,
   geneSymbol,
   organism,
+  locusTag,
   apiKey,
   signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
@@ -348,14 +547,24 @@ export async function searchKEGG({
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
   try {
-    const searchQuery = geneSymbol 
-      ? `${geneSymbol} AND ${query}`
-      : query;
+    const organismCodes: Record<string, string> = {
+      'Escherichia coli': 'eco',
+      'Corynebacterium glutamicum': 'cgl',
+      'Bacillus subtilis': 'bsu',
+      'Saccharomyces cerevisiae': 'sce',
+      'Homo sapiens': 'hsa',
+      'Mus musculus': 'mmu',
+    };
+    const organismCode = organism ? organismCodes[organism] : undefined;
+    const exactEntry = organismCode && locusTag ? `${organismCode}:${locusTag}` : null;
+    const searchQuery = geneSymbol ? `${geneSymbol} ${organism || ''}`.trim() : query;
 
-    const response = await fetch(
-      `${GENE_DATABASE_URLS.KEGG_API}find/genes/${encodeURIComponent(searchQuery)}`,
+    const response = await requireOk(await fetch(
+      exactEntry
+        ? `${GENE_DATABASE_URLS.KEGG_API}list/${encodeURIComponent(exactEntry)}`
+        : `${GENE_DATABASE_URLS.KEGG_API}find/genes/${encodeURIComponent(searchQuery)}`,
       { headers, signal: createFetchSignal(signal) }
-    );
+    ), 'KEGG search');
 
     const data = await response.text();
     const sources = parseKEGGResults(data, geneSymbol, organism);
@@ -569,6 +778,9 @@ export async function createGeneSearchProvider({
   query,
   geneSymbol,
   organism,
+  locusTag,
+  proteinId,
+  taxonId,
   maxResult = 10,
   scope,
   signal,
@@ -580,6 +792,9 @@ export async function createGeneSearchProvider({
     query,
     geneSymbol,
     organism,
+    locusTag,
+    proteinId,
+    taxonId,
     maxResult,
     scope,
     signal,
@@ -643,21 +858,29 @@ function splitXmlBlocks(xml: string, tag: string): string[] {
     .map((match) => match[0]);
 }
 
-function parsePubMedResults(xmlData: string, geneSymbol?: string, organism?: string): GeneSource[] {
+function parsePubMedResults(
+  xmlData: string,
+  options: Pick<GeneSearchProviderOptions, 'geneSymbol' | 'organism' | 'locusTag' | 'proteinId'>
+): GeneSource[] {
+  const { geneSymbol, organism, locusTag, proteinId } = options;
   return splitXmlBlocks(xmlData, 'PubmedArticle').map((article) => {
     const pmid = extractTag(article, 'PMID');
     const title = extractTag(article, 'ArticleTitle') || `PubMed article ${pmid || 'unknown'}`;
     const abstract = extractAllTags(article, 'AbstractText').join(' ');
     const journal = extractTag(article, 'ISOAbbreviation') || extractTag(article, 'Title');
     const year = extractTag(article, 'Year');
+    const doi = Array.from(article.matchAll(/<ArticleId[^>]*IdType=["']doi["'][^>]*>([^<]+)<\/ArticleId>/gi))[0]?.[1] || '';
     const authors = splitXmlBlocks(article, 'Author')
       .map((author) => [extractTag(author, 'ForeName'), extractTag(author, 'LastName')].filter(Boolean).join(' '))
       .filter(Boolean)
       .slice(0, 6);
 
+    const match = targetTextMatch(`${title}\n${abstract}\n${organism || ''}`, options);
     return {
       title,
       content: [
+        pmid ? `PMID: ${pmid}` : '',
+        doi ? `DOI: ${decodeXml(doi)}` : '',
         authors.length ? `Authors: ${authors.join(', ')}` : '',
         journal ? `Journal: ${journal}` : '',
         year ? `Year: ${year}` : '',
@@ -669,27 +892,187 @@ function parsePubMedResults(xmlData: string, geneSymbol?: string, organism?: str
       organism,
       confidence: 0.9,
       evidence: ['literature', pmid ? `PMID:${pmid}` : 'pubmed'],
+      targetMatch: match.targetMatch,
+      provenance: {
+        provider: 'pubmed',
+        recordId: pmid,
+        matchedBy: match.matchedBy,
+        actualOrganism: organism,
+      },
+      structuredData: {
+        literatureReferences: [{
+          pmid,
+          title,
+          authors,
+          journal,
+          year: Number(year) || new Date().getFullYear(),
+          abstract,
+          relevance: 'high',
+          studyType: 'experimental',
+          organism: organism || '',
+          methodology: ['PubMed'],
+        }],
+      },
       type: 'literature' as const
     };
   });
 }
 
-function parseUniProtResults(results: any[], geneSymbol?: string, organism?: string): GeneSource[] {
-  return results.map(result => ({
-    title: result.proteinDescription?.recommendedName?.fullName?.value || result.uniProtkbId,
-    content: `Protein: ${result.proteinDescription?.recommendedName?.fullName?.value || 'Unknown'}
-Gene: ${result.geneNames?.[0]?.geneName?.value || 'Unknown'}
-Organism: ${result.organism?.scientificName || 'Unknown'}
-Function: ${result.comments?.find((c: any) => c.commentType === 'FUNCTION')?.text?.[0]?.value || 'Unknown'}
-Subcellular location: ${result.comments?.find((c: any) => c.commentType === 'SUBCELLULAR_LOCATION')?.text?.[0]?.value || 'Unknown'}`,
-    url: `https://www.uniprot.org/uniprot/${result.uniProtkbId}`,
-    database: 'uniprot',
-    geneSymbol: geneSymbol,
-    organism: organism,
-    confidence: 0.9,
-    evidence: ['database'],
-    type: 'protein' as const
-  }));
+function parseUniProtResults(
+  results: any[],
+  geneSymbol?: string,
+  organism?: string,
+  locusTag?: string,
+  proteinId?: string,
+  taxonId?: string | number,
+): GeneSource[] {
+  return results.map(result => {
+    const accession = result.primaryAccession || result.uniProtkbId;
+    const proteinName = result.proteinDescription?.recommendedName?.fullName?.value
+      || result.proteinDescription?.submissionNames?.[0]?.fullName?.value
+      || result.uniProtkbId;
+    const gene = result.genes?.[0]?.geneName?.value || geneSymbol || 'Unknown';
+    const actualOrganism = result.organism?.scientificName || '';
+    const locusNames = (result.genes || [])
+      .flatMap((entry: any) => entry.orderedLocusNames || [])
+      .map((entry: any) => entry.value)
+      .filter(Boolean);
+    const exactProteinMatch = Boolean(proteinId && accession === proteinId);
+    const exactLocusMatch = Boolean(locusTag && locusNames.includes(locusTag));
+    const exactTaxonMatch = !taxonId || Number(result.organism?.taxonId) === Number(taxonId);
+    const targetMatch = (exactProteinMatch || exactLocusMatch || (!proteinId && !locusTag && gene.toLowerCase() === String(geneSymbol || '').toLowerCase()))
+      && organismNamesCompatible(actualOrganism, organism)
+      && exactTaxonMatch;
+    const aliases = [
+      ...(result.genes?.[0]?.synonyms || []).map((entry: any) => entry.value),
+      ...(result.genes?.[0]?.orderedLocusNames || []).map((entry: any) => entry.value),
+    ].filter(Boolean);
+    const comments = result.comments || [];
+    const commentTexts = (type: string) => comments
+      .filter((comment: any) => comment.commentType === type)
+      .flatMap((comment: any) => comment.texts || comment.text || [])
+      .map((text: any) => text.value)
+      .filter(Boolean);
+    const functions = commentTexts('FUNCTION');
+    const pathways = commentTexts('PATHWAY');
+    const families = commentTexts('SIMILARITY');
+    const catalyticActivities = comments
+      .filter((comment: any) => comment.commentType === 'CATALYTIC ACTIVITY')
+      .map((comment: any) => comment.reaction?.name)
+      .filter(Boolean);
+    const locations = comments
+      .filter((comment: any) => comment.commentType === 'SUBCELLULAR LOCATION')
+      .flatMap((comment: any) => comment.subcellularLocations || [])
+      .map((location: any) => location.location?.value)
+      .filter(Boolean);
+    const ecNumbers = Array.from(new Set([
+      ...(result.proteinDescription?.recommendedName?.ecNumbers || []).map((entry: any) => entry.value),
+      ...comments.map((comment: any) => comment.reaction?.ecNumber).filter(Boolean),
+    ])) as string[];
+    const crossReferences = result.uniProtKBCrossReferences || [];
+    const goTerms = crossReferences.filter((ref: any) => ref.database === 'GO').map((ref: any) => ref.id);
+    const allPathwayTerms = crossReferences
+      .filter((ref: any) => ['KEGG', 'BioCyc', 'Reactome'].includes(ref.database))
+      .map((ref: any) => `${ref.database}:${ref.id}`);
+    const exactKeggTerms = locusTag
+      ? allPathwayTerms.filter((term: string) => term.toLowerCase().endsWith(`:${locusTag.toLowerCase()}`))
+      : [];
+    const pathwayTerms = [
+      ...(exactKeggTerms.length ? exactKeggTerms : allPathwayTerms.filter((term: string) => term.startsWith('KEGG:'))),
+      ...allPathwayTerms.filter((term: string) => !term.startsWith('KEGG:')),
+    ];
+    const dbXrefs = [
+      `UniProtKB:${accession}`,
+      ...crossReferences.filter((ref: any) => ['GeneID', 'RefSeq', 'PDB'].includes(ref.database))
+        .map((ref: any) => `${ref.database}:${ref.id}`),
+    ];
+    const pmids = Array.from(new Set(
+      comments.flatMap((comment: any) => [
+        ...(comment.texts || []).flatMap((text: any) => text.evidences || []),
+        ...(comment.reaction?.evidences || []),
+      ]).filter((evidence: any) => evidence.source === 'PubMed').map((evidence: any) => evidence.id)
+    )) as string[];
+    const content = [
+      `UniProtKB: ${accession}`,
+      `Protein: ${proteinName}`,
+      `Gene: ${gene}`,
+      aliases.length ? `Alternative names: ${aliases.join(', ')}` : '',
+      `Organism: ${result.organism?.scientificName || organism || 'Unknown'}`,
+      functions.length ? `Function: ${functions.join(' ')}` : '',
+      catalyticActivities.length ? `Catalytic activity: ${catalyticActivities.join('; ')}` : '',
+      ecNumbers.length ? `EC: ${ecNumbers.join(', ')}` : '',
+      pathways.length ? `Biological process: ${pathways.join('; ')}` : '',
+      locations.length ? `Subcellular location: ${locations.join(', ')}` : '',
+      families.length ? `Protein family: ${families.join(' ')}` : '',
+      result.sequence?.length ? `Protein length: ${result.sequence.length} aa` : '',
+      result.sequence?.molWeight ? `Molecular weight: ${result.sequence.molWeight} Da` : '',
+      goTerms.length ? `GO terms: ${goTerms.join(', ')}` : '',
+      pathwayTerms.length ? `Pathway identifiers: ${pathwayTerms.join(', ')}` : '',
+      dbXrefs.length ? `Database cross-references: ${dbXrefs.join(', ')}` : '',
+      pmids.length ? `Supporting literature: ${pmids.map(pmid => `PMID:${pmid}`).join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+
+    return {
+      title: proteinName,
+      content,
+      url: `https://www.uniprot.org/uniprotkb/${accession}/entry`,
+      database: 'uniprot',
+      geneSymbol,
+      organism: actualOrganism || organism,
+      sourceId: `UniProtKB:${accession}`,
+      targetMatch,
+      provenance: {
+        provider: 'uniprot',
+        recordId: accession,
+        matchedBy: [
+          ...(exactProteinMatch ? ['protein_id'] : []),
+          ...(exactLocusMatch ? ['locus_tag'] : []),
+          ...(exactTaxonMatch ? ['taxon_id'] : []),
+        ],
+        actualGeneSymbol: gene,
+        actualOrganism,
+        actualTaxonId: result.organism?.taxonId,
+        locusTags: locusNames,
+        proteinIds: [accession],
+      },
+      confidence: result.entryType === 'UniProtKB reviewed (Swiss-Prot)' ? 0.98 : 0.85,
+      evidence: ['database', `UniProtKB:${accession}`, ...pmids.map(pmid => `PMID:${pmid}`)],
+      annotation: {
+        product: proteinName,
+        ecNumbers,
+        goTerms,
+        pathwayTerms,
+        dbXrefs,
+        reviewed: result.entryType === 'UniProtKB reviewed (Swiss-Prot)',
+      },
+      structuredData: {
+        geneBasicInfo: {
+          geneSymbol: gene,
+          organism: result.organism?.scientificName || organism || '',
+          alternativeNames: aliases,
+          geneType: 'protein_coding',
+          description: functions[0] || proteinName,
+        },
+        functionalData: {
+          molecularFunction: functions,
+          biologicalProcess: pathways,
+          cellularComponent: locations,
+          catalyticActivity: catalyticActivities.join('; '),
+          enzymeClassification: ecNumbers[0] || '',
+        },
+        proteinInfo: {
+          uniprotId: accession,
+          proteinName,
+          proteinSize: result.sequence?.length || 0,
+          molecularWeight: result.sequence?.molWeight || 0,
+          subcellularLocation: locations,
+          proteinDomains: families,
+          catalyticActivity: catalyticActivities.join('; '),
+        },
+      },
+      type: 'protein' as const,
+    };
+  });
 }
 
 function parseNCBIGeneResults(xmlData: string, geneSymbol?: string, organism?: string): GeneSource[] {
@@ -769,6 +1152,7 @@ function parseKEGGResults(data: string, geneSymbol?: string, organism?: string):
     .filter(Boolean)
     .map((line) => {
       const [entry, description = ''] = line.split('\t');
+      const product = description.includes(';') ? description.split(';').slice(1).join(';').trim() : '';
       return {
         title: `${entry}: ${description.split(';')[0] || geneSymbol || 'KEGG gene match'}`,
         content: `KEGG entry: ${entry}\nDescription: ${description || 'No KEGG description returned.'}`,
@@ -778,6 +1162,10 @@ function parseKEGGResults(data: string, geneSymbol?: string, organism?: string):
         organism,
         confidence: 0.8,
         evidence: ['pathway', 'database'],
+        annotation: {
+          product: product || undefined,
+          dbXrefs: [`KEGG:${entry}`],
+        },
         type: 'pathway' as const
       };
     });

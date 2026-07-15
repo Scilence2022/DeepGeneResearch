@@ -8,6 +8,7 @@ import {
 import { rewritingPrompt } from "@/constants/prompts";
 import { completePath } from "@/utils/url";
 import { pick, sort } from "radash";
+import { createFetchSignal } from "@/utils/fetch-signal";
 
 type TavilySearchResult = {
   title: string;
@@ -123,6 +124,7 @@ export interface SearchProviderOptions {
   query: string;
   maxResult?: number;
   scope?: string;
+  signal?: AbortSignal;
 }
 
 export async function createSearchProvider({
@@ -132,6 +134,7 @@ export async function createSearchProvider({
   query,
   maxResult = 5,
   scope,
+  signal,
 }: SearchProviderOptions) {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -327,8 +330,12 @@ ${rewritingPrompt}`,
       )}/search?${searchQuery.toString()}`,
       baseURL?.startsWith(local.origin)
         ? { method: "POST", credentials: "omit", headers }
-        : { method: "GET", credentials: "omit" }
+        : { method: "GET", credentials: "omit", signal: createFetchSignal(signal) }
     );
+    if (!response.ok) {
+      const body = (await response.text()).replace(/\s+/g, " ").slice(0, 300);
+      throw new Error(`SearxNG returned HTTP ${response.status}${body ? `: ${body}` : ""}`);
+    }
     const { results = [] } = await response.json();
     const rearrangedResults = sort(
       results as SearxngSearchResult[],
@@ -337,7 +344,7 @@ ${rewritingPrompt}`,
     );
     return {
       sources: rearrangedResults
-        .filter((item) => item.content && item.url && item.score >= 0.5)
+        .filter((item) => item.category !== "images" && item.content && item.url && item.score >= 0.5)
         .slice(0, maxResult * 5)
         .map((result) => pick(result, ["title", "content", "url"])) as Source[],
       images: rearrangedResults

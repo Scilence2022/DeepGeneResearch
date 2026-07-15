@@ -42,7 +42,9 @@ describe.sequential('durable task queue lifecycle', () => {
       cacheService: {
         getCachedResult: vi.fn().mockResolvedValue(null),
         setCachedResult: vi.fn().mockResolvedValue(undefined),
+        deleteCachedResult: vi.fn().mockResolvedValue(false),
       },
+      isReusableResearchResult: vi.fn().mockReturnValue(false),
     }));
   }
 
@@ -209,6 +211,8 @@ describe.sequential('durable task queue lifecycle', () => {
     await expect(queue.addTask({ ...base, maxResult: 21 })).rejects.toBeInstanceOf(TaskValidationError);
     await expect(queue.addTask({ ...base, userPrompt: 'x'.repeat(8_001) })).rejects.toBeInstanceOf(TaskValidationError);
     await expect(queue.addTask({ ...base, researchFocus: Array(21).fill('function') }))
+      .rejects.toBeInstanceOf(TaskValidationError);
+    await expect(queue.addTask({ ...base, forceRefresh: 'yes' } as any))
       .rejects.toBeInstanceOf(TaskValidationError);
   });
 });

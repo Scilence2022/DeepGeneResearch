@@ -37,7 +37,7 @@ export type CodeXomicsAnnotationProposal = Omit<AnnotationChangeSetProposal, 'ta
   generatedAt: string;
   mergeHints: {
     conservative: true;
-    overwriteProduct: false;
+    overwriteProduct: boolean;
     preserveExistingProduct: true;
   };
 };
@@ -46,12 +46,54 @@ interface BuildProposalInput {
   geneSymbol: string;
   organism: string;
   target?: GenomeTargetRef;
+  /** Existing product qualifier resolved from the exact CodeXomics target. */
+  currentProduct?: string | null;
   finalReport?: string;
   sources?: SourceLike[];
   confidence?: number | null;
   reportUrl?: string;
   detailsUrl?: string;
 }
+
+type MutationField = 'product' | 'EC_number' | 'go_terms' | 'ko' | 'pathway' | 'db_xref';
+
+interface QualifiedFieldEvidence {
+  value: string;
+  source: Record<string, any>;
+  provenance: Record<string, any>;
+}
+
+interface QualifiedMutationCandidate {
+  field: MutationField;
+  value: string;
+  evidence: QualifiedFieldEvidence[];
+}
+
+const AUTHORITATIVE_ANNOTATION_DATABASES = new Set([
+  'biocyc',
+  'ecocyc',
+  'gene_ontology',
+  'go',
+  'kegg',
+  'ncbi',
+  'ncbi_gene',
+  'refseq',
+  'uniprot',
+  'uniprotkb',
+]);
+
+const MUTATION_FIELD_DEFINITIONS: Array<{
+  field: MutationField;
+  annotationKey: string;
+  provenanceKey: string;
+}> = [
+  { field: 'product', annotationKey: 'product', provenanceKey: 'product' },
+  { field: 'EC_number', annotationKey: 'ecNumbers', provenanceKey: 'ecNumbers' },
+  { field: 'go_terms', annotationKey: 'goTerms', provenanceKey: 'goTerms' },
+  { field: 'ko', annotationKey: 'koTerms', provenanceKey: 'koTerms' },
+  { field: 'pathway', annotationKey: 'pathwayTerms', provenanceKey: 'pathwayTerms' },
+  { field: 'db_xref', annotationKey: 'dbXrefs', provenanceKey: 'dbXrefs' },
+];
 
 function dedupe(values: Array<string | null | undefined>): string[] {
   const seen = new Set<string>();
@@ -122,6 +164,7 @@ function sourceToText(source: SourceLike): string {
     source.url,
     source.database,
     Array.isArray(source.evidence) ? source.evidence.join(' ') : source.evidence,
+    source.annotation ? JSON.stringify(source.annotation) : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -260,48 +303,147 @@ function findEvidenceSourcePayload(detail: CodeXomicsEvidenceDetail, sources: So
   return '';
 }
 
-function extractAnnotationTerms(reportText: string, sources: SourceLike[]) {
-  const text = [reportText, ...sources.map(sourceToText)].join('\n');
+function normalizeComparable(value: unknown): string {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
 
-  return {
-    ecNumbers: dedupe(
-      Array.from(text.matchAll(/\bEC(?:\s+number)?[:\s]*(\d{1,2}\.\d{1,3}\.\d{1,3}\.(?:\d{1,3}|-))\b/gi)).map(
-        (match) => match[1]
-      )
-    ),
-    goTerms: dedupe(Array.from(text.matchAll(/\bGO:\d{7}\b/gi)).map((match) => match[0].toUpperCase())),
-    koTerms: dedupe(Array.from(text.matchAll(/\bK\d{5}\b/g)).map((match) => match[0])),
-    pathwayTerms: dedupe(
-      Array.from(text.matchAll(/\b(?:KEGG|Reactome|MetaCyc|BioCyc)[:\s]+([A-Za-z0-9_.:-]+)\b/gi)).map(
-        (match) => match[0]
-      )
-    ),
-  };
+function normalizeDatabase(value: unknown): string {
+  return normalizeComparable(value).replace(/[\s-]+/g, '_');
+}
+
+function normalizeUrl(value: unknown): string {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function asValues(value: unknown): string[] {
+  return dedupe((Array.isArray(value) ? value : [value]).map(item => String(item || '')));
+}
+
+function sourceTargetsExactFeature(source: Record<string, any>, target: GenomeTargetRef): boolean {
+  if (source.targetMatch !== true) return false;
+  const sourceTarget = source.target || source.targetRef || source.annotation?.target;
+  if (!sourceTarget || typeof sourceTarget !== 'object') return false;
+
+  return (['workspaceId', 'genomeId', 'annotationRevision', 'featureId', 'featureHash', 'chromosome'] as const)
+    .every(key => String(sourceTarget[key]) === String(target[key]));
+}
+
+function getFieldProvenance(annotation: Record<string, any>, key: string): Record<string, any>[] {
+  const container = annotation.fieldEvidence || annotation.provenance;
+  const value = container?.[key];
+  if (!value) return [];
+  return (Array.isArray(value) ? value : [value])
+    .filter(item => Boolean(item && typeof item === 'object'));
+}
+
+function isQualifiedFieldProvenance({
+  field,
+  value,
+  source,
+  provenance,
+  currentProduct,
+}: {
+  field: MutationField;
+  value: string;
+  source: Record<string, any>;
+  provenance: Record<string, any>;
+  currentProduct?: string | null;
+}): boolean {
+  const database = normalizeDatabase(source.database);
+  if (
+    normalizeComparable(provenance.value) !== normalizeComparable(value)
+    || normalizeComparable(provenance.sourceId) !== normalizeComparable(source.sourceId)
+    || normalizeDatabase(provenance.database) !== database
+    || normalizeUrl(provenance.url) !== normalizeUrl(source.url)
+  ) {
+    return false;
+  }
+
+  if (field !== 'product') return true;
+  const existingProduct = String(currentProduct || '').trim();
+  if (!existingProduct || normalizeComparable(existingProduct) === normalizeComparable(value)) return false;
+
+  return normalizeComparable(provenance.currentValue) === normalizeComparable(existingProduct)
+    && String(provenance.justification || '').trim().length >= 10;
+}
+
+function collectQualifiedMutationCandidates(
+  sources: SourceLike[],
+  target: GenomeTargetRef | undefined,
+  currentProduct?: string | null
+): QualifiedMutationCandidate[] {
+  if (!target) return [];
+  const candidates = new Map<string, QualifiedMutationCandidate>();
+
+  for (const source of sources) {
+    if (!source || typeof source === 'string') continue;
+    const database = normalizeDatabase(source.database);
+    if (
+      source.authoritative !== true
+      || !AUTHORITATIVE_ANNOTATION_DATABASES.has(database)
+      || !source.sourceId
+      || !source.url
+      || !source.annotation
+      || typeof source.annotation !== 'object'
+      || !sourceTargetsExactFeature(source, target)
+    ) {
+      continue;
+    }
+
+    for (const definition of MUTATION_FIELD_DEFINITIONS) {
+      const values = asValues(source.annotation[definition.annotationKey]);
+      const provenanceEntries = getFieldProvenance(source.annotation, definition.provenanceKey);
+      for (const value of values) {
+        const qualifiedEvidence = provenanceEntries
+          .filter(provenance => isQualifiedFieldProvenance({
+            field: definition.field,
+            value,
+            source,
+            provenance,
+            currentProduct,
+          }))
+          .map(provenance => ({ value, source, provenance }));
+        if (qualifiedEvidence.length === 0) continue;
+
+        const key = `${definition.field}:${normalizeComparable(value)}`;
+        const existing = candidates.get(key);
+        if (existing) {
+          existing.evidence.push(...qualifiedEvidence);
+        } else {
+          candidates.set(key, {
+            field: definition.field,
+            value,
+            evidence: qualifiedEvidence,
+          });
+        }
+      }
+    }
+  }
+
+  return Array.from(candidates.values());
 }
 
 export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): CodeXomicsAnnotationProposal {
   const finalReport = input.finalReport || '';
   const sources = input.sources || [];
   const summary = extractSummary(finalReport);
-  const evidenceDetails = extractEvidenceFromSources(sources);
+  // Prioritize authoritative structured records so a long literature list
+  // cannot crowd the exact UniProt/KEGG identity record out of the bounded
+  // annotation manifest.
+  const orderedSources = [...sources].sort((left, right) => {
+    const rank = (source: SourceLike) => {
+      if (!source || typeof source === 'string') return 0;
+      if (source.annotation?.reviewed) return 3;
+      if (source.annotation) return 2;
+      return source.database === 'pubmed' ? 1 : 0;
+    };
+    return rank(right) - rank(left);
+  });
+  const evidenceDetails = extractEvidenceFromSources(orderedSources);
   for (const detail of extractEvidenceFromText(finalReport)) {
     addEvidenceDetail(evidenceDetails, detail);
   }
-
-  const evidence = dedupe(evidenceDetails.map((detail) => detail.label)).slice(0, 30);
-  const terms = extractAnnotationTerms(finalReport, sources);
-  const dbXrefs = dedupe(evidence.filter((item) => /^(PMID|DOI):/i.test(item)));
-  const candidateUpdates: Record<string, string | string[]> = {};
-
-  // Narrative text remains proposal/report metadata. It is not a mutating
-  // qualifier until DGR can provide sentence-level cited spans or entailment
-  // evidence for every clause.
-  if (terms.ecNumbers.length > 0) candidateUpdates.EC_number = terms.ecNumbers;
-  if (terms.goTerms.length > 0) candidateUpdates.go_terms = terms.goTerms;
-  if (terms.koTerms.length > 0) candidateUpdates.ko = terms.koTerms;
-  if (terms.pathwayTerms.length > 0) candidateUpdates.pathway = terms.pathwayTerms;
-  if (dbXrefs.length > 0) candidateUpdates.db_xref = dbXrefs;
-  if (evidence.length > 0) candidateUpdates.codexomics_research_evidence = evidence;
+  evidenceDetails.splice(30);
 
   const generatedAt = new Date().toISOString();
   const confidence = normalizeConfidence(input.confidence);
@@ -323,55 +465,86 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
       sourceHash: createHash('sha256')
         .update(JSON.stringify({ detail, sourcePayload: evidenceSourcePayloads[index] }))
         .digest('hex'),
-      supporting: Boolean(evidenceSourcePayloads[index]),
+      // Report text, citations, and unstructured retrieval payloads are useful
+      // audit context but can never authorize an annotation mutation.
+      supporting: false,
     };
   });
+  const qualifiedCandidates = collectQualifiedMutationCandidates(sources, input.target, input.currentProduct);
   const claims: AnnotationChangeSetProposal['claims'] = [];
   const operations: AnnotationOperation[] = [];
   const updates: Record<string, string | string[]> = {};
-  for (const [field, value] of Object.entries(candidateUpdates)) {
-    const candidateValues = Array.isArray(value) ? value : [value];
-    const supportedValues: string[] = [];
-
-    for (const candidateValue of candidateValues) {
-      const normalizedValue = String(candidateValue).toLowerCase();
-      const evidenceIds = sourceRecords
-        .filter((record, index) => {
-          if (!record.supporting) return false;
-          if (field === 'codexomics_research_evidence' || field === 'db_xref') {
-            return record.label.toLowerCase().includes(normalizedValue);
-          }
-          if (['EC_number', 'go_terms', 'ko', 'pathway'].includes(field)) {
-            const payload = evidenceSourcePayloads[index].toLowerCase();
-            return Boolean(payload) && payload.includes(normalizedValue);
-          }
-          return false;
-        })
-        .map(record => record.id);
-      if (evidenceIds.length === 0) continue;
-
-      const supportedValue = String(candidateValue);
-      supportedValues.push(supportedValue);
-      const claim = {
-        id: `claim_${claims.length + 1}`,
-        field,
-        value: supportedValue,
-        evidenceIds,
-        confidence,
-      };
-      claims.push(claim);
-      operations.push({
-        op: field === 'db_xref' ? 'addDbxref' : field === 'codexomics_research_evidence' ? 'addEvidenceLink' : 'addQualifier',
-        field,
-        value: supportedValue,
-        claimIds: [claim.id],
+  for (const candidate of qualifiedCandidates) {
+    const evidenceIds = candidate.evidence.map(({ source, provenance }) => {
+      const id = `evidence_${sourceRecords.length + 1}`;
+      sourceRecords.push({
+        id,
+        type: 'database',
+        label: `${provenance.sourceId} ${candidate.field}=${candidate.value}`,
+        sourceId: String(provenance.sourceId),
+        url: String(provenance.url),
+        database: String(provenance.database),
+        retrievedAt: typeof provenance.retrievedAt === 'string' ? provenance.retrievedAt : generatedAt,
+        sourceHash: createHash('sha256')
+          .update(JSON.stringify({
+            field: candidate.field,
+            value: candidate.value,
+            target: input.target,
+            source: {
+              sourceId: source.sourceId,
+              database: source.database,
+              url: source.url,
+              targetMatch: source.targetMatch,
+              target: source.target || source.targetRef || source.annotation?.target,
+              annotation: source.annotation,
+            },
+            provenance,
+          }))
+          .digest('hex'),
+        supporting: true,
       });
-    }
+      return id;
+    });
 
-    if (supportedValues.length > 0) {
-      updates[field] = Array.isArray(value) ? supportedValues : supportedValues[0];
+    const claim = {
+      id: `claim_${claims.length + 1}`,
+      field: candidate.field,
+      value: candidate.value,
+      evidenceIds,
+      confidence,
+    };
+    claims.push(claim);
+    operations.push({
+      op: candidate.field === 'product'
+        ? 'replaceQualifier'
+        : candidate.field === 'db_xref'
+          ? 'addDbxref'
+          : 'addQualifier',
+      field: candidate.field,
+      value: candidate.value,
+      claimIds: [claim.id],
+    });
+
+    if (candidate.field === 'product') {
+      updates.product = candidate.value;
+    } else {
+      const existing = Array.isArray(updates[candidate.field]) ? updates[candidate.field] as string[] : [];
+      updates[candidate.field] = dedupe([...existing, candidate.value]);
     }
   }
+
+  const valuesFor = (field: MutationField) => qualifiedCandidates
+    .filter(candidate => candidate.field === field)
+    .map(candidate => candidate.value);
+  const ecNumbers = valuesFor('EC_number');
+  const goTerms = valuesFor('go_terms');
+  const koTerms = valuesFor('ko');
+  const pathwayTerms = valuesFor('pathway');
+  const dbXrefs = valuesFor('db_xref');
+  const evidence = dedupe([
+    ...evidenceDetails.map(detail => detail.label),
+    ...sourceRecords.filter(record => record.supporting).map(record => record.label),
+  ]).slice(0, 30);
 
   const proposal: CodeXomicsAnnotationProposal = {
     schema: 'codexomics.annotation-change-set.v2',
@@ -398,17 +571,17 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
     evidenceDetails,
     sources: evidence,
     updates,
-    ecNumbers: terms.ecNumbers,
-    goTerms: terms.goTerms,
-    koTerms: terms.koTerms,
-    pathwayTerms: terms.pathwayTerms,
+    ecNumbers,
+    goTerms,
+    koTerms,
+    pathwayTerms,
     dbXrefs,
     reportUrl: input.reportUrl,
     detailsUrl: input.detailsUrl,
     generatedAt,
     mergeHints: {
       conservative: true,
-      overwriteProduct: false,
+      overwriteProduct: Boolean(updates.product),
       preserveExistingProduct: true,
     },
   };

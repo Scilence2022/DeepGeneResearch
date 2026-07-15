@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
         baseURL: getSearchProviderBaseURL(SEARCH_PROVIDER),
         apiKey: getSearchProviderApiKey(SEARCH_PROVIDER),
         provider: SEARCH_PROVIDER,
+        scope: process.env.MCP_SEARXNG_SCOPE || undefined,
         maxResult: body.maxResult ?? 5,
       },
       language: body.language || 'English',

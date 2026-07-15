@@ -31,6 +31,7 @@ export interface DeepResearchOptions {
     apiKey?: string;
     provider: string;
     maxResult?: number;
+    scope?: string;
   };
   language?: string;
   onMessage?: (event: string, data: any) => void;
@@ -590,6 +591,11 @@ class DeepResearch {
     explicitGeneInfo?: {
       geneSymbol: string;
       organism: string;
+      target?: {
+        locusTag?: string | null;
+        proteinId?: string | null;
+        taxonId?: string | number | null;
+      };
       researchFocus?: string[];
       specificAspects?: string[];
       diseaseContext?: string;
@@ -621,6 +627,7 @@ class DeepResearch {
       const geneEngine = createGeneResearchEngine({
         geneSymbol: geneInfo.geneSymbol,
         organism: geneInfo.organism,
+        target: explicitGeneInfo?.target,
         researchFocus: geneInfo.researchFocus,
         specificAspects: geneInfo.specificAspects,
         diseaseContext: geneInfo.diseaseContext,
@@ -635,6 +642,7 @@ class DeepResearch {
         fallbackSearchProvider: this.options.searchProvider,
         language: this.options.language,
         signal,
+        onProgress: data => this.onMessage('progress', data),
       });
 
       this.onMessage("progress", { step: "gene-research", status: "processing" });
@@ -661,12 +669,26 @@ class DeepResearch {
         };
       });
       const requestedGene = geneInfo.geneSymbol.trim().toLowerCase();
-      const sourceMatchesRequestedGene = (source: { title?: string; content?: string; url?: string }) =>
-        [source.title, source.content, source.url]
+      const requestedOrganism = geneInfo.organism.trim().toLowerCase();
+      const trustedDatabases = new Set(['pubmed', 'uniprot', 'ncbi_gene', 'kegg', 'pdb', 'string', 'reactome']);
+      const sourceMatchesRequestedGene = (source: {
+        title?: string;
+        content?: string;
+        url?: string;
+        database?: string;
+        geneSymbol?: string;
+        organism?: string;
+      }) => {
+        const textMatch = [source.title, source.content, source.url]
           .filter(Boolean)
           .join('\n')
           .toLowerCase()
           .includes(requestedGene);
+        const provenanceMatch = trustedDatabases.has(String(source.database || '').toLowerCase())
+          && String(source.geneSymbol || '').trim().toLowerCase() === requestedGene
+          && (!source.organism || String(source.organism).toLowerCase().includes(requestedOrganism));
+        return textMatch || provenanceMatch;
+      };
       const sources = Array.from(
         new Map(
           [...literatureSources, ...(result.sources || [])]
@@ -693,7 +715,8 @@ class DeepResearch {
           qualityMetrics: result.qualityMetrics,
           visualizations: enableVisualization ? result.visualizations : [],
           workflow: result.workflow
-        }
+        },
+        metadata: result.metadata,
       };
       
       // Update task status if taskId is provided

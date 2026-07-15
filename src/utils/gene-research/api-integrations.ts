@@ -187,13 +187,15 @@ export class GeneAPIIntegrations {
   }
 
   private async searchUniProtId(): Promise<string | null> {
-    const searchUrl = `https://rest.uniprot.org/uniprotkb/search?query=gene:${this.geneSymbol} AND organism:${this.organism}&format=json&size=1`;
+    const query = `gene_exact:${this.geneSymbol} AND organism_name:"${this.organism}"`;
+    const searchUrl = `https://rest.uniprot.org/uniprotkb/search?query=${encodeURIComponent(query)}&format=json&size=1`;
     
     const response = await this.fetch(searchUrl);
+    if (!response.ok) throw new Error(`UniProt search returned HTTP ${response.status}`);
     const data = await response.json();
     
     const results = data.results;
-    return results && results.length > 0 ? results[0].uniProtkbId : null;
+    return results && results.length > 0 ? results[0].primaryAccession || results[0].uniProtkbId : null;
   }
 
   private async fetchUniProtProtein(uniprotId: string): Promise<any> {
