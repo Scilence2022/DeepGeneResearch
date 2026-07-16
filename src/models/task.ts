@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { GenomeTargetRef } from '@/contracts/annotation-change-set';
+import type { CurrentAnnotationSnapshot, GenomeTargetRef } from '@/contracts/annotation-change-set';
 
 // 任务状态类型
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancel_requested' | 'cancelled';
@@ -43,6 +43,8 @@ export interface GeneResearchParameters {
   forceRefresh?: boolean;
   /** Exact target returned by CodeXomics resolve_annotation_target. */
   target?: GenomeTargetRef;
+  /** Scientific qualifier snapshot derived from that exact target revision. */
+  currentAnnotation?: CurrentAnnotationSnapshot;
   idempotencyKey?: string;
   correlationId?: string;
 }

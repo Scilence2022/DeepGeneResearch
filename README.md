@@ -193,6 +193,10 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 TAVILY_API_KEY=your_tavily_api_key
 EXA_API_KEY=your_exa_api_key
 
+# Optional but recommended for sustained NCBI Gene/PubMed research.
+# DGR still rate-limits and retries requests when this is unset.
+NCBI_API_KEY=your_ncbi_eutilities_api_key
+
 # Required for MCP and crawler routes (at least 16 characters)
 ACCESS_PASSWORD=replace_with_a_long_random_shared_secret
 
@@ -427,7 +431,7 @@ Deep Gene Research provides a comprehensive MCP Server for integration with AI a
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
-| `deep-gene-research` | Queue specialized gene function research | geneSymbol, organism, researchFocus, userPrompt |
+| `deep-gene-research` | Queue specialized gene function research | geneSymbol, organism, target, currentAnnotation, researchFocus, userPrompt |
 | `get-task-status` | Poll queued research task status/results | taskId, resultMode |
 | `cancel-research-run` | Request cancellation without deleting the audit record | taskId |
 | `write-research-plan` | Generate research plan based on query | query, language |
@@ -497,6 +501,8 @@ When the task completes, its result includes:
 - **Quality Metrics**: Data completeness, literature coverage, experimental evidence
 - **Visualizations**: Mermaid diagrams for pathways, interactions, structures
 - **Research Report**: Structured sections with executive summary, molecular function, etc.
+- **Identity-aware bibliography**: exact NCBI Gene-linked PubMed records are kept separate from directly supported target papers; explicit homonyms, Lys-C digestion reagents, phage genes, off-organism results, and papers focused on another subject are rejected.
+- **Citation-bound findings**: biological literature facts are copied from direct PubMed abstract spans and carry an exact PMID/DOI, canonical abstract/span hashes, and exact UTF-16 offsets. Evidence records locate the canonical abstract in the full task `sources`, allowing CodeXomics to verify archived findings before use. Gene-linked-only context is never promoted to a biological claim.
 
 ```json
 {
@@ -558,10 +564,12 @@ const response = await fetch('https://your-domain.com/api/mcp', {
 
 There are two supported integration paths:
 
-1. An external agent connects to DGR directly, passes the exact object returned by CodeXomics `resolve_annotation_target` as `target`, polls with `resultMode: "annotation"`, and passes `result.annotationProposal` to CodeXomics `create_annotation_changeset`.
-2. The CodeXomics ChatBox calls its built-in `start_annotation_research` workflow. CodeXomics' Electron main process sends DGR requests through a credential-holding proxy configured with `DGR_MCP_URL` and `DGR_MCP_TOKEN`; the renderer never receives the bearer secret.
+1. An external agent should normally call CodeXomics `start_annotation_research` and poll `get_annotation_research_workflow`; CodeXomics invokes DGR, archives the full task, verifies every citation-bound abstract span, and only then materializes the proposal. If the agent starts DGR directly, it must call CodeXomics `archive_annotation_research` with the exact task, correlation ID, and CDS identifier before calling `create_annotation_changeset` with `researchRun=taskId`.
+2. The CodeXomics ChatBox uses the same built-in `start_annotation_research` workflow. CodeXomics' Electron main process sends DGR requests through a credential-holding proxy configured with `DGR_MCP_URL` and `DGR_MCP_TOKEN`; the renderer never receives the bearer secret.
 
 A target-bound proposal is not a commit. CodeXomics validates the evidence and target again, creates a reviewable diff, requires a separate curator approval, and applies the ChangeSet only while its target hash and revision still match.
+
+CodeXomics should also pass `currentAnnotation` from that same resolved CDS revision. It is a bounded snapshot containing optional `product` plus `EC_number`, `go_terms`, `ko`, `pathway`, and `db_xref` arrays. DGR uses it to omit qualifiers that already exist. Product replacement is proposed only when an exact authoritative source refines a supplied placeholder or lexically generic product; a missing or already-specific product is preserved.
 
 ### **Custom Model Configuration**
 

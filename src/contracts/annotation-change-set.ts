@@ -23,6 +23,22 @@ export interface GenomeTargetRef {
   proteinSha256?: string | null;
 }
 
+/**
+ * Bounded snapshot of mutable scientific qualifiers on the resolved CDS.
+ * CodeXomics derives this from the same immutable target revision; DGR uses it
+ * only to suppress no-op additions and to assess conservative product
+ * refinement.
+ */
+export interface CurrentAnnotationSnapshot {
+  product?: string | null;
+  note?: string[];
+  EC_number?: string[];
+  go_terms?: string[];
+  ko?: string[];
+  pathway?: string[];
+  db_xref?: string[];
+}
+
 export interface EvidenceRecord {
   id: string;
   type: 'pmid' | 'doi' | 'url' | 'database' | 'citation';
@@ -30,8 +46,37 @@ export interface EvidenceRecord {
   sourceId?: string;
   url?: string;
   database?: string;
+  identifiers?: Array<{
+    scheme: 'pmid' | 'doi';
+    value: string;
+  }>;
   retrievedAt: string;
   sourceHash: string;
+  /**
+   * Machine-verifiable locator for evidence content retained in the full DGR
+   * task result. It is intentionally relative to a matched source object so a
+   * downstream archive can select the source by an exact identifier before it
+   * dereferences the content.
+   */
+  sourceBinding?: {
+    schema: 'dgr.evidence-source-binding.v1';
+    sourceCollection: 'sources';
+    selector: {
+      database: 'pubmed';
+      identifier: {
+        scheme: 'pmid';
+        value: string;
+      };
+    };
+    content: {
+      relativeJsonPointer: '/structuredData/literatureReferences/0/abstract';
+      canonicalization: 'dgr.pubmed-abstract.v1';
+      sha256: string;
+      hashEncoding: 'utf8';
+      length: number;
+      lengthEncoding: 'utf16_code_units';
+    };
+  };
   supporting: boolean;
 }
 
@@ -76,6 +121,29 @@ export function assertAnnotationChangeSetProposalIntegrity(proposal: AnnotationC
   const evidenceById = new Map(proposal.evidenceManifest.sourceRecords.map(record => [record.id, record]));
   if (evidenceById.size !== proposal.evidenceManifest.sourceRecords.length) {
     throw new Error('Annotation proposal contains duplicate evidence IDs');
+  }
+
+  for (const evidence of proposal.evidenceManifest.sourceRecords) {
+    const binding = evidence.sourceBinding;
+    if (!binding) continue;
+    const pmidIdentifier = evidence.identifiers?.find(identifier => identifier.scheme === 'pmid')?.value;
+    if (
+      binding.schema !== 'dgr.evidence-source-binding.v1'
+      || binding.sourceCollection !== 'sources'
+      || binding.selector.database !== 'pubmed'
+      || binding.selector.identifier.scheme !== 'pmid'
+      || !/^\d{6,10}$/.test(binding.selector.identifier.value)
+      || binding.selector.identifier.value !== pmidIdentifier
+      || binding.content.relativeJsonPointer !== '/structuredData/literatureReferences/0/abstract'
+      || binding.content.canonicalization !== 'dgr.pubmed-abstract.v1'
+      || !/^[a-f0-9]{64}$/.test(binding.content.sha256)
+      || binding.content.hashEncoding !== 'utf8'
+      || !Number.isInteger(binding.content.length)
+      || binding.content.length <= 0
+      || binding.content.lengthEncoding !== 'utf16_code_units'
+    ) {
+      throw new Error(`Annotation evidence ${evidence.id} contains an invalid source binding`);
+    }
   }
 
   const claimsById = new Map(proposal.claims.map(claim => [claim.id, claim]));

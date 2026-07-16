@@ -167,9 +167,24 @@ export async function resolvePublicUrl(rawUrl: string): Promise<{
   return { url, address: selected.address, family: selected.family as 4 | 6 };
 }
 
+/** Create a DNS-rebinding-safe lookup that supports both Node callback forms. */
+export function createPinnedLookup(address: string, family: 4 | 6): LookupFunction {
+  return ((_hostname, options, callback) => {
+    if (typeof options === 'object' && options?.all) {
+      (callback as any)(null, [{ address, family }]);
+      return;
+    }
+    (callback as any)(null, address, family);
+  }) as LookupFunction;
+}
+
 export async function fetchPublicText(
   rawUrl: string,
-  { maxBytes = 5 * 1024 * 1024, timeoutMs = 15_000 }: { maxBytes?: number; timeoutMs?: number } = {}
+  {
+    maxBytes = 5 * 1024 * 1024,
+    timeoutMs = 15_000,
+    maxRedirects = 3,
+  }: { maxBytes?: number; timeoutMs?: number; maxRedirects?: number } = {}
 ): Promise<{ url: URL; status: number; contentType: string; body: string }> {
   const resolved = await resolvePublicUrl(rawUrl);
   const request = resolved.url.protocol === 'https:' ? httpsRequest : httpRequest;
@@ -185,12 +200,29 @@ export async function fetchPublicText(
         },
         // Pin the validated address so DNS rebinding cannot redirect the
         // subsequent connection into a private network.
-        lookup: ((_hostname, _options, callback) => {
-          callback(null, resolved.address, resolved.family);
-        }) satisfies LookupFunction,
+        lookup: createPinnedLookup(resolved.address, resolved.family),
       },
       response => {
         const status = response.statusCode || 0;
+        if ([301, 302, 303, 307, 308].includes(status) && response.headers.location) {
+          response.resume();
+          if (maxRedirects <= 0) {
+            reject(new Error('Crawler upstream exceeded the redirect limit'));
+            return;
+          }
+          let redirectUrl: string;
+          try {
+            redirectUrl = new URL(response.headers.location, resolved.url).toString();
+          } catch {
+            reject(new Error('Crawler upstream returned an invalid redirect URL'));
+            return;
+          }
+          // Re-enter through resolvePublicUrl so every redirect target is
+          // independently checked and DNS-pinned against SSRF/rebinding.
+          void fetchPublicText(redirectUrl, { maxBytes, timeoutMs, maxRedirects: maxRedirects - 1 })
+            .then(resolve, reject);
+          return;
+        }
         if (status < 200 || status >= 300) {
           response.resume();
           reject(new Error(`Crawler upstream returned ${status}`));

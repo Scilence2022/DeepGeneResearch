@@ -112,6 +112,24 @@ export class TaskQueue extends EventEmitter {
     ) {
       throw new TaskValidationError('maxResult must be an integer from 1 to 20');
     }
+    if (parameters.currentAnnotation !== undefined) {
+      if (!parameters.currentAnnotation || typeof parameters.currentAnnotation !== 'object' || Array.isArray(parameters.currentAnnotation)) {
+        throw new TaskValidationError('currentAnnotation must be a bounded scientific qualifier snapshot');
+      }
+      const allowedFields = new Set(['product', 'note', 'EC_number', 'go_terms', 'ko', 'pathway', 'db_xref']);
+      const unknownField = Object.keys(parameters.currentAnnotation).find(field => !allowedFields.has(field));
+      if (unknownField) throw new TaskValidationError(`currentAnnotation.${unknownField} is not an allowed qualifier`);
+      boundedString(parameters.currentAnnotation.product, 'currentAnnotation.product', 1_024);
+      boundedStringArray(parameters.currentAnnotation.note, 'currentAnnotation.note', 32, 8_192);
+      boundedStringArray(parameters.currentAnnotation.EC_number, 'currentAnnotation.EC_number', 64, 64);
+      boundedStringArray(parameters.currentAnnotation.go_terms, 'currentAnnotation.go_terms', 256, 64);
+      boundedStringArray(parameters.currentAnnotation.ko, 'currentAnnotation.ko', 128, 128);
+      boundedStringArray(parameters.currentAnnotation.pathway, 'currentAnnotation.pathway', 256, 256);
+      boundedStringArray(parameters.currentAnnotation.db_xref, 'currentAnnotation.db_xref', 512, 512);
+      if (!parameters.target) {
+        throw new TaskValidationError('currentAnnotation requires an exact resolved CodeXomics target');
+      }
+    }
     if (!parameters.target) return;
 
     if (typeof parameters.target !== 'object') {
@@ -122,7 +140,7 @@ export class TaskQueue extends EventEmitter {
       boundedString(parameters.target[field], `target.${field}`, 512, true);
     }
     boundedString(parameters.target.annotationId, 'target.annotationId', 512);
-    boundedString(parameters.target.featureType, 'target.featureType', 128);
+    boundedString(parameters.target.featureType, 'target.featureType', 128, true);
     boundedString(parameters.target.locusTag, 'target.locusTag', 256);
     boundedString(parameters.target.geneSymbol, 'target.geneSymbol', 128);
     boundedString(parameters.target.proteinId, 'target.proteinId', 256);
@@ -132,6 +150,12 @@ export class TaskQueue extends EventEmitter {
     boundedString(parameters.target.proteinSha256, 'target.proteinSha256', 128);
     if (!Number.isInteger(parameters.target.annotationRevision) || parameters.target.annotationRevision < 0) {
       throw new TaskValidationError('Resolved CodeXomics target has an invalid annotationRevision');
+    }
+    if (String(parameters.target.featureType).trim().toUpperCase() !== 'CDS') {
+      throw new TaskValidationError('Deep gene annotation research is restricted to resolved CDS targets');
+    }
+    if (!String(parameters.target.locusTag || '').trim() && !String(parameters.target.proteinId || '').trim()) {
+      throw new TaskValidationError('Resolved CDS target must include a stable locusTag or proteinId');
     }
 
     const normalize = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -244,6 +268,7 @@ export class TaskQueue extends EventEmitter {
         geneSymbol: task.parameters.geneSymbol,
         organism: task.parameters.organism,
         target: task.parameters.target,
+        currentAnnotation: task.parameters.currentAnnotation,
         finalReport: result.finalReport || result.report?.content || '',
         sources: result.sources || [],
         confidence:
@@ -444,6 +469,7 @@ export class TaskQueue extends EventEmitter {
         geneSymbol,
         organism,
         target: task.parameters.target,
+        currentAnnotation: task.parameters.currentAnnotation,
         researchFocus,
         specificAspects,
         diseaseContext,

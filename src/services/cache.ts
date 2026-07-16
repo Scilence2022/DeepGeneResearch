@@ -1,8 +1,10 @@
 import { GeneResearchParameters } from '@/models/task';
 import { Md5 } from 'ts-md5';
 import packageMetadata from '../../package.json';
+import { normalizeAnnotationQualifierValue } from '@/utils/gene-research/current-annotation';
+import type { CurrentAnnotationSnapshot } from '@/contracts/annotation-change-set';
 
-const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v2';
+const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v5';
 const NON_SEMANTIC_PARAMETER_KEYS = new Set([
   'idempotencyKey',
   'correlationId',
@@ -10,7 +12,7 @@ const NON_SEMANTIC_PARAMETER_KEYS = new Set([
   'returnReportAsUrl',
   'returnDetailsAsUrl',
 ]);
-const AUTHORITATIVE_DATABASES = new Set([
+const EXACT_TARGET_DATABASES = new Set([
   'biocyc',
   'ecocyc',
   'ensembl',
@@ -18,11 +20,7 @@ const AUTHORITATIVE_DATABASES = new Set([
   'kegg',
   'ncbi',
   'ncbi_gene',
-  'pdb',
-  'pubmed',
-  'reactome',
   'refseq',
-  'string',
   'uniprot',
 ]);
 const PLACEHOLDER_PATTERN = /\[(?:brief description|specific function|key structural|ncbi gene id|enzyme commission number|chemical equation|main substrates|required cofactors|list of aliases|chromosome and coordinates|number of (?:exons|introns)|[^\]]*unknown[^\]]*)[^\]]*\]/i;
@@ -121,6 +119,27 @@ function canonicalizeParameters(parameters: GeneResearchParameters): Record<stri
       if ((key === 'researchFocus' || key === 'specificAspects') && Array.isArray(value)) {
         return [key, Array.from(new Set(value.map(item => String(item).trim()))).sort()] as const;
       }
+      if (key === 'currentAnnotation' && value && typeof value === 'object') {
+        const snapshot = value as CurrentAnnotationSnapshot;
+        const canonicalSnapshot: Record<string, string | string[]> = {};
+        for (const field of ['product', 'note', 'EC_number', 'go_terms', 'ko', 'pathway', 'db_xref'] as const) {
+          const rawValues = field === 'product'
+            ? [snapshot.product]
+            : Array.isArray(snapshot[field])
+              ? snapshot[field] as string[]
+              : [];
+          const normalized = Array.from(new Set(rawValues
+            .map(item => normalizeAnnotationQualifierValue(field, item))
+            .filter(Boolean)))
+            .sort();
+          if (field === 'product') {
+            if (normalized[0]) canonicalSnapshot.product = normalized[0];
+          } else if (normalized.length > 0) {
+            canonicalSnapshot[field] = normalized;
+          }
+        }
+        return [key, canonicalSnapshot] as const;
+      }
       return [key, value] as const;
     });
   return Object.fromEntries(entries);
@@ -183,11 +202,19 @@ function sourcePayload(source: any): string {
     .trim();
 }
 
-function isAuthoritativeSource(source: any): boolean {
+function isExactTargetAuthoritativeSource(source: any): boolean {
   const database = String(source?.database || '').trim().toLowerCase();
-  if (AUTHORITATIVE_DATABASES.has(database)) return true;
-  if (source?.structuredData && typeof source.structuredData === 'object') return true;
-  return Boolean(source?.pmid || source?.doi) && database !== 'searxng';
+  return EXACT_TARGET_DATABASES.has(database)
+    && source?.authoritative === true
+    && source?.targetMatch === true;
+}
+
+function isTargetRelevantLiterature(source: any): boolean {
+  const database = String(source?.database || '').trim().toLowerCase();
+  return database === 'pubmed'
+    && source?.structuredData?.targetRelevance?.accepted === true
+    && source?.structuredData?.targetRelevance?.directness !== 'gene_linked_context'
+    && Boolean(source?.provenance?.recordId || source?.pmid || source?.url);
 }
 
 /**
@@ -218,7 +245,11 @@ export function isReusableResearchResult(
   }
 
   const substantiveSources = Array.from(uniqueSources.values());
-  return substantiveSources.length >= 2 && substantiveSources.some(isAuthoritativeSource);
+  const exactTargetSources = substantiveSources.filter(isExactTargetAuthoritativeSource);
+  const targetRelevantSources = substantiveSources.filter(source =>
+    isExactTargetAuthoritativeSource(source) || isTargetRelevantLiterature(source)
+  );
+  return exactTargetSources.length >= 1 && targetRelevantSources.length >= 2;
 }
 
 class CacheService {

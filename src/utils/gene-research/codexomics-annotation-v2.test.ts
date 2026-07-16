@@ -1,6 +1,8 @@
+import { createHash } from 'crypto';
 import { describe, expect, it } from 'vitest';
 import { assertAnnotationChangeSetProposalIntegrity } from '@/contracts/annotation-change-set';
 import { buildCodeXomicsAnnotationProposal } from './codexomics-annotation';
+import { canonicalizePubMedAbstract } from './literature-findings';
 
 const target = {
   workspaceId: 'ws_a',
@@ -74,12 +76,12 @@ function exactStructuredSource({
 
 describe('CodeXomics annotation ChangeSet proposal v2', () => {
   it('accepts exact-target authoritative structured fields with field-level provenance', () => {
-    const currentProduct = 'bifunctional homoserine kinase / 4-hydroxythreonine kinase';
+    const currentProduct = 'hypothetical protein';
     const proposal = buildCodeXomicsAnnotationProposal({
       geneSymbol: 'thrB',
       organism: 'Escherichia coli',
       target,
-      currentProduct,
+      currentAnnotation: { product: currentProduct },
       finalReport: 'The narrative may summarize the research but cannot authorize mutations.',
       sources: [exactStructuredSource({ currentProduct })],
       confidence: 0.9,
@@ -106,7 +108,272 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     expect(proposal.claims.flatMap(claim => claim.evidenceIds).every(evidenceId =>
       proposal.evidenceManifest.sourceRecords.find(record => record.id === evidenceId)?.supporting
     )).toBe(true);
+    expect(proposal.researchSummary).toMatchObject({
+      schema: 'dgr.curation-summary.v1',
+      facts: expect.arrayContaining([
+        expect.objectContaining({ category: 'identity', field: 'product', value: 'Homoserine kinase' }),
+        expect.objectContaining({ category: 'function', field: 'enzyme_classification', value: ['2.7.1.39'] }),
+      ]),
+    });
+    expect(proposal.researchSummary.facts.every(fact => fact.evidenceIds.length > 0)).toBe(true);
+    expect(proposal.evidenceManifest.sourceRecords.every(record => !record.label.includes('retrievedAt'))).toBe(true);
     expect(proposal.mergeHints.overwriteProduct).toBe(true);
+  });
+
+  it('includes only target-relevant PubMed records in the concise literature summary', () => {
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: { ...target, featureId: 'b4024', locusTag: 'b4024', geneSymbol: 'lysC' },
+      sources: [
+        {
+          title: 'Direct control of the Escherichia coli lysC riboswitch',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/38253429/',
+          database: 'pubmed',
+          provenance: { provider: 'pubmed', recordId: '38253429' },
+          structuredData: {
+            targetRelevance: {
+              accepted: true,
+              score: 12,
+              directness: 'direct',
+              reason: 'target supported by gene_symbol, organism_text',
+            },
+            literatureReferences: [{
+              pmid: '38253429',
+              year: 2024,
+              abstract: 'In Escherichia coli, lysC expression is repressed by a lysine-responsive regulatory mechanism.',
+            }],
+          },
+        },
+        {
+          title: 'Lysozyme C assay',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/11111111/',
+          database: 'pubmed',
+          provenance: { provider: 'pubmed', recordId: '11111111' },
+          structuredData: {
+            targetRelevance: { accepted: false, score: 0, reason: 'no exact target identity' },
+            literatureReferences: [{ pmid: '11111111', year: 2020 }],
+          },
+        },
+      ],
+    });
+
+    expect(proposal.researchSummary.literature).toHaveLength(1);
+    expect(proposal.researchSummary.literature[0]).toMatchObject({
+      pmid: '38253429',
+      relevance: 'high',
+    });
+    expect(proposal.researchSummary.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        category: 'regulation',
+        field: 'literature_finding',
+        evidenceLevel: 'target_literature',
+        citation: expect.objectContaining({
+          type: 'pmid',
+          id: '38253429',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/38253429/',
+        }),
+      }),
+    ]));
+    expect(proposal.curationNote).toMatchObject({
+      schema: 'dgr.curation-note.v1',
+      coverage: expect.objectContaining({ includedFactCount: 1 }),
+      segments: [expect.objectContaining({
+        category: 'regulation',
+        factIds: expect.any(Array),
+        citations: [expect.objectContaining({ type: 'pmid', id: '38253429' })],
+      })],
+    });
+    expect(proposal.curationNote?.text).toContain('(PMID:38253429)');
+    expect(proposal.updates.note).toBe(proposal.curationNote?.text);
+    expect(proposal.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ op: 'addQualifier', field: 'note', value: proposal.curationNote?.text }),
+    ]));
+
+    const repeated = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: { ...target, featureId: 'b4024', locusTag: 'b4024', geneSymbol: 'lysC' },
+      currentAnnotation: { note: [String(proposal.curationNote?.text)] },
+      sources: [{
+        title: 'Direct control of the Escherichia coli lysC riboswitch',
+        url: 'https://pubmed.ncbi.nlm.nih.gov/38253429/',
+        database: 'pubmed',
+        provenance: { provider: 'pubmed', recordId: '38253429' },
+        structuredData: {
+          targetRelevance: { accepted: true, score: 12, directness: 'direct', reason: 'exact target and organism' },
+          literatureReferences: [{
+            pmid: '38253429',
+            abstract: 'In Escherichia coli, lysC expression is repressed by a lysine-responsive regulatory mechanism.',
+          }],
+        },
+      }],
+    });
+    expect(repeated.curationNote).toBeUndefined();
+    expect(repeated.operations.some(operation => operation.field === 'note')).toBe(false);
+  });
+
+  it('retains a complete 38-paper exact-target bibliography in the evidence manifest', () => {
+    const sources = Array.from({ length: 38 }, (_, index) => {
+      const pmid = String(12000000 + index);
+      return {
+        title: `Exact lysC study ${index + 1}`,
+        url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+        database: 'pubmed',
+        provenance: { provider: 'pubmed', recordId: pmid },
+        structuredData: {
+          targetRelevance: {
+            accepted: true,
+            score: 12,
+            directness: 'direct',
+            reason: 'exact target and organism',
+          },
+          literatureReferences: [{
+            pmid,
+            year: 2000 + (index % 20),
+            abstract: `In Escherichia coli, lysC expression was increased in exact-target experiment ${index + 1}.`,
+          }],
+        },
+      };
+    });
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: { ...target, featureId: 'b4024', locusTag: 'b4024', geneSymbol: 'lysC' },
+      sources,
+    });
+
+    expect(proposal.evidenceManifest.sourceRecords).toHaveLength(38);
+    expect(proposal.evidenceDetails).toHaveLength(38);
+    expect(proposal.researchSummary.literature).toHaveLength(30);
+    expect(proposal.operations).toEqual([
+      expect.objectContaining({ op: 'addQualifier', field: 'note' }),
+    ]);
+    expect(proposal.curationNote?.segments).toHaveLength(1);
+    expect(proposal.curationNote?.coverage).toMatchObject({
+      availableFactCount: 18,
+      includedFactCount: 1,
+    });
+    expect(proposal.curationNote?.coverage.omittedFactIds).toHaveLength(17);
+    expect(proposal.researchSummary.facts
+      .filter(fact => fact.evidenceLevel === 'target_literature'))
+      .toHaveLength(18);
+  });
+
+  it('deduplicates report citations against structured source records by exact identifiers', () => {
+    const abstract = 'In Escherichia coli, lysC expression is repressed by a lysine-responsive regulatory mechanism.';
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: { ...target, featureId: 'b4024', locusTag: 'b4024', geneSymbol: 'lysC' },
+      finalReport: [
+        '[PMID:38253429](https://pubmed.ncbi.nlm.nih.gov/38253429/)',
+        '[UniProtKB:P08660](https://www.uniprot.org/uniprotkb/P08660/entry)',
+      ].join('\n'),
+      sources: [
+        {
+          title: 'Direct control of the Escherichia coli lysC riboswitch',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/38253429/',
+          database: 'pubmed',
+          provenance: { provider: 'pubmed', recordId: '38253429' },
+          structuredData: {
+            targetRelevance: {
+              accepted: true,
+              score: 12,
+              directness: 'direct',
+              reason: 'exact target and organism',
+            },
+            literatureReferences: [{
+              pmid: '38253429',
+              doi: '10.1261/rna.079779.123',
+              abstract,
+            }],
+          },
+        },
+        {
+          title: 'Reviewed lysC record',
+          url: 'https://www.uniprot.org/uniprotkb/P08660/entry',
+          database: 'uniprot',
+        },
+      ],
+    });
+
+    expect(proposal.evidenceManifest.sourceRecords).toHaveLength(2);
+    const literatureFact = proposal.researchSummary.facts.find(fact => fact.evidenceLevel === 'target_literature');
+    expect(literatureFact?.evidenceIds).toHaveLength(1);
+    expect(proposal.evidenceManifest.sourceRecords.find(record => record.id === literatureFact?.evidenceIds[0]))
+      .toMatchObject({
+        database: 'pubmed',
+        identifiers: expect.arrayContaining([
+          { scheme: 'pmid', value: '38253429' },
+          { scheme: 'doi', value: '10.1261/rna.079779.123' },
+        ]),
+        sourceBinding: {
+          schema: 'dgr.evidence-source-binding.v1',
+          sourceCollection: 'sources',
+          selector: {
+            database: 'pubmed',
+            identifier: { scheme: 'pmid', value: '38253429' },
+          },
+          content: {
+            relativeJsonPointer: '/structuredData/literatureReferences/0/abstract',
+            canonicalization: 'dgr.pubmed-abstract.v1',
+            sha256: createHash('sha256').update(canonicalizePubMedAbstract(abstract)).digest('hex'),
+            hashEncoding: 'utf8',
+            length: canonicalizePubMedAbstract(abstract).length,
+            lengthEncoding: 'utf16_code_units',
+          },
+        },
+      });
+    const basis = literatureFact?.literatureBasis;
+    expect(basis).toMatchObject({
+      kind: 'pubmed_abstract_span',
+      evidenceId: literatureFact?.evidenceIds[0],
+      pmid: '38253429',
+      abstractSha256: createHash('sha256').update(canonicalizePubMedAbstract(abstract)).digest('hex'),
+      abstractLength: canonicalizePubMedAbstract(abstract).length,
+      canonicalization: 'dgr.pubmed-abstract.v1',
+      offsetEncoding: 'utf16_code_units',
+      hashEncoding: 'utf8',
+    });
+    expect(basis?.excerpt).toBe(literatureFact?.statement);
+    expect(canonicalizePubMedAbstract(abstract).slice(basis?.excerptStart, basis?.excerptEnd))
+      .toBe(basis?.excerpt);
+    expect(basis?.excerptSha256).toBe(
+      createHash('sha256').update(String(basis?.excerpt)).digest('hex')
+    );
+  });
+
+  it('fails closed when duplicate task sources disagree about a PMID abstract', () => {
+    const makeSource = (abstract: string) => ({
+      title: 'Direct control of the Escherichia coli lysC riboswitch',
+      url: 'https://pubmed.ncbi.nlm.nih.gov/38253429/',
+      database: 'pubmed',
+      provenance: { provider: 'pubmed', recordId: '38253429' },
+      structuredData: {
+        targetRelevance: {
+          accepted: true,
+          score: 12,
+          directness: 'direct',
+          reason: 'exact target and organism',
+        },
+        literatureReferences: [{ pmid: '38253429', abstract }],
+      },
+    });
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: { ...target, featureId: 'b4024', locusTag: 'b4024', geneSymbol: 'lysC' },
+      sources: [
+        makeSource('In Escherichia coli, lysC expression was increased by lysine limitation.'),
+        makeSource('In Escherichia coli, lysC expression was decreased by lysine limitation.'),
+      ],
+    });
+
+    expect(proposal.evidenceManifest.sourceRecords).toHaveLength(1);
+    expect(proposal.evidenceManifest.sourceRecords[0].sourceBinding).toBeUndefined();
+    expect(proposal.researchSummary.facts.filter(fact => fact.evidenceLevel === 'target_literature'))
+      .toEqual([]);
   });
 
   it('rejects report text and Searx snippets as mutation evidence', () => {
@@ -114,7 +381,7 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
       geneSymbol: 'thrB',
       organism: 'Escherichia coli',
       target,
-      currentProduct: 'legacy kinase annotation',
+      currentAnnotation: { product: 'legacy kinase annotation' },
       finalReport: 'Product: invented kinase. EC: 9.9.9.9. GO:9999999. KEGG:fake. UniProtKB:FAKE.',
       sources: [{
         title: 'thrB annotation snippet',
@@ -140,7 +407,7 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
       geneSymbol: 'thrB',
       organism: 'Escherichia coli',
       target,
-      currentProduct: 'legacy kinase annotation',
+      currentAnnotation: { product: 'legacy kinase annotation' },
       sources: [
         exactStructuredSource({ targetMatch: false }),
         exactStructuredSource({ matchedTarget: { ...target, featureId: 'feat_other' } }),
@@ -158,7 +425,7 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
       geneSymbol: 'thrB',
       organism: 'Escherichia coli',
       target,
-      currentProduct: 'legacy kinase annotation',
+      currentAnnotation: { product: 'legacy kinase annotation' },
       sources: [exactStructuredSource({ includeFieldEvidence: false })],
     });
 
@@ -185,12 +452,52 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
       geneSymbol: 'thrB',
       organism: 'Escherichia coli',
       target,
-      currentProduct: ' Homoserine   Kinase ',
+      currentAnnotation: { product: ' Homoserine   Kinase ' },
       sources: [exactStructuredSource({ currentProduct: ' Homoserine   Kinase ' })],
     });
 
     expect(proposal.updates.product).toBeUndefined();
     expect(proposal.mergeHints.overwriteProduct).toBe(false);
+  });
+
+  it('does not replace an already-specific product with a different exact-source name', () => {
+    const currentProduct = 'Threonine-pathway homoserine kinase';
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target,
+      currentAnnotation: { product: currentProduct },
+      sources: [exactStructuredSource({ currentProduct })],
+    });
+
+    expect(proposal.operations.some(operation => operation.field === 'product')).toBe(false);
+    expect(proposal.mergeHints.overwriteProduct).toBe(false);
+  });
+
+  it('omits every operation when the resolved CDS already contains all proposed qualifiers', () => {
+    const currentProduct = 'Homoserine kinase';
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target,
+      currentAnnotation: {
+        product: currentProduct,
+        EC_number: ['EC:2.7.1.39'],
+        go_terms: ['GO:0004413'],
+        pathway: ['KEGG:eco00260'],
+        db_xref: ['UniProtKB:P00547'],
+      },
+      sources: [exactStructuredSource({ currentProduct })],
+    });
+
+    expect(proposal.status).toBe('draft_requires_evidence');
+    expect(proposal.operations).toEqual([]);
+    expect(proposal.claims).toEqual([]);
+    expect(proposal.updates).toEqual({});
+    expect(proposal.ecNumbers).toEqual([]);
+    expect(proposal.goTerms).toEqual([]);
+    expect(proposal.pathwayTerms).toEqual([]);
+    expect(proposal.dbXrefs).toEqual([]);
   });
 
   it('does not launder a report-only sibling value through exact structured evidence', () => {
@@ -234,7 +541,7 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     const proposal = buildCodeXomicsAnnotationProposal({
       geneSymbol: 'thrB',
       organism: 'Escherichia coli',
-      currentProduct: 'legacy kinase annotation',
+      currentAnnotation: { product: 'legacy kinase annotation' },
       sources: [exactStructuredSource()],
       confidence: 80,
     });
@@ -250,7 +557,7 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
       geneSymbol: 'thrB',
       organism: 'Escherichia coli',
       target,
-      currentProduct: 'legacy kinase annotation',
+      currentAnnotation: { product: 'legacy kinase annotation' },
       sources: [exactStructuredSource()],
     });
     proposal.claims[0].evidenceIds = [];

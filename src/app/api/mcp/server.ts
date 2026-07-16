@@ -125,7 +125,7 @@ export function initMcpServer() {
         featureId: z.string().min(1).max(512),
         featureHash: z.string().min(1).max(512),
         annotationId: z.string().max(512).nullable().optional(),
-        featureType: z.string().max(128).nullable().optional(),
+        featureType: z.literal("CDS").describe("Only protein-coding CDS annotation targets are supported."),
         chromosome: z.string().min(1).max(512),
         organism: z.string().max(256).nullable().optional(),
         locusTag: z.string().max(256).nullable().optional(),
@@ -137,6 +137,15 @@ export function initMcpServer() {
         taxonId: z.union([z.string(), z.number()]).nullable().optional(),
         proteinSha256: z.string().max(128).nullable().optional(),
       }).optional().describe("Exact immutable target returned by CodeXomics resolve_annotation_target. Required for a proposal that can be committed."),
+      currentAnnotation: z.object({
+        product: z.string().max(1024).nullable().optional(),
+        note: z.array(z.string().min(1).max(8192)).max(32).optional(),
+        EC_number: z.array(z.string().min(1).max(64)).max(64).optional(),
+        go_terms: z.array(z.string().min(1).max(64)).max(256).optional(),
+        ko: z.array(z.string().min(1).max(128)).max(128).optional(),
+        pathway: z.array(z.string().min(1).max(256)).max(256).optional(),
+        db_xref: z.array(z.string().min(1).max(512)).max(512).optional(),
+      }).strict().optional().describe("Bounded current scientific qualifier snapshot derived by CodeXomics from the same resolved CDS revision. Used to suppress no-op updates, including repeated DGR notes, and permit conservative placeholder product refinement."),
       idempotencyKey: z.string().min(1).max(256).optional().describe("Stable key preventing duplicate logical research runs."),
       correlationId: z.string().min(1).max(256).optional().describe("Cross-service trace ID."),
     },
@@ -158,6 +167,7 @@ export function initMcpServer() {
         includeCodeXomicsAnnotationProposal = true,
         forceRefresh = false,
         target,
+        currentAnnotation,
         idempotencyKey,
         correlationId,
       },
@@ -183,6 +193,7 @@ export function initMcpServer() {
           includeCodeXomicsAnnotationProposal,
           forceRefresh,
           target,
+          currentAnnotation,
           idempotencyKey,
           correlationId,
         });
@@ -432,7 +443,8 @@ Use these only if the user specifically requests a step-by-step breakdown or if 
 3.  **Handling Results**:
     - \`deep-gene-research\` returns a \`taskId\` first. Use \`get-task-status\` until the task is \`completed\` or \`failed\`.
     - When completed, present the \`finalReport\` or \`download.reportUrl\` to the user clearly.
-    - If integrating with CodeXomics, pass \`result.annotationProposal\` to \`create_annotation_changeset\`, show the resulting diff to a curator, and only then use the approval and apply ChangeSet tools. Never ask CodeXomics to merge a Markdown report directly.
+    - For durable CodeXomics integration, prefer CodeXomics \`start_annotation_research\` and poll \`get_annotation_research_workflow\`; that workflow archives this full task as a verified gene attachment before creating a ChangeSet.
+    - If this task was started directly through DGR, call CodeXomics \`archive_annotation_research\` with the exact \`taskId\`, \`correlationId\`, and CDS identifier first. Then pass \`result.annotationProposal\` plus \`researchRun=taskId\` to \`create_annotation_changeset\`. CodeXomics rejects DGR proposals that do not match a citation-verified archived task. Never merge a Markdown report directly.
     - Highlight key findings, then offer to show the detailed sources or quality metrics if requested.
 
 ## Example Usage

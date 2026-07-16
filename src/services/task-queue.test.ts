@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { buildExactAnnotationFieldEvidence } from '@/utils/gene-research/current-annotation';
 
 const originalWorkerCount = process.env.DGR_WORKER_COUNT;
 const originalWebConcurrency = process.env.WEB_CONCURRENCY;
@@ -135,10 +136,40 @@ describe.sequential('durable task queue lifecycle', () => {
         featureId: 'feature_a',
         featureHash: 'hash_a',
         chromosome: 'NC_000913.3',
+        featureType: 'CDS',
+        locusTag: 'b0001',
         geneSymbol: 'thrL',
         organism: 'Escherichia coli',
       },
     })).rejects.toThrow('Research geneSymbol does not match');
+  });
+
+  it('rejects non-CDS and unstable external annotation targets', async () => {
+    mockResearch(async () => ({ finalReport: 'unused', sources: [] }));
+    const { TaskQueue } = await import('./task-queue');
+    const queue = new TaskQueue();
+    const baseTarget = {
+      workspaceId: 'ws_a',
+      genomeId: 'genome_a',
+      annotationRevision: 1,
+      featureId: 'feature_a',
+      featureHash: 'hash_a',
+      chromosome: 'NC_000913.3',
+      geneSymbol: 'thrL',
+      organism: 'Escherichia coli',
+    };
+
+    await expect(queue.addTask({
+      geneSymbol: 'thrL',
+      organism: 'Escherichia coli',
+      target: { ...baseTarget, featureType: 'tRNA', locusTag: 'b0001' },
+    })).rejects.toThrow('restricted to resolved CDS targets');
+
+    await expect(queue.addTask({
+      geneSymbol: 'thrL',
+      organism: 'Escherichia coli',
+      target: { ...baseTarget, featureType: 'CDS' },
+    })).rejects.toThrow('stable locusTag or proteinId');
   });
 
   it('retries recovery after a transient task-store failure', async () => {
@@ -170,6 +201,94 @@ describe.sequential('durable task queue lifecycle', () => {
       expect((await taskStore.getTask(task.id))?.status).toBe('completed');
     });
     expect((await taskStore.getTask(task.id))?.result.annotationProposal.confidence).toBe(0.73);
+    await vi.waitFor(() => expect(queue.getQueueStatus().processingCount).toBe(0));
+  });
+
+  it('carries the resolved qualifier snapshot through research into conservative product refinement', async () => {
+    const exactTarget = {
+      workspaceId: 'ws_a',
+      genomeId: 'genome_a',
+      annotationRevision: 5,
+      featureId: 'feature_thrB',
+      featureHash: 'hash_thrB',
+      chromosome: 'NC_000913.3',
+      featureType: 'CDS',
+      locusTag: 'b0003',
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+    } as const;
+    const sourceId = 'UniProtKB:P00547';
+    const sourceUrl = 'https://www.uniprot.org/uniprotkb/P00547/entry';
+    const research = vi.fn(async (_query, _taskId, geneInfo) => {
+      const fieldEvidence = buildExactAnnotationFieldEvidence({
+        annotation: { product: 'Homoserine kinase' },
+        currentAnnotation: geneInfo.currentAnnotation,
+        sourceId,
+        database: 'uniprot',
+        url: sourceUrl,
+        retrievedAt: '2026-07-16T00:00:00.000Z',
+      });
+      return {
+        finalReport: 'Reviewed exact-target protein identity.',
+        sources: [{
+          title: 'Reviewed homoserine kinase record',
+          sourceId,
+          url: sourceUrl,
+          database: 'uniprot',
+          authoritative: true,
+          targetMatch: true,
+          target: geneInfo.target,
+          annotation: {
+            product: 'Homoserine kinase',
+            reviewed: true,
+            ...(fieldEvidence ? { fieldEvidence } : {}),
+          },
+        }],
+      };
+    });
+    mockResearch(research);
+    const { TaskQueue } = await import('./task-queue');
+    const { taskStore } = await import('./task-store');
+    const queue = new TaskQueue();
+
+    const placeholderTask = await queue.addTask({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target: exactTarget,
+      currentAnnotation: { product: 'hypothetical protein' },
+    });
+    await vi.waitFor(async () => {
+      expect((await taskStore.getTask(placeholderTask.id))?.status).toBe('completed');
+    });
+    const placeholderProposal = (await taskStore.getTask(placeholderTask.id))?.result.annotationProposal;
+    expect(research.mock.calls[0][2].currentAnnotation).toEqual({ product: 'hypothetical protein' });
+    expect(placeholderProposal.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        op: 'replaceQualifier',
+        field: 'product',
+        value: 'Homoserine kinase',
+      }),
+    ]));
+
+    const specificTask = await queue.addTask({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target: exactTarget,
+      currentAnnotation: { product: 'Threonine-pathway homoserine kinase' },
+    });
+    const missingTask = await queue.addTask({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target: exactTarget,
+    });
+    await vi.waitFor(async () => {
+      expect((await taskStore.getTask(specificTask.id))?.status).toBe('completed');
+      expect((await taskStore.getTask(missingTask.id))?.status).toBe('completed');
+    });
+    for (const taskId of [specificTask.id, missingTask.id]) {
+      const proposal = (await taskStore.getTask(taskId))?.result.annotationProposal;
+      expect(proposal.operations.some((operation: any) => operation.field === 'product')).toBe(false);
+    }
     await vi.waitFor(() => expect(queue.getQueueStatus().processingCount).toBe(0));
   });
 
@@ -214,5 +333,34 @@ describe.sequential('durable task queue lifecycle', () => {
       .rejects.toBeInstanceOf(TaskValidationError);
     await expect(queue.addTask({ ...base, forceRefresh: 'yes' } as any))
       .rejects.toBeInstanceOf(TaskValidationError);
+    await expect(queue.addTask({ ...base, currentAnnotation: { product: 'hypothetical protein' } }))
+      .rejects.toThrow('requires an exact resolved CodeXomics target');
+    await expect(queue.addTask({
+      ...base,
+      target: {
+        workspaceId: 'ws_a', genomeId: 'genome_a', annotationRevision: 1,
+        featureId: 'feature_a', featureHash: 'hash_a', chromosome: 'NC_000913.3',
+        featureType: 'CDS', locusTag: 'b0001', geneSymbol: 'thrL', organism: 'Escherichia coli',
+      },
+      currentAnnotation: { product: 'x'.repeat(1_025) },
+    })).rejects.toBeInstanceOf(TaskValidationError);
+    await expect(queue.addTask({
+      ...base,
+      target: {
+        workspaceId: 'ws_a', genomeId: 'genome_a', annotationRevision: 1,
+        featureId: 'feature_a', featureHash: 'hash_a', chromosome: 'NC_000913.3',
+        featureType: 'CDS', locusTag: 'b0001', geneSymbol: 'thrL', organism: 'Escherichia coli',
+      },
+      currentAnnotation: { note: 'untrusted free text' } as any,
+    })).rejects.toThrow('must contain at most 32 items');
+    await expect(queue.addTask({
+      ...base,
+      target: {
+        workspaceId: 'ws_a', genomeId: 'genome_a', annotationRevision: 1,
+        featureId: 'feature_a', featureHash: 'hash_a', chromosome: 'NC_000913.3',
+        featureType: 'CDS', locusTag: 'b0001', geneSymbol: 'thrL', organism: 'Escherichia coli',
+      },
+      currentAnnotation: { unsupported: ['untrusted'] } as any,
+    })).rejects.toThrow('not an allowed qualifier');
   });
 });
