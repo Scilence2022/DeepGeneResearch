@@ -32,7 +32,7 @@ describe('current annotation snapshot handling', () => {
     expect(evidence?.product).toEqual([expect.objectContaining({
       value: 'Homoserine kinase',
       currentValue: 'hypothetical protein',
-      justification: 'Exact-target authoritative evidence provides a more specific CDS product than the current placeholder or generic product.',
+      justification: 'Exact-target authoritative evidence provides a more specific annotation product than the current placeholder or generic product.',
     })]);
     expect(evidence?.ecNumbers).toHaveLength(1);
 

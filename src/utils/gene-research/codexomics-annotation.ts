@@ -125,7 +125,7 @@ export type CodeXomicsAnnotationProposal = Omit<AnnotationChangeSetProposal, 'ta
     literature: CodeXomicsLiteratureHighlight[];
     limitations: string[];
   };
-  /** Reviewable CDS /note text derived only from exact-target facts above. */
+  /** Reviewable annotation /note text derived only from exact-target facts above. */
   curationNote?: CodeXomicsCurationNote;
   updates: Record<string, string | string[]>;
   ecNumbers: string[];
@@ -995,6 +995,12 @@ function collectQualifiedMutationCandidates(
 ): QualifiedMutationCandidate[] {
   if (!target) return [];
   const candidates = new Map<string, QualifiedMutationCandidate>();
+  const featureType = String(target.featureType || '').trim().toUpperCase();
+  const allowedFields = featureType === 'CDS'
+    ? new Set<MutationField>(['product', 'EC_number', 'go_terms', 'ko', 'pathway', 'db_xref'])
+    : featureType === 'GENE' || featureType === 'PSEUDOGENE'
+      ? new Set<MutationField>(['db_xref'])
+      : new Set<MutationField>(['product', 'go_terms', 'pathway', 'db_xref']);
 
   for (const source of sources) {
     if (!source || typeof source === 'string') continue;
@@ -1012,6 +1018,7 @@ function collectQualifiedMutationCandidates(
     }
 
     for (const definition of MUTATION_FIELD_DEFINITIONS) {
+      if (!allowedFields.has(definition.field)) continue;
       const values = asValues(source.annotation[definition.annotationKey]);
       const provenanceEntries = getFieldProvenance(source.annotation, definition.provenanceKey);
       for (const value of values) {

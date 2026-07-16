@@ -24,7 +24,7 @@ export interface GenomeTargetRef {
 }
 
 /**
- * Bounded snapshot of mutable scientific qualifiers on the resolved CDS.
+ * Bounded snapshot of mutable scientific qualifiers on the resolved gene annotation feature.
  * CodeXomics derives this from the same immutable target revision; DGR uses it
  * only to suppress no-op additions and to assess conservative product
  * refinement.
@@ -132,7 +132,7 @@ export function assertAnnotationChangeSetProposalIntegrity(proposal: AnnotationC
       || binding.sourceCollection !== 'sources'
       || binding.selector.database !== 'pubmed'
       || binding.selector.identifier.scheme !== 'pmid'
-      || !/^\d{6,10}$/.test(binding.selector.identifier.value)
+      || !/^[1-9]\d{0,9}$/.test(binding.selector.identifier.value)
       || binding.selector.identifier.value !== pmidIdentifier
       || binding.content.relativeJsonPointer !== '/structuredData/literatureReferences/0/abstract'
       || binding.content.canonicalization !== 'dgr.pubmed-abstract.v1'
