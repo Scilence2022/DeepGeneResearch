@@ -184,13 +184,14 @@ export interface Mutation {
 
 export interface LiteratureReference {
   pmid: string;
+  doi?: string;
   title: string;
   authors: string[];
   journal: string;
   year: number;
   abstract: string;
   relevance: 'high' | 'medium' | 'low';
-  studyType: 'experimental' | 'computational' | 'review' | 'meta_analysis';
+  studyType: 'experimental' | 'computational' | 'review' | 'meta_analysis' | 'other';
   organism: string;
   methodology: string[];
 }

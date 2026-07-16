@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage } from 'node:http';
 import { describe, expect, it } from 'vitest';
-import { isPublicAddress, readBoundedTextResponse, resolvePublicUrl } from './safe-public-fetch';
+import { createPinnedLookup, isPublicAddress, readBoundedTextResponse, resolvePublicUrl } from './safe-public-fetch';
 
 describe('safe public crawler URLs', () => {
   it('rejects loopback, link-local, private, carrier-grade NAT, and IPv4-mapped IPv6 addresses', async () => {
@@ -27,6 +27,25 @@ describe('safe public crawler URLs', () => {
     expect(isPublicAddress('8.8.8.8')).toBe(true);
     expect(isPublicAddress('2606:4700:4700::1111')).toBe(true);
     expect(isPublicAddress('64:ff9b::808:808')).toBe(true);
+  });
+
+  it('pins both scalar and all-address Node DNS lookup callback forms', async () => {
+    const pinnedLookup = createPinnedLookup('8.8.8.8', 4) as any;
+    const scalar = await new Promise<{ address: string; family: number }>((resolve, reject) => {
+      pinnedLookup('example.org', { family: 0, all: false }, (error: Error | null, address: string, family: number) => {
+        if (error) reject(error);
+        else resolve({ address, family });
+      });
+    });
+    const all = await new Promise<Array<{ address: string; family: number }>>((resolve, reject) => {
+      pinnedLookup('example.org', { family: 0, all: true }, (error: Error | null, addresses: Array<{ address: string; family: number }>) => {
+        if (error) reject(error);
+        else resolve(addresses);
+      });
+    });
+
+    expect(scalar).toEqual({ address: '8.8.8.8', family: 4 });
+    expect(all).toEqual([{ address: '8.8.8.8', family: 4 }]);
   });
 
   it('rejects aborted and incomplete upstream response bodies', async () => {

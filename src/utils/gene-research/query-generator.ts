@@ -328,6 +328,26 @@ export class GeneQueryGenerator {
   }
 
   private generateDiseaseQueries(): GeneSearchTask[] {
+    if (this.isProkaryoticOrganism() && !this.diseaseContext) {
+      return [
+        {
+          query: `${this.geneSymbol} mutant knockout phenotype fitness ${this.organism}`,
+          researchGoal: `Find experimentally measured growth, fitness, and metabolic phenotypes caused by perturbing ${this.geneSymbol} in ${this.organism}.`,
+          database: 'pubmed',
+          priority: 'high',
+          category: 'disease',
+          status: 'pending'
+        },
+        {
+          query: `${this.geneSymbol} allele complementation biochemical phenotype ${this.organism}`,
+          researchGoal: `Find allele, complementation, and biochemical phenotype evidence that links ${this.geneSymbol} to its annotated function.`,
+          database: 'pubmed',
+          priority: 'high',
+          category: 'disease',
+          status: 'pending'
+        }
+      ];
+    }
     if (!this.diseaseContext) {
       return [
         {
@@ -408,14 +428,23 @@ export class GeneQueryGenerator {
         category: 'pathway',
         status: 'pending'
       },
-      {
-        query: `${this.geneSymbol} signaling pathway network ${this.organism}`,
-        researchGoal: `Investigate signaling pathways and regulatory networks involving ${this.geneSymbol}.`,
-        database: 'pubmed',
-        priority: 'high',
-        category: 'pathway',
-        status: 'pending'
-      },
+      this.isProkaryoticOrganism()
+        ? {
+            query: `${this.geneSymbol} biosynthetic pathway metabolic regulation ${this.organism}`,
+            researchGoal: `Investigate biosynthetic pathways and metabolic regulatory networks involving ${this.geneSymbol}.`,
+            database: 'pubmed',
+            priority: 'high',
+            category: 'pathway',
+            status: 'pending'
+          }
+        : {
+            query: `${this.geneSymbol} signaling pathway network ${this.organism}`,
+            researchGoal: `Investigate signaling pathways and regulatory networks involving ${this.geneSymbol}.`,
+            database: 'pubmed',
+            priority: 'high',
+            category: 'pathway',
+            status: 'pending'
+          },
     ];
     queries.push(this.isProkaryoticOrganism() ? {
       query: `${this.geneSymbol} knockout phenotype metabolic flux ${this.organism}`,

@@ -9,6 +9,8 @@ const target = {
   featureId: 'feature_thrB',
   featureHash: 'hash_thrB',
   chromosome: 'NC_000913.3',
+  featureType: 'CDS',
+  locusTag: 'b0003',
 };
 const parameters: GeneResearchParameters = {
   geneSymbol: 'thrB',
@@ -47,11 +49,15 @@ describe('research result quality gate', () => {
           pmid: '8660667',
           url: 'https://pubmed.ncbi.nlm.nih.gov/8660667/',
           content: 'Experimental biochemical characterization identifies Escherichia coli ThrB as the homoserine kinase responsible for ATP-dependent O-phosphohomoserine production.',
+          provenance: { provider: 'pubmed', recordId: '8660667' },
+          structuredData: { targetRelevance: { accepted: true } },
         },
         {
           database: 'uniprot',
           url: 'https://www.uniprot.org/uniprotkb/P00547/entry',
           content: 'The reviewed UniProt record assigns EC 2.7.1.39 and the homoserine kinase product name to Escherichia coli ThrB in threonine biosynthesis.',
+          authoritative: true,
+          targetMatch: true,
         },
       ],
       metadata: { searchDiagnostics: { successfulSearches: 2 } },

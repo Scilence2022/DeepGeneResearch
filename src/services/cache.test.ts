@@ -15,6 +15,8 @@ const target = {
   featureId: 'feat_thrB',
   featureHash: 'feature-hash-thrB',
   chromosome: 'NC_000913.3',
+  featureType: 'CDS',
+  locusTag: 'b0003',
   geneSymbol: 'thrB',
   organism: 'Escherichia coli',
 };
@@ -39,11 +41,15 @@ function substantiveResult(label = 'cached') {
         pmid: '8660667',
         url: 'https://pubmed.ncbi.nlm.nih.gov/8660667/',
         content: 'Functional characterization established that Escherichia coli ThrB is homoserine kinase and catalyzes ATP-dependent phosphorylation of L-homoserine to O-phosphohomoserine.',
+        provenance: { provider: 'pubmed', recordId: '8660667' },
+        structuredData: { targetRelevance: { accepted: true } },
       },
       {
         database: 'uniprot',
         url: 'https://www.uniprot.org/uniprotkb/P00547/entry',
         content: 'The reviewed UniProt record identifies ThrB as homoserine kinase, assigns EC 2.7.1.39, and places the enzyme in threonine amino-acid biosynthesis in Escherichia coli.',
+        authoritative: true,
+        targetMatch: true,
       },
     ],
     metadata: { searchDiagnostics: { successfulSearches: 2 } },
@@ -74,6 +80,8 @@ describe('semantic research cache keys', () => {
         workspaceId: target.workspaceId,
         organism: target.organism,
         geneSymbol: target.geneSymbol,
+        featureType: target.featureType,
+        locusTag: target.locusTag,
       },
     });
 
@@ -117,6 +125,39 @@ describe('semantic research cache keys', () => {
       searchScope: 'general',
     }));
   });
+
+  it('includes a canonical current annotation snapshot in semantic cache identity', () => {
+    const placeholder = parameters({
+      currentAnnotation: {
+        product: 'Hypothetical   protein',
+        note: ['Existing evidence summary. PMID:38253429'],
+        go_terms: ['GO:0004413', 'GO:0008152'],
+      },
+    });
+    const equivalent = parameters({
+      currentAnnotation: {
+        go_terms: ['GO:0008152', 'GO:0004413'],
+        note: [' existing evidence summary.   pmid:38253429 '],
+        product: 'hypothetical protein',
+      },
+    });
+    const alreadyAnnotated = parameters({
+      currentAnnotation: {
+        product: 'Homoserine kinase',
+        go_terms: ['GO:0004413', 'GO:0008152'],
+      },
+    });
+
+    expect(generateCacheKey(placeholder)).toBe(generateCacheKey(equivalent));
+    expect(generateCacheKey(placeholder)).not.toBe(generateCacheKey(alreadyAnnotated));
+    expect(buildCacheKeyPayload(placeholder).parameters).toMatchObject({
+      currentAnnotation: {
+        product: 'hypothetical protein',
+        note: ['existing evidence summary. pmid:38253429'],
+        go_terms: ['0004413', '0008152'],
+      },
+    });
+  });
 });
 
 describe('research cache quality boundary', () => {
@@ -136,6 +177,21 @@ describe('research cache quality boundary', () => {
     expect(isReusableResearchResult(request, {
       ...result,
       sources: [result.sources[0]],
+    })).toBe(false);
+  });
+
+  it('does not treat unrelated structured PubMed records as reusable target authority', () => {
+    const result = substantiveResult();
+    const noisySources = result.sources.map(source => ({
+      ...source,
+      authoritative: false,
+      targetMatch: false,
+      structuredData: { targetRelevance: { accepted: false, reason: 'off-target homonym' } },
+    }));
+
+    expect(isReusableResearchResult(parameters(), {
+      ...result,
+      sources: noisySources,
     })).toBe(false);
   });
 

@@ -2,14 +2,16 @@
 // Comprehensive gene research workflow orchestration
 
 import { GeneQueryGenerator, createGeneQueryGenerator } from './query-generator';
-import { createGeneSearchProvider } from './search-providers';
+import { assessGeneTargetRelevance, createGeneSearchProvider, fetchPubMedIdsForGene } from './search-providers';
+import { extractCitationBoundLiteratureFindings } from './literature-findings';
 import { GeneDataExtractor } from './data-extractor';
 import { GeneVisualizationGenerator, createGeneVisualizationGenerator } from './visualization-generators';
 import { GeneResearchQualityControl, createGeneQualityControl } from './quality-control';
 import { GeneAPIIntegrations, createGeneAPIIntegrations } from './api-integrations';
 import { createSearchProvider } from '@/utils/deep-research/search';
 import { fetchPublicText } from '@/utils/safe-public-fetch';
-import type { GenomeTargetRef } from '@/contracts/annotation-change-set';
+import type { CurrentAnnotationSnapshot, GenomeTargetRef } from '@/contracts/annotation-change-set';
+import { buildExactAnnotationFieldEvidence } from './current-annotation';
 import { 
   GeneResearchWorkflow, 
   GeneSearchTask, 
@@ -21,6 +23,7 @@ export interface GeneResearchConfig {
   geneSymbol: string;
   organism: string;
   target?: Partial<GenomeTargetRef>;
+  currentAnnotation?: CurrentAnnotationSnapshot;
   researchFocus?: string[];
   specificAspects?: string[];
   diseaseContext?: string;
@@ -40,6 +43,8 @@ export interface GeneResearchConfig {
     maxResult?: number;
     scope?: string;
   };
+  /** NCBI E-utilities API key used for rate-limit-aware Gene/PubMed requests. */
+  ncbiApiKey?: string;
   language?: string;
   signal?: AbortSignal;
   onProgress?: (data: Record<string, any>) => void;
@@ -72,12 +77,19 @@ export interface GeneResearchResult {
         durationMs: number;
         status: 'success' | 'empty' | 'error';
         error?: string;
+        warnings?: string[];
+        seedPmidsRequested?: number;
+        seedPmidsRetrieved?: number;
+        seedRetrievalComplete?: boolean;
       }>;
       identityResolved?: boolean;
       authoritativeSourceCount?: number;
       literatureSourceCount?: number;
       discoverySourceCount?: number;
       retrievedContentCount?: number;
+      linkedBibliographyRequested?: number;
+      linkedBibliographyRetrieved?: number;
+      linkedBibliographyComplete?: boolean;
       degradedProviders?: string[];
       coverageByCategory?: Record<string, {
         queries: number;
@@ -96,6 +108,9 @@ interface ResearchCoverage {
   literatureSourceCount: number;
   discoverySourceCount: number;
   retrievedContentCount: number;
+  linkedBibliographyRequested: number;
+  linkedBibliographyRetrieved: number;
+  linkedBibliographyComplete: boolean;
   degradedProviders: string[];
   coverageByCategory: Record<string, {
     queries: number;
@@ -115,6 +130,9 @@ export class GeneResearchEngine {
   private apiIntegrations: GeneAPIIntegrations;
   private searchAttempts: GeneResearchResult['metadata']['searchDiagnostics']['attempts'] = [];
   private identityTerms = new Set<string>();
+  private exactGeneIds = new Set<string>();
+  private pubMedSeedPmids: string[] = [];
+  private pubMedSeedsConsumed = false;
 
   constructor(config: GeneResearchConfig) {
     this.config = config;
@@ -136,28 +154,43 @@ export class GeneResearchEngine {
     this.config.signal?.throwIfAborted();
   }
 
-  private sourceMatchesGene(source: { title?: string; content?: string; url?: string }): boolean {
-    const geneSymbol = this.config.geneSymbol.trim().toLowerCase();
-    if (!geneSymbol) return false;
-    const searchable = [source.title, source.content, source.url].filter(Boolean).join('\n').toLowerCase();
-    const organism = this.config.organism.trim().toLowerCase();
-    const genus = organism.split(/\s+/)[0];
-    const mentionsOrganism = !organism
-      || searchable.includes(organism)
-      || (genus.length > 3 && searchable.includes(genus));
-    const mentionsIdentity = Array.from(this.identityTerms).some(term => term.length > 2 && searchable.includes(term));
-    return mentionsOrganism && (searchable.includes(geneSymbol) || mentionsIdentity);
+  private assertSupportedTarget(): void {
+    if (!this.config.target) return;
+    if (String(this.config.target.featureType || '').toUpperCase() !== 'CDS') {
+      throw new Error('Deep gene annotation research is restricted to resolved CDS targets');
+    }
+    if (!String(this.config.target.locusTag || '').trim() && !String(this.config.target.proteinId || '').trim()) {
+      throw new Error('A resolved CDS target must include a stable locusTag or proteinId');
+    }
+  }
+
+  private assessSourceRelevance(source: { title?: string; content?: string; url?: string }) {
+    return assessGeneTargetRelevance(
+      source.title || '',
+      source.content || '',
+      {
+        geneSymbol: this.config.geneSymbol,
+        organism: this.config.organism,
+        locusTag: this.config.target?.locusTag || undefined,
+        proteinId: this.config.target?.proteinId || undefined,
+        identityTerms: Array.from(this.identityTerms),
+      },
+    );
   }
 
   async conductResearch(): Promise<GeneResearchResult> {
     const startTime = Date.now();
     
     try {
+      this.assertSupportedTarget();
       this.assertNotCancelled();
       // Phase 1: Generate research queries
       console.log('Phase 1: Generating research queries...');
       const queries = this.generateResearchQueries();
       this.searchAttempts = [];
+      this.exactGeneIds = new Set();
+      this.pubMedSeedPmids = [];
+      this.pubMedSeedsConsumed = false;
       this.identityTerms = new Set([
         this.config.geneSymbol,
         this.config.target?.locusTag,
@@ -170,6 +203,8 @@ export class GeneResearchEngine {
       // symbol for every focus area creates activity without new evidence.
       console.log('Phase 2a: Resolving exact target identity...');
       const searchResults = await this.resolveTargetIdentity();
+      await this.resolvePubMedSeeds();
+      await this.retrieveResolvedPubMedLiterature(searchResults);
 
       // Phase 2b: run each research question through its specialist adapter
       // and the configured academic discovery provider. Discovery is always
@@ -239,18 +274,19 @@ export class GeneResearchEngine {
         qualityMetrics = this.getDefaultQualityMetrics();
       }
       
+      const sources = this.rankSources(this.dedupeSources(
+        Array.from(searchResults.values()).flatMap((result: any) => result?.sources || [])
+      )).filter(source => source?.evidenceRole !== 'excluded');
+
       // Phase 7: Generate report
       console.log('Phase 7: Generating research report...');
-      const report = this.generateReport(extractedData, visualizations, qualityMetrics, coverage);
+      const report = this.generateReport(extractedData, visualizations, qualityMetrics, coverage, sources);
       this.assertNotCancelled();
       
       // Phase 8: Compile workflow
       const workflow = this.compileWorkflow(extractedData);
       
       const researchTime = Date.now() - startTime;
-      const sources = this.rankSources(this.dedupeSources(
-        Array.from(searchResults.values()).flatMap((result: any) => result?.sources || [])
-      ));
       const successfulSearches = this.searchAttempts.filter(attempt => attempt.status === 'success').length;
       
       return {
@@ -277,6 +313,9 @@ export class GeneResearchEngine {
             literatureSourceCount: coverage.literatureSourceCount,
             discoverySourceCount: coverage.discoverySourceCount,
             retrievedContentCount: coverage.retrievedContentCount,
+            linkedBibliographyRequested: coverage.linkedBibliographyRequested,
+            linkedBibliographyRetrieved: coverage.linkedBibliographyRetrieved,
+            linkedBibliographyComplete: coverage.linkedBibliographyComplete,
             degradedProviders: coverage.degradedProviders,
             coverageByCategory: coverage.coverageByCategory,
             evidenceGaps: coverage.evidenceGaps,
@@ -326,6 +365,7 @@ export class GeneResearchEngine {
           taxonId: this.config.target?.taxonId || undefined,
           assemblyAccession: this.config.target?.assemblyAccession || undefined,
           proteinSha256: this.config.target?.proteinSha256 || undefined,
+          apiKey: item.provider === 'ncbi_gene' ? this.config.ncbiApiKey : undefined,
           maxResult: this.config.maxSearchResults || 10,
           signal: this.config.signal,
         } as any);
@@ -344,27 +384,29 @@ export class GeneResearchEngine {
         const sources = (result?.sources || []).map((source: any) => {
           const exact = source.targetMatch === true;
           const sourceId = source.sourceId || source.provenance?.recordId || source.url;
-          const fieldEvidence = source.annotation
-            ? Object.fromEntries(
-                Object.entries(source.annotation)
-                  .filter(([key, value]) => ['product', 'ecNumbers', 'goTerms', 'koTerms', 'pathwayTerms', 'dbXrefs'].includes(key) && value)
-                  .map(([key, value]) => [key, (Array.isArray(value) ? value : [value]).map(item => ({
-                    value: String(item),
-                    sourceId,
-                    database: source.database,
-                    url: source.url,
-                    retrievedAt: new Date().toISOString(),
-                  }))])
-              )
+          const fieldEvidence = exact
+            ? buildExactAnnotationFieldEvidence({
+                annotation: source.annotation,
+                currentAnnotation: this.config.currentAnnotation,
+                sourceId: String(sourceId || ''),
+                database: String(source.database || ''),
+                url: String(source.url || ''),
+                retrievedAt: new Date().toISOString(),
+              })
             : undefined;
+          const providerAnnotation = source.annotation && typeof source.annotation === 'object'
+            ? Object.fromEntries(Object.entries(source.annotation).filter(([key]) =>
+                key !== 'fieldEvidence' && key !== 'provenance'
+              ))
+            : source.annotation;
           return {
             ...source,
             sourceId,
             authoritative: exact && Boolean(source.annotation),
             target: exact ? this.config.target : undefined,
-            annotation: source.annotation
-              ? { ...source.annotation, ...(fieldEvidence ? { fieldEvidence } : {}) }
-              : source.annotation,
+            annotation: providerAnnotation
+              ? { ...providerAnnotation, ...(fieldEvidence ? { fieldEvidence } : {}) }
+              : providerAnnotation,
             researchCategory: 'basic_info',
             evidenceRole: exact ? 'authoritative' : 'reference',
             contentKind: source.structuredData ? 'structured-record' : 'record',
@@ -374,10 +416,17 @@ export class GeneResearchEngine {
           if (source.targetMatch !== true && this.config.target) continue;
           [
             source.annotation?.product,
+            source.sourceId,
+            source.provenance?.recordId,
             source.verifiedIdentity?.geneSymbol,
             source.verifiedIdentity?.locusTag,
             source.verifiedIdentity?.proteinId,
+            source.structuredData?.geneBasicInfo?.geneID,
+            ...(source.annotation?.dbXrefs || []),
+            ...(source.structuredData?.geneBasicInfo?.alternativeNames || []),
           ].filter(Boolean).forEach(term => this.identityTerms.add(String(term).trim().toLowerCase()));
+          const geneId = String(source.structuredData?.geneBasicInfo?.geneID || '').trim();
+          if (source.targetMatch === true && /^\d+$/.test(geneId)) this.exactGeneIds.add(geneId);
         }
         results.set(`identity:${item.provider}`, {
           ...result,
@@ -409,6 +458,121 @@ export class GeneResearchEngine {
     return results;
   }
 
+  private async resolvePubMedSeeds(): Promise<void> {
+    for (const geneId of this.exactGeneIds) {
+      this.assertNotCancelled();
+      const startedAt = Date.now();
+      try {
+        const pmids = await fetchPubMedIdsForGene(geneId, {
+          apiKey: this.config.ncbiApiKey,
+          signal: this.config.signal,
+          maxResult: 100,
+        });
+        this.pubMedSeedPmids = Array.from(new Set([...this.pubMedSeedPmids, ...pmids]));
+        this.searchAttempts.push({
+          query: `GeneID:${geneId} linked PubMed literature`,
+          provider: 'ncbi_gene_link',
+          phase: 'identity',
+          category: 'basic_info',
+          sourceCount: pmids.length,
+          durationMs: Date.now() - startedAt,
+          status: pmids.length ? 'success' : 'empty',
+        });
+      } catch (error) {
+        this.searchAttempts.push({
+          query: `GeneID:${geneId} linked PubMed literature`,
+          provider: 'ncbi_gene_link',
+          phase: 'identity',
+          category: 'basic_info',
+          sourceCount: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  private async retrieveResolvedPubMedLiterature(searchResults: Map<string, any>): Promise<void> {
+    if (
+      this.pubMedSeedPmids.length === 0
+      || !(this.config.searchProviders || ['pubmed']).includes('pubmed')
+    ) {
+      return;
+    }
+    const startedAt = Date.now();
+    const query = `Exact NCBI Gene-linked bibliography (${this.pubMedSeedPmids.length} PMIDs)`;
+    this.config.onProgress?.({
+      step: 'gene-search', status: 'start', phase: 'identity', category: 'basic_info',
+      name: query, provider: 'pubmed_gene_link_records',
+    });
+    try {
+      const result = await createGeneSearchProvider({
+        provider: 'pubmed',
+        query,
+        geneSymbol: this.config.geneSymbol,
+        organism: this.config.organism,
+        locusTag: this.config.target?.locusTag || undefined,
+        proteinId: this.config.target?.proteinId || undefined,
+        identityTerms: Array.from(this.identityTerms),
+        seedPmids: this.pubMedSeedPmids,
+        scope: 'seed_only',
+        apiKey: this.config.ncbiApiKey,
+        maxResult: 1,
+        signal: this.config.signal,
+      });
+      const sources = (result.sources || []).map((source: any) => ({
+        ...source,
+        researchCategory: 'basic_info',
+        researchCategories: ['basic_info'],
+        matchedQueries: [query],
+        evidenceRole: 'reference',
+        contentKind: 'abstract',
+      }));
+      searchResults.set('identity:pubmed_gene_link_records', {
+        ...result,
+        sources,
+        metadata: { ...(result.metadata || {}), category: 'basic_info', phase: 'identity' },
+      });
+      this.pubMedSeedsConsumed = result.metadata?.seedRetrievalComplete === true;
+      this.searchAttempts.push({
+        query,
+        provider: 'pubmed_gene_link_records',
+        phase: 'identity',
+        category: 'basic_info',
+        sourceCount: sources.length,
+        durationMs: Date.now() - startedAt,
+        status: result.metadata?.error ? 'error' : sources.length ? 'success' : 'empty',
+        error: result.metadata?.error,
+        warnings: result.metadata?.warnings,
+        seedPmidsRequested: result.metadata?.seedPmidsRequested,
+        seedPmidsRetrieved: result.metadata?.seedPmidsRetrieved,
+        seedRetrievalComplete: result.metadata?.seedRetrievalComplete,
+      });
+      this.config.onProgress?.({
+        step: 'gene-search', status: result.metadata?.error ? 'error' : 'end', phase: 'identity',
+        category: 'basic_info', name: query, provider: 'pubmed_gene_link_records',
+        sourceCount: sources.length, error: result.metadata?.error,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.searchAttempts.push({
+        query,
+        provider: 'pubmed_gene_link_records',
+        phase: 'identity',
+        category: 'basic_info',
+        sourceCount: 0,
+        durationMs: Date.now() - startedAt,
+        status: 'error',
+        error: message,
+      });
+      this.config.onProgress?.({
+        step: 'gene-search', status: 'error', phase: 'identity', category: 'basic_info',
+        name: query, provider: 'pubmed_gene_link_records', error: message,
+      });
+    }
+  }
+
   private mergeSearchResultMaps(target: Map<string, any>, incoming: Map<string, any>): void {
     for (const [key, value] of incoming) {
       const current = target.get(key);
@@ -429,7 +593,7 @@ export class GeneResearchEngine {
   private countUniqueSources(searchResults: Map<string, any>): number {
     return this.dedupeSources(
       Array.from(searchResults.values()).flatMap((result: any) => result?.sources || [])
-    ).length;
+    ).filter(source => source?.evidenceRole !== 'excluded').length;
   }
 
   private assessEvidenceCoverage(
@@ -438,10 +602,11 @@ export class GeneResearchEngine {
   ): ResearchCoverage {
     const sources = this.dedupeSources(
       Array.from(searchResults.values()).flatMap((result: any) => result?.sources || [])
-    );
+    ).filter(source => source?.evidenceRole !== 'excluded');
     const authoritativeSources = sources.filter(source => source?.targetMatch === true && source?.annotation);
     const literatureSources = sources.filter(source =>
       source?.database === 'pubmed'
+      && source?.structuredData?.targetRelevance?.directness === 'direct'
       && (source?.structuredData?.literatureReferences?.length || source?.contentKind === 'abstract')
     );
     const discoverySources = sources.filter(source => source?.evidenceRole === 'discovery');
@@ -454,14 +619,23 @@ export class GeneResearchEngine {
       coverageByCategory[category].queries += 1;
     }
     for (const source of sources) {
-      const category = String(source?.researchCategory || 'basic_info');
-      coverageByCategory[category] ||= { queries: 0, sources: 0, literatureSources: 0, fullContentSources: 0 };
-      coverageByCategory[category].sources += 1;
-      if (source?.database === 'pubmed' && source?.structuredData?.literatureReferences?.length) {
-        coverageByCategory[category].literatureSources += 1;
-      }
-      if (source?.contentKind === 'retrieved-content' || source?.contentKind === 'abstract') {
-        coverageByCategory[category].fullContentSources += 1;
+      const categories = Array.from(new Set([
+        ...(source?.researchCategories || []),
+        source?.researchCategory || 'basic_info',
+      ])) as string[];
+      for (const category of categories) {
+        coverageByCategory[category] ||= { queries: 0, sources: 0, literatureSources: 0, fullContentSources: 0 };
+        coverageByCategory[category].sources += 1;
+        if (
+          source?.database === 'pubmed'
+          && source?.structuredData?.literatureReferences?.length
+          && source?.structuredData?.targetRelevance?.directness === 'direct'
+        ) {
+          coverageByCategory[category].literatureSources += 1;
+        }
+        if (source?.contentKind === 'retrieved-content' || source?.contentKind === 'abstract') {
+          coverageByCategory[category].fullContentSources += 1;
+        }
       }
     }
 
@@ -484,6 +658,20 @@ export class GeneResearchEngine {
         evidenceGaps.push(`${category}:no_literature_or_full_content`);
       }
     }
+    const seedAttempts = this.searchAttempts.filter(attempt => Number(attempt.seedPmidsRequested || 0) > 0);
+    const linkedBibliographyRequested = Math.max(0, ...seedAttempts.map(attempt => Number(attempt.seedPmidsRequested || 0)));
+    const linkedBibliographyRetrieved = Math.max(0, ...seedAttempts.map(attempt => Number(attempt.seedPmidsRetrieved || 0)));
+    const geneLinkAttempted = this.searchAttempts.some(attempt => attempt.provider === 'ncbi_gene_link');
+    const linkedBibliographyComplete = linkedBibliographyRequested > 0
+      && linkedBibliographyRetrieved >= linkedBibliographyRequested
+      && seedAttempts.some(attempt => attempt.seedRetrievalComplete === true);
+    if (geneLinkAttempted && !linkedBibliographyComplete) {
+      evidenceGaps.push(
+        linkedBibliographyRequested > 0
+          ? `exact_gene_bibliography:incomplete_${linkedBibliographyRetrieved}_of_${linkedBibliographyRequested}`
+          : 'exact_gene_bibliography:not_retrieved'
+      );
+    }
 
     return {
       identityResolved: this.config.target ? authoritativeSources.length > 0 : sources.length > 0,
@@ -491,6 +679,9 @@ export class GeneResearchEngine {
       literatureSourceCount: literatureSources.length,
       discoverySourceCount: discoverySources.length,
       retrievedContentCount: retrievedSources.length,
+      linkedBibliographyRequested,
+      linkedBibliographyRetrieved,
+      linkedBibliographyComplete,
       degradedProviders: Array.from(new Set(
         this.searchAttempts.filter(attempt => attempt.status === 'error').map(attempt => attempt.provider)
       )),
@@ -541,9 +732,31 @@ export class GeneResearchEngine {
   }
 
   private async retrieveDiscoveryContent(searchResults: Map<string, any>): Promise<void> {
-    const candidates = this.rankSources(this.dedupeSources(
+    const seen = new Set<string>();
+    const candidates = this.rankSources(
       Array.from(searchResults.values()).flatMap((result: any) => result?.sources || [])
-    ))
+        .filter((source: any) => {
+          const key = String(source?.url || source?.sourceId || '').toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          try {
+            const url = new URL(source.url);
+            const hostname = url.hostname.toLowerCase();
+            if (
+              hostname === 'pubmed.ncbi.nlm.nih.gov'
+              || (hostname.endsWith('.ncbi.nlm.nih.gov') && /^\/pubmed\//i.test(url.pathname))
+            ) {
+              // PubMed abstracts have already been retrieved through EFetch
+              // with exact PMID provenance. Crawling a duplicate HTML page
+              // adds no evidence and often only follows a legacy redirect.
+              return false;
+            }
+          } catch {
+            return false;
+          }
+          return true;
+        })
+    )
       .filter(source => source?.evidenceRole === 'discovery' && source?.contentKind === 'snippet' && source?.url)
       .slice(0, 4);
 
@@ -556,16 +769,19 @@ export class GeneResearchEngine {
         if (content.length < 200) throw new Error('Retrieved page did not contain substantive text');
         source.content = content;
         source.contentKind = 'retrieved-content';
-        source.evidenceRole = 'context';
+        const relevance = this.assessSourceRelevance(source);
+        source.structuredData = { ...(source.structuredData || {}), targetRelevance: relevance };
+        source.evidenceRole = relevance.accepted ? 'context' : 'excluded';
         source.retrievedAt = new Date().toISOString();
         this.searchAttempts.push({
           query: source.url,
           provider: 'content-retrieval',
           phase: 'retrieval',
           category: source.researchCategory,
-          sourceCount: 1,
+          sourceCount: relevance.accepted ? 1 : 0,
           durationMs: Date.now() - startedAt,
-          status: 'success',
+          status: relevance.accepted ? 'success' : 'empty',
+          ...(!relevance.accepted ? { error: relevance.reason } : {}),
         });
       } catch (error) {
         this.searchAttempts.push({
@@ -599,8 +815,8 @@ export class GeneResearchEngine {
   }
 
   private dedupeSources(sources: any[]): any[] {
-    const seen = new Set<string>();
-    return sources.filter(source => {
+    const merged = new Map<string, any>();
+    for (const source of sources) {
       const key = String(
         source?.sourceId
         || source?.recordId
@@ -608,10 +824,35 @@ export class GeneResearchEngine {
         || source?.url
         || `${source?.database || 'unknown'}:${source?.title || ''}`
       ).toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      if (!key) continue;
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, {
+          ...source,
+          matchedQueries: Array.from(new Set(source?.matchedQueries || [])),
+          researchCategories: Array.from(new Set([
+            ...(source?.researchCategories || []),
+            source?.researchCategory,
+          ].filter(Boolean))),
+        });
+        continue;
+      }
+      existing.matchedQueries = Array.from(new Set([
+        ...(existing.matchedQueries || []),
+        ...(source?.matchedQueries || []),
+      ]));
+      existing.researchCategories = Array.from(new Set([
+        ...(existing.researchCategories || []),
+        ...(source?.researchCategories || []),
+        source?.researchCategory,
+      ].filter(Boolean)));
+      if (Number(source?.structuredData?.targetRelevance?.score || 0) > Number(existing?.structuredData?.targetRelevance?.score || 0)) {
+        existing.structuredData = source.structuredData;
+        existing.targetMatch = source.targetMatch;
+        existing.provenance = source.provenance;
+      }
+    }
+    return Array.from(merged.values());
   }
 
   private rankSources(sources: any[]): any[] {
@@ -663,6 +904,9 @@ export class GeneResearchEngine {
         if (searchProviders.includes(provider) && !new Set(['uniprot', 'ncbi_gene', 'kegg']).has(provider)) {
           const attemptStartedAt = Date.now();
           try {
+            const seedPmids = provider === 'pubmed' && !this.pubMedSeedsConsumed
+              ? this.pubMedSeedPmids
+              : [];
             result = await createGeneSearchProvider({
               provider,
               query: query.query,
@@ -673,6 +917,11 @@ export class GeneResearchEngine {
               taxonId: this.config.target?.taxonId || undefined,
               assemblyAccession: this.config.target?.assemblyAccession || undefined,
               proteinSha256: this.config.target?.proteinSha256 || undefined,
+              identityTerms: Array.from(this.identityTerms),
+              seedPmids,
+              apiKey: ['pubmed', 'ncbi_gene', 'geo'].includes(provider)
+                ? this.config.ncbiApiKey
+                : undefined,
               maxResult: this.config.maxSearchResults || 10,
               signal: this.config.signal,
             } as any);
@@ -680,9 +929,18 @@ export class GeneResearchEngine {
               result.sources = result.sources.map((source: any) => ({
                 ...source,
                 researchCategory: query.category,
+                researchCategories: [query.category],
+                matchedQueries: [query.query],
                 evidenceRole: source.annotation && source.targetMatch === true ? 'authoritative' : 'reference',
                 contentKind: source.structuredData?.literatureReferences ? 'abstract' : 'structured-record',
               }));
+            }
+            if (
+              provider === 'pubmed'
+              && seedPmids.length > 0
+              && result?.metadata?.seedRetrievalComplete === true
+            ) {
+              this.pubMedSeedsConsumed = true;
             }
             this.searchAttempts.push({
               query: query.query,
@@ -693,6 +951,10 @@ export class GeneResearchEngine {
               durationMs: Date.now() - attemptStartedAt,
               status: result?.metadata?.error ? 'error' : result?.sources?.length ? 'success' : 'empty',
               error: result?.metadata?.error,
+              warnings: result?.metadata?.warnings,
+              seedPmidsRequested: result?.metadata?.seedPmidsRequested,
+              seedPmidsRetrieved: result?.metadata?.seedPmidsRetrieved,
+              seedRetrievalComplete: result?.metadata?.seedRetrievalComplete,
             });
           } catch (error) {
             console.error(`Primary ${provider} search failed for query "${query.query}":`, error);
@@ -726,7 +988,9 @@ export class GeneResearchEngine {
               scope: fallback.scope || (fallback.provider === 'searxng' ? 'academic' : undefined),
               signal: this.config.signal,
             });
-            const relevantSources = fallbackResult.sources.filter(source => this.sourceMatchesGene(source));
+            const relevantSources = fallbackResult.sources
+              .map(source => ({ source, relevance: this.assessSourceRelevance(source) }))
+              .filter(({ relevance }) => relevance.accepted);
             this.searchAttempts.push({
               query: query.query,
               provider: fallback.provider,
@@ -736,7 +1000,7 @@ export class GeneResearchEngine {
               durationMs: Date.now() - fallbackStartedAt,
               status: relevantSources.length ? 'success' : 'empty',
             });
-            const discoverySources = relevantSources.map(source => ({
+            const discoverySources = relevantSources.map(({ source, relevance }) => ({
               title: source.title || query.query,
               content: source.content || '',
               url: source.url,
@@ -747,6 +1011,7 @@ export class GeneResearchEngine {
               evidence: ['search-discovery'],
               targetMatch: false,
               provenance: { provider: fallback.provider, matchedBy: ['search-discovery'] },
+              structuredData: { targetRelevance: relevance },
               researchCategory: query.category,
               evidenceRole: 'discovery',
               contentKind: 'snippet',
@@ -893,9 +1158,15 @@ export class GeneResearchEngine {
       // Search snippets are discovery leads, not annotation evidence. They
       // must not feed the heuristic extractor or create claims from isolated
       // EC/GO/pathway strings.
-      if (source.evidenceRole === 'discovery' && source.contentKind === 'snippet') continue;
+      if (['discovery', 'context', 'excluded'].includes(source.evidenceRole)) continue;
       if (this.config.target && source.annotation && source.targetMatch !== true) continue;
       if (source.structuredData) structuredSources.push(source);
+      // PubMed records contribute validated bibliography and narrative
+      // context only. Generic regex extraction from an arbitrary abstract can
+      // otherwise turn a sentence from an unrelated experimental system into
+      // a molecular-function or localization annotation.
+      if (source.database === 'pubmed') continue;
+      if (this.config.target && source.targetMatch !== true && source.authoritative !== true) continue;
       const content = `${source.title}\n${source.content}`;
       const partialData = await this.dataExtractor.extractFromContent(content, source.database || 'unknown');
       this.assertNotCancelled();
@@ -1126,12 +1397,52 @@ export class GeneResearchEngine {
     extractedData: GeneDataExtractionResult,
     visualizations: any[],
     qualityMetrics: GeneResearchQualityMetrics,
-    coverage?: ResearchCoverage
+    coverage?: ResearchCoverage,
+    sources: any[] = []
   ): any {
     const basic = extractedData.geneBasicInfo;
     const functional = extractedData.functionalData;
     const protein = extractedData.proteinInfo;
     const references = extractedData.literatureReferences || [];
+    const authoritativeSources = sources.filter(source => source?.authoritative === true && source?.targetMatch === true);
+    const sourceCitation = (source: any) => {
+      const label = String(source?.sourceId || source?.title || source?.database || 'source').replace(/[\[\]]/g, '');
+      return source?.url ? `[${label}](${source.url})` : label;
+    };
+    const authoritativeCitations = authoritativeSources.map(sourceCitation).join('; ');
+    const citationsFor = (...databases: string[]) => authoritativeSources
+      .filter(source => databases.includes(String(source.database || '').toLowerCase()))
+      .map(sourceCitation)
+      .join('; ') || authoritativeCitations;
+    const hasValue = (value: unknown) => Array.isArray(value) ? value.length > 0 : Boolean(value);
+    const citationsForField = (field: string) => authoritativeSources
+      .filter(source => {
+        const sourceBasic = source.structuredData?.geneBasicInfo || {};
+        const sourceFunctional = source.structuredData?.functionalData || {};
+        const sourceProtein = source.structuredData?.proteinInfo || {};
+        const fieldValues: Record<string, unknown[]> = {
+          gene_symbol: [sourceBasic.geneSymbol, source.provenance?.actualGeneSymbol],
+          organism: [sourceBasic.organism, source.provenance?.actualOrganism],
+          gene_id: [sourceBasic.geneID],
+          alternative_names: [sourceBasic.alternativeNames, source.provenance?.locusTags],
+          product: [source.annotation?.product, sourceProtein.proteinName],
+          uniprot_id: [sourceProtein.uniprotId, String(source.database).toLowerCase() === 'uniprot' && source.sourceId],
+          protein_size: [sourceProtein.proteinSize],
+          molecular_weight: [sourceProtein.molecularWeight],
+          molecular_function: [sourceFunctional.molecularFunction],
+          catalytic_activity: [sourceFunctional.catalyticActivity, sourceProtein.catalyticActivity],
+          enzyme_classification: [source.annotation?.ecNumbers, sourceFunctional.enzymeClassification],
+          biological_process: [sourceFunctional.biologicalProcess, source.annotation?.pathwayTerms],
+          cellular_component: [sourceFunctional.cellularComponent],
+          protein_domains: [sourceProtein.proteinDomains],
+          subcellular_location: [sourceProtein.subcellularLocation],
+        };
+        return (fieldValues[field] || []).some(hasValue);
+      })
+      .map(sourceCitation)
+      .join('; ');
+    const identityCitations = citationsForField('gene_symbol') || citationsFor('ncbi_gene', 'uniprot');
+    const ncbiCitation = citationsForField('gene_id') || citationsFor('ncbi_gene');
     const hasEvidence = Boolean(
       protein.proteinName
       || protein.uniprotId
@@ -1139,42 +1450,100 @@ export class GeneResearchEngine {
       || functional.catalyticActivity
       || references.length
     );
-    const bullet = (label: string, value: unknown) => {
+    const bullet = (label: string, value: unknown, citations = '') => {
       const formatted = Array.isArray(value) ? value.filter(Boolean).join('; ') : String(value || '').trim();
-      return formatted ? `- **${label}**: ${formatted}` : '';
+      return formatted ? `- **${label}**: ${formatted}${citations ? ` — ${citations}` : ''}` : '';
+    };
+    const sentence = (value: unknown) => {
+      const formatted = String(value || '').trim();
+      return !formatted || /[.!?]$/.test(formatted) ? formatted : `${formatted}.`;
     };
     const evidenceSummary = hasEvidence
       ? [
-          protein.proteinName ? `${this.config.geneSymbol} encodes ${protein.proteinName}.` : '',
-          functional.catalyticActivity || functional.molecularFunction[0] || '',
-          functional.biologicalProcess[0] || '',
-        ].filter(Boolean).join(' ')
+          protein.proteinName ? sentence(`${this.config.geneSymbol} encodes ${protein.proteinName}`) : '',
+          sentence(functional.catalyticActivity || functional.molecularFunction[0] || ''),
+          sentence(functional.biologicalProcess[0] || ''),
+        ].filter(Boolean).join(' ') + (authoritativeCitations ? ` ${authoritativeCitations}` : '')
       : `No source-backed functional evidence was retrieved for ${this.config.geneSymbol} in ${this.config.organism}. The pipeline did not infer missing biology.`;
     const identityLines = [
-      bullet('Gene symbol', basic.geneSymbol || this.config.geneSymbol),
-      bullet('Organism', basic.organism || this.config.organism),
-      bullet('NCBI Gene ID', basic.geneID),
-      bullet('Alternative names', basic.alternativeNames),
-      bullet('Protein product', protein.proteinName),
-      bullet('UniProtKB', protein.uniprotId),
-      bullet('Protein length', protein.proteinSize ? `${protein.proteinSize} aa` : ''),
-      bullet('Molecular weight', protein.molecularWeight ? `${protein.molecularWeight} Da` : ''),
+      bullet('Gene symbol', basic.geneSymbol || this.config.geneSymbol, identityCitations),
+      bullet('Organism', basic.organism || this.config.organism, identityCitations),
+      bullet('NCBI Gene ID', basic.geneID, ncbiCitation),
+      bullet('Alternative names', basic.alternativeNames, citationsForField('alternative_names')),
+      bullet('Protein product', protein.proteinName, citationsForField('product')),
+      bullet('UniProtKB', protein.uniprotId, citationsForField('uniprot_id')),
+      bullet('Protein length', protein.proteinSize ? `${protein.proteinSize} aa` : '', citationsForField('protein_size')),
+      bullet('Molecular weight', protein.molecularWeight ? `${protein.molecularWeight} Da` : '', citationsForField('molecular_weight')),
     ].filter(Boolean).join('\n');
     const functionLines = [
-      bullet('Molecular function', functional.molecularFunction),
-      bullet('Catalytic activity', functional.catalyticActivity),
-      bullet('EC number', functional.enzymeClassification),
-      bullet('Biological process/pathway', functional.biologicalProcess),
-      bullet('Cellular component', functional.cellularComponent),
-      bullet('Protein family/domains', protein.proteinDomains),
-      bullet('Subcellular location', protein.subcellularLocation),
+      bullet('Molecular function', functional.molecularFunction, citationsForField('molecular_function')),
+      bullet('Catalytic activity', functional.catalyticActivity, citationsForField('catalytic_activity')),
+      bullet('EC number', functional.enzymeClassification, citationsForField('enzyme_classification')),
+      bullet('Biological process/pathway', functional.biologicalProcess, citationsForField('biological_process')),
+      bullet('Cellular component', functional.cellularComponent, citationsForField('cellular_component')),
+      bullet('Protein family/domains', protein.proteinDomains, citationsForField('protein_domains')),
+      bullet('Subcellular location', protein.subcellularLocation, citationsForField('subcellular_location')),
     ].filter(Boolean).join('\n');
-    const referenceLines = references.length
-      ? references.map(reference => {
-          const pmid = reference.pmid ? ` PMID:${reference.pmid}.` : '';
-          return `- ${reference.title}.${pmid}`;
+    const relevantLiterature = sources.filter(source =>
+      source?.database === 'pubmed'
+      && source?.structuredData?.targetRelevance?.accepted === true
+      && source?.structuredData?.targetRelevance?.directness === 'direct'
+    );
+    const geneLinkedContext = sources.filter(source =>
+      source?.database === 'pubmed'
+      && source?.structuredData?.targetRelevance?.accepted === true
+      && source?.structuredData?.targetRelevance?.directness === 'gene_linked_context'
+    );
+    const literatureFindings = extractCitationBoundLiteratureFindings(
+      relevantLiterature,
+      {
+        geneSymbol: this.config.geneSymbol,
+        organism: this.config.organism,
+        locusTag: this.config.target?.locusTag,
+        proteinId: this.config.target?.proteinId,
+        identityTerms: Array.from(this.identityTerms),
+      },
+      24,
+    );
+    const escapeMarkdown = (value: unknown) => String(value || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/([\[\]*_`])/g, '\\$1')
+      .replace(/[\r\n]+/g, ' ')
+      .trim();
+    const findingLines = literatureFindings.length
+      ? literatureFindings.map(finding =>
+          `- **${finding.category}**: ${escapeMarkdown(finding.statement)} — [PMID:${finding.pmid}](${finding.url})`
+        ).join('\n')
+      : '- No abstract sentence met the exact-target, result-statement, and citation-binding requirements.';
+    const referenceLines = relevantLiterature.length
+      ? relevantLiterature.map(source => {
+          const reference = source.structuredData?.literatureReferences?.[0] || {};
+          const pmid = reference.pmid || source.provenance?.recordId;
+          const citation = pmid
+            ? `[PMID:${pmid}](https://pubmed.ncbi.nlm.nih.gov/${pmid}/)`
+            : `[source](${source.url})`;
+          const year = reference.year ? ` (${reference.year})` : '';
+          const reason = source.structuredData?.targetRelevance?.reason;
+          return `- **${escapeMarkdown(source.title)}**${year} — ${citation}${reason ? ` — ${escapeMarkdown(reason)}` : ''}`;
         }).join('\n')
       : '- No validated literature references were retained.';
+    const linkedContextLines = geneLinkedContext.length
+      ? geneLinkedContext.map(source => {
+          const reference = source.structuredData?.literatureReferences?.[0] || {};
+          const pmid = reference.pmid || source.provenance?.recordId;
+          const citation = pmid
+            ? `[PMID:${pmid}](https://pubmed.ncbi.nlm.nih.gov/${pmid}/)`
+            : `[source](${source.url})`;
+          const year = reference.year ? ` (${reference.year})` : '';
+          return `- **${escapeMarkdown(source.title)}**${year} — ${citation}`;
+        }).join('\n')
+      : '- No additional exact NCBI Gene-linked contextual records were retained.';
+    const authoritativeCitationLines = authoritativeSources.length
+      ? authoritativeSources.map(source => {
+          const label = source.sourceId || source.title || source.database;
+          return `- [${label}](${source.url}) — exact-target ${source.database} record`;
+        }).join('\n')
+      : '- No exact-target authoritative record was retained.';
     const qualityLines = [
       bullet('Overall quality', `${(qualityMetrics.overallQuality * 100).toFixed(1)}%`),
       bullet('Data completeness', `${(qualityMetrics.dataCompleteness * 100).toFixed(1)}%`),
@@ -1188,6 +1557,7 @@ export class GeneResearchEngine {
           `- **Literature records**: ${coverage.literatureSourceCount}`,
           `- **Discovery records**: ${coverage.discoverySourceCount}`,
           `- **Retrieved pages**: ${coverage.retrievedContentCount}`,
+          `- **Exact GeneID bibliography**: ${coverage.linkedBibliographyRetrieved}/${coverage.linkedBibliographyRequested || 0} records retrieved (${coverage.linkedBibliographyComplete ? 'complete' : 'incomplete or unavailable'})`,
           `- **Degraded providers**: ${coverage.degradedProviders.length ? coverage.degradedProviders.join(', ') : 'none'}`,
           coverage.evidenceGaps.length
             ? `- **Evidence gaps**: ${coverage.evidenceGaps.join('; ')}`
@@ -1213,7 +1583,7 @@ export class GeneResearchEngine {
       },
       {
         id: 'evidence', title: 'Evidence', priority: 'high', required: true,
-        content: `## Evidence\n\n${referenceLines}`,
+        content: `## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Citation-Bound Target Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their abstracts do not contain sufficiently direct target wording. They are included for bibliography coverage and are not used to generate biological claims or annotation operations.\n\n${linkedContextLines}`,
         visualizations: [],
       },
       {
@@ -1234,6 +1604,9 @@ export class GeneResearchEngine {
         reportType: this.config.reportType || 'comprehensive',
         targetAudience: this.config.targetAudience || 'researchers',
         complexity: 'advanced',
+        directLiteratureCount: relevantLiterature.length,
+        geneLinkedContextCount: geneLinkedContext.length,
+        citationBoundFindingCount: literatureFindings.length,
       },
     };
   }

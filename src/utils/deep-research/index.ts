@@ -17,6 +17,8 @@ import { isNetworkingModel } from "@/utils/model";
 import { ThinkTagStreamProcessor, removeJsonMarkdown } from "@/utils/text";
 import { pick, unique, flat, isFunction } from "radash";
 import { createGeneResearchEngine } from "@/utils/gene-research";
+import { assessGeneTargetRelevance } from "@/utils/gene-research/search-providers";
+import type { CurrentAnnotationSnapshot } from "@/contracts/annotation-change-set";
 
 export interface DeepResearchOptions {
   AIProvider: {
@@ -592,10 +594,12 @@ class DeepResearch {
       geneSymbol: string;
       organism: string;
       target?: {
+        featureType?: string | null;
         locusTag?: string | null;
         proteinId?: string | null;
         taxonId?: string | number | null;
       };
+      currentAnnotation?: CurrentAnnotationSnapshot;
       researchFocus?: string[];
       specificAspects?: string[];
       diseaseContext?: string;
@@ -628,6 +632,7 @@ class DeepResearch {
         geneSymbol: geneInfo.geneSymbol,
         organism: geneInfo.organism,
         target: explicitGeneInfo?.target,
+        currentAnnotation: explicitGeneInfo?.currentAnnotation,
         researchFocus: geneInfo.researchFocus,
         specificAspects: geneInfo.specificAspects,
         diseaseContext: geneInfo.diseaseContext,
@@ -640,6 +645,7 @@ class DeepResearch {
         maxSearchResults: Math.min(20, Math.max(1, this.options.searchProvider.maxResult ?? 5)),
         searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'],
         fallbackSearchProvider: this.options.searchProvider,
+        ncbiApiKey: process.env.NCBI_API_KEY || process.env.NCBI_EUTILS_API_KEY,
         language: this.options.language,
         signal,
         onProgress: data => this.onMessage('progress', data),
@@ -668,9 +674,6 @@ class DeepResearch {
           formattedCitation // Add the formatted citation
         };
       });
-      const requestedGene = geneInfo.geneSymbol.trim().toLowerCase();
-      const requestedOrganism = geneInfo.organism.trim().toLowerCase();
-      const trustedDatabases = new Set(['pubmed', 'uniprot', 'ncbi_gene', 'kegg', 'pdb', 'string', 'reactome']);
       const sourceMatchesRequestedGene = (source: {
         title?: string;
         content?: string;
@@ -678,16 +681,23 @@ class DeepResearch {
         database?: string;
         geneSymbol?: string;
         organism?: string;
+        targetMatch?: boolean;
+        authoritative?: boolean;
+        structuredData?: Record<string, any>;
       }) => {
-        const textMatch = [source.title, source.content, source.url]
-          .filter(Boolean)
-          .join('\n')
-          .toLowerCase()
-          .includes(requestedGene);
-        const provenanceMatch = trustedDatabases.has(String(source.database || '').toLowerCase())
-          && String(source.geneSymbol || '').trim().toLowerCase() === requestedGene
-          && (!source.organism || String(source.organism).toLowerCase().includes(requestedOrganism));
-        return textMatch || provenanceMatch;
+        if (source.targetMatch === true && source.authoritative === true) return true;
+        const retainedRelevance = source.structuredData?.targetRelevance;
+        if (retainedRelevance) return retainedRelevance.accepted === true;
+        return assessGeneTargetRelevance(
+          source.title || '',
+          source.content || '',
+          {
+            geneSymbol: geneInfo.geneSymbol,
+            organism: geneInfo.organism,
+            locusTag: explicitGeneInfo?.target?.locusTag || undefined,
+            proteinId: explicitGeneInfo?.target?.proteinId || undefined,
+          },
+        ).accepted;
       };
       const sources = Array.from(
         new Map(

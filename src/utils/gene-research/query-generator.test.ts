@@ -42,4 +42,21 @@ describe('GeneQueryGenerator', () => {
     expect(queries.some(query => query.category === 'evolution')).toBe(true);
     expect(new Set(keys).size).toBe(keys.length);
   });
+
+  it('uses phenotype and metabolic queries instead of human disease language for prokaryotic CDS research', () => {
+    const generator = new GeneQueryGenerator({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      researchFocus: ['phenotype', 'pathway'],
+    });
+    const queries = generator.generateComprehensiveQueries().map(task => task.query);
+
+    expect(queries).toEqual(expect.arrayContaining([
+      expect.stringContaining('mutant knockout phenotype fitness'),
+      expect.stringContaining('allele complementation biochemical phenotype'),
+      expect.stringContaining('biosynthetic pathway metabolic regulation'),
+    ]));
+    expect(queries.some(query => /disease association|genetic disorder|syndrome|signaling pathway/i.test(query)))
+      .toBe(false);
+  });
 });
