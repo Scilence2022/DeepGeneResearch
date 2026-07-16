@@ -6,6 +6,7 @@ import { GeneSearchTask } from '@/types/gene-research';
 export interface GeneQueryContext {
   geneSymbol: string;
   organism: string;
+  featureType?: string;
   researchFocus?: string[];
   specificAspects?: string[];
   diseaseContext?: string;
@@ -15,6 +16,7 @@ export interface GeneQueryContext {
 export class GeneQueryGenerator {
   private geneSymbol: string;
   private organism: string;
+  private featureType: string;
   private researchFocus: string[];
   private specificAspects: string[];
   private diseaseContext?: string;
@@ -24,9 +26,14 @@ export class GeneQueryGenerator {
     return /(?:Escherichia|Corynebacterium|Bacillus|Pseudomonas|Salmonella|Staphylococcus|Streptococcus|Mycobacterium)/i.test(this.organism);
   }
 
+  private isProteinCodingFeature(): boolean {
+    return this.featureType.toUpperCase() === 'CDS';
+  }
+
   constructor(context: GeneQueryContext) {
     this.geneSymbol = context.geneSymbol;
     this.organism = context.organism;
+    this.featureType = context.featureType || 'CDS';
     this.researchFocus = (context.researchFocus || ['general']).map(aspect => this.normalizeAspect(aspect));
     this.specificAspects = (context.specificAspects || []).map(aspect => this.normalizeAspect(aspect));
     this.diseaseContext = context.diseaseContext;
@@ -118,6 +125,34 @@ export class GeneQueryGenerator {
   }
 
   private generateFunctionQueries(): GeneSearchTask[] {
+    if (!this.isProteinCodingFeature()) {
+      return [
+        {
+          query: `${this.geneSymbol} ${this.featureType} molecular biological function ${this.organism}`,
+          researchGoal: `Determine the molecular and biological function of the ${this.geneSymbol} ${this.featureType} feature in ${this.organism}.`,
+          database: 'pubmed',
+          priority: 'high',
+          category: 'function',
+          status: 'pending'
+        },
+        {
+          query: `${this.geneSymbol} RNA processing maturation modification ${this.organism}`,
+          researchGoal: `Identify processing, maturation, modification, and stability mechanisms relevant to ${this.geneSymbol}.`,
+          database: 'pubmed',
+          priority: 'high',
+          category: 'function',
+          status: 'pending'
+        },
+        {
+          query: `${this.geneSymbol} phenotype deletion mutation ${this.organism}`,
+          researchGoal: `Find direct phenotype evidence that establishes the physiological role of ${this.geneSymbol}.`,
+          database: 'pubmed',
+          priority: 'high',
+          category: 'function',
+          status: 'pending'
+        }
+      ];
+    }
     return [
       {
         query: `${this.geneSymbol} molecular function catalytic activity ${this.organism}`,
@@ -155,6 +190,26 @@ export class GeneQueryGenerator {
   }
 
   private generateStructureQueries(): GeneSearchTask[] {
+    if (!this.isProteinCodingFeature()) {
+      return [
+        {
+          query: `${this.geneSymbol} RNA secondary structure functional elements ${this.organism}`,
+          researchGoal: `Determine experimentally supported RNA structure and functional elements for ${this.geneSymbol}.`,
+          database: 'pubmed',
+          priority: 'medium',
+          category: 'structure',
+          status: 'pending'
+        },
+        {
+          query: `${this.geneSymbol} RNA binding partners ribonucleoprotein ${this.organism}`,
+          researchGoal: `Identify RNA, DNA, and protein partners required for ${this.geneSymbol} function.`,
+          database: 'pubmed',
+          priority: 'medium',
+          category: 'structure',
+          status: 'pending'
+        }
+      ];
+    }
     return [
       {
         query: `${this.geneSymbol} protein structure 3D crystal ${this.organism}`,
@@ -196,11 +251,17 @@ export class GeneQueryGenerator {
           researchGoal: `Find transcriptomic evidence for ${this.geneSymbol} expression in ${this.organism}.`,
           database: 'geo', priority: 'medium', category: 'expression', status: 'pending'
         },
-        {
-          query: `${this.geneSymbol} subcellular localization ${this.organism}`,
-          researchGoal: `Determine the experimentally supported cellular localization of the ${this.geneSymbol} product.`,
-          database: 'uniprot', priority: 'high', category: 'expression', status: 'pending'
-        }
+        this.isProteinCodingFeature()
+          ? {
+              query: `${this.geneSymbol} subcellular localization ${this.organism}`,
+              researchGoal: `Determine the experimentally supported cellular localization of the ${this.geneSymbol} product.`,
+              database: 'uniprot', priority: 'high', category: 'expression', status: 'pending'
+            }
+          : {
+              query: `${this.geneSymbol} RNA abundance localization half-life ${this.organism}`,
+              researchGoal: `Determine the abundance, localization, stability, and condition dependence of ${this.geneSymbol}.`,
+              database: 'pubmed', priority: 'high', category: 'expression', status: 'pending'
+            }
       ];
     }
     return [
@@ -291,6 +352,26 @@ export class GeneQueryGenerator {
   }
 
   private generateInteractionQueries(): GeneSearchTask[] {
+    if (!this.isProteinCodingFeature()) {
+      return [
+        {
+          query: `${this.geneSymbol} RNA interaction targets binding partners ${this.organism}`,
+          researchGoal: `Identify experimentally supported targets and binding partners of ${this.geneSymbol}.`,
+          database: 'pubmed',
+          priority: 'high',
+          category: 'interactions',
+          status: 'pending'
+        },
+        {
+          query: `${this.geneSymbol} ribonucleoprotein complex regulation ${this.organism}`,
+          researchGoal: `Determine whether ${this.geneSymbol} functions in a ribonucleoprotein complex or regulatory RNA network.`,
+          database: 'pubmed',
+          priority: 'medium',
+          category: 'interactions',
+          status: 'pending'
+        }
+      ];
+    }
     return [
       {
         query: `${this.geneSymbol} protein-protein interactions network ${this.organism}`,

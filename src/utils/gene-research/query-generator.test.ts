@@ -59,4 +59,22 @@ describe('GeneQueryGenerator', () => {
     expect(queries.some(query => /disease association|genetic disorder|syndrome|signaling pathway/i.test(query)))
       .toBe(false);
   });
+
+  it('uses RNA-specific research questions for non-coding gene features', () => {
+    const generator = new GeneQueryGenerator({
+      geneSymbol: 'ffs',
+      organism: 'Escherichia coli',
+      featureType: 'ncRNA',
+    });
+    const queries = generator.generateComprehensiveQueries();
+
+    expect(queries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ query: expect.stringContaining('RNA processing maturation modification') }),
+      expect.objectContaining({ query: expect.stringContaining('RNA secondary structure functional elements') }),
+      expect.objectContaining({ query: expect.stringContaining('RNA interaction targets binding partners') }),
+    ]));
+    expect(queries.some(query => query.database === 'pdb')).toBe(false);
+    expect(queries.some(query => /protein domains|protein-protein|active site binding pocket/i.test(query.query)))
+      .toBe(false);
+  });
 });

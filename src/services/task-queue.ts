@@ -6,6 +6,10 @@ import { cacheService, isReusableResearchResult } from './cache';
 import { storeResearchResult } from '@/utils/mcp-research-store';
 import { buildCodeXomicsAnnotationProposal } from '@/utils/gene-research/codexomics-annotation';
 import { enforceTaskMediaPolicy } from './task-result-projection';
+import {
+  hasStableGeneResearchIdentity,
+  isSupportedGeneAnnotationFeatureType,
+} from '@/contracts/gene-annotation-target';
 
 const MCP_SERVER_BASE_URL = (process.env.MCP_SERVER_BASE_URL || '').trim().replace(/\/+$/, '');
 const MCP_SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || 'model';
@@ -151,11 +155,13 @@ export class TaskQueue extends EventEmitter {
     if (!Number.isInteger(parameters.target.annotationRevision) || parameters.target.annotationRevision < 0) {
       throw new TaskValidationError('Resolved CodeXomics target has an invalid annotationRevision');
     }
-    if (String(parameters.target.featureType).trim().toUpperCase() !== 'CDS') {
-      throw new TaskValidationError('Deep gene annotation research is restricted to resolved CDS targets');
+    if (!isSupportedGeneAnnotationFeatureType(parameters.target.featureType)) {
+      throw new TaskValidationError(
+        `Deep gene annotation research does not support target feature type "${parameters.target.featureType}"`,
+      );
     }
-    if (!String(parameters.target.locusTag || '').trim() && !String(parameters.target.proteinId || '').trim()) {
-      throw new TaskValidationError('Resolved CDS target must include a stable locusTag or proteinId');
+    if (!hasStableGeneResearchIdentity(parameters.target)) {
+      throw new TaskValidationError('Resolved annotation target must include a locusTag, proteinId, or geneSymbol');
     }
 
     const normalize = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();

@@ -140,7 +140,7 @@ export function buildExactAnnotationFieldEvidence({
           url,
           retrievedAt,
           currentValue: currentProduct,
-          justification: 'Exact-target authoritative evidence provides a more specific CDS product than the current placeholder or generic product.',
+          justification: 'Exact-target authoritative evidence provides a more specific annotation product than the current placeholder or generic product.',
         }];
       }
       return [{ value, sourceId, database, url, retrievedAt }];

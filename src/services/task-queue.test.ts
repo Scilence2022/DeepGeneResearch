@@ -144,7 +144,7 @@ describe.sequential('durable task queue lifecycle', () => {
     })).rejects.toThrow('Research geneSymbol does not match');
   });
 
-  it('rejects non-CDS and unstable external annotation targets', async () => {
+  it('accepts supported RNA targets and rejects unsupported or unstable annotation targets', async () => {
     mockResearch(async () => ({ finalReport: 'unused', sources: [] }));
     const { TaskQueue } = await import('./task-queue');
     const queue = new TaskQueue();
@@ -163,13 +163,19 @@ describe.sequential('durable task queue lifecycle', () => {
       geneSymbol: 'thrL',
       organism: 'Escherichia coli',
       target: { ...baseTarget, featureType: 'tRNA', locusTag: 'b0001' },
-    })).rejects.toThrow('restricted to resolved CDS targets');
+    })).resolves.toMatchObject({ parameters: { target: { featureType: 'tRNA', locusTag: 'b0001' } } });
 
     await expect(queue.addTask({
       geneSymbol: 'thrL',
       organism: 'Escherichia coli',
-      target: { ...baseTarget, featureType: 'CDS' },
-    })).rejects.toThrow('stable locusTag or proteinId');
+      target: { ...baseTarget, featureType: 'exon', locusTag: 'b0001' },
+    })).rejects.toThrow('does not support target feature type');
+
+    await expect(queue.addTask({
+      geneSymbol: 'thrL',
+      organism: 'Escherichia coli',
+      target: { ...baseTarget, geneSymbol: undefined, featureType: 'CDS' },
+    })).rejects.toThrow('locusTag, proteinId, or geneSymbol');
   });
 
   it('retries recovery after a transient task-store failure', async () => {

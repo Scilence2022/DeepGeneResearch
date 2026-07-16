@@ -12,6 +12,11 @@ import { createSearchProvider } from '@/utils/deep-research/search';
 import { fetchPublicText } from '@/utils/safe-public-fetch';
 import type { CurrentAnnotationSnapshot, GenomeTargetRef } from '@/contracts/annotation-change-set';
 import { buildExactAnnotationFieldEvidence } from './current-annotation';
+import {
+  hasStableGeneResearchIdentity,
+  isProteinCodingFeatureType,
+  isSupportedGeneAnnotationFeatureType,
+} from '@/contracts/gene-annotation-target';
 import { 
   GeneResearchWorkflow, 
   GeneSearchTask, 
@@ -139,6 +144,7 @@ export class GeneResearchEngine {
     this.queryGenerator = createGeneQueryGenerator({
       geneSymbol: config.geneSymbol,
       organism: config.organism,
+      featureType: config.target?.featureType || undefined,
       researchFocus: config.researchFocus,
       specificAspects: config.specificAspects,
       diseaseContext: config.diseaseContext,
@@ -156,11 +162,13 @@ export class GeneResearchEngine {
 
   private assertSupportedTarget(): void {
     if (!this.config.target) return;
-    if (String(this.config.target.featureType || '').toUpperCase() !== 'CDS') {
-      throw new Error('Deep gene annotation research is restricted to resolved CDS targets');
+    if (!isSupportedGeneAnnotationFeatureType(this.config.target.featureType)) {
+      throw new Error(
+        `Deep gene annotation research does not support target feature type "${this.config.target.featureType || 'unknown'}"`,
+      );
     }
-    if (!String(this.config.target.locusTag || '').trim() && !String(this.config.target.proteinId || '').trim()) {
-      throw new Error('A resolved CDS target must include a stable locusTag or proteinId');
+    if (!hasStableGeneResearchIdentity(this.config.target)) {
+      throw new Error('A resolved annotation target must include a locusTag, proteinId, or geneSymbol');
     }
   }
 
@@ -198,7 +206,7 @@ export class GeneResearchEngine {
       ].filter(Boolean).map(value => String(value).trim().toLowerCase()));
       this.assertNotCancelled();
 
-      // Phase 2a: resolve the immutable CDS target once. Identity databases
+      // Phase 2a: resolve the immutable annotation target once. Identity databases
       // are not research-query engines; repeatedly asking them the same
       // symbol for every focus area creates activity without new evidence.
       console.log('Phase 2a: Resolving exact target identity...');
@@ -343,7 +351,9 @@ export class GeneResearchEngine {
     const results = new Map<string, any>();
     const enabled = new Set(this.config.searchProviders || []);
     const providers = [
-      { provider: 'uniprot', query: `${this.config.geneSymbol} exact protein identity ${this.config.organism}` },
+      ...(isProteinCodingFeatureType(this.config.target?.featureType)
+        ? [{ provider: 'uniprot', query: `${this.config.geneSymbol} exact protein identity ${this.config.organism}` }]
+        : []),
       { provider: 'ncbi_gene', query: `${this.config.target?.locusTag || this.config.geneSymbol} exact gene identity ${this.config.organism}` },
       { provider: 'kegg', query: `${this.config.target?.locusTag || this.config.geneSymbol} exact pathway identity ${this.config.organism}` },
     ].filter(item => enabled.size === 0 || enabled.has(item.provider));

@@ -856,7 +856,7 @@ export async function searchUniProt({
       : [];
     const exactTargetResults = [...exactProteinResults, ...exactLocusResults]
       .filter((entry: any, index: number, entries: any[]) => entries.indexOf(entry) === index);
-    // An immutable CDS target must fail closed. Never turn a missing exact
+    // An immutable annotation target must fail closed. Never turn a missing exact
     // locus/accession match into an unrelated strain-wide gene-symbol hit.
     const selectedResults = proteinId || locusTag
       ? exactTargetResults.slice(0, 1)

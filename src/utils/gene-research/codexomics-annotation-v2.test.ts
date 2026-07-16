@@ -120,6 +120,32 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     expect(proposal.mergeHints.overwriteProduct).toBe(true);
   });
 
+  it('limits mutation fields according to the resolved feature type', () => {
+    const geneTarget = { ...target, featureType: 'gene', featureId: 'feat_gene_thrB' };
+    const geneProposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target: geneTarget,
+      currentAnnotation: { product: 'hypothetical protein' },
+      sources: [exactStructuredSource({ matchedTarget: geneTarget, currentProduct: 'hypothetical protein' })],
+    });
+    expect(geneProposal.operations.map(operation => operation.field)).toEqual(['db_xref']);
+
+    const rnaTarget = { ...target, featureType: 'ncRNA', featureId: 'feat_rna_thrB' };
+    const rnaProposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target: rnaTarget,
+      currentAnnotation: { product: 'hypothetical protein' },
+      sources: [exactStructuredSource({ matchedTarget: rnaTarget, currentProduct: 'hypothetical protein' })],
+    });
+    expect(rnaProposal.operations.map(operation => operation.field)).toEqual(
+      expect.arrayContaining(['product', 'go_terms', 'pathway', 'db_xref']),
+    );
+    expect(rnaProposal.operations.some(operation => operation.field === 'EC_number')).toBe(false);
+    expect(rnaProposal.operations.some(operation => operation.field === 'ko')).toBe(false);
+  });
+
   it('includes only target-relevant PubMed records in the concise literature summary', () => {
     const proposal = buildCodeXomicsAnnotationProposal({
       geneSymbol: 'lysC',
