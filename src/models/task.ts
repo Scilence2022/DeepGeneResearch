@@ -41,6 +41,8 @@ export interface GeneResearchParameters {
   includeCodeXomicsAnnotationProposal?: boolean;
   /** Bypass and invalidate an otherwise matching semantic research cache entry. */
   forceRefresh?: boolean;
+  /** Content-addressed PDFs previously uploaded through the authenticated DGR document endpoint. */
+  userDocumentIds?: string[];
   /** Exact target returned by CodeXomics resolve_annotation_target. */
   target?: GenomeTargetRef;
   /** Scientific qualifier snapshot derived from that exact target revision. */

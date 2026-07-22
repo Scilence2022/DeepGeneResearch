@@ -194,7 +194,7 @@ export async function fetchPublicText(
       resolved.url,
       {
         headers: {
-          accept: 'text/html,text/plain,application/xhtml+xml',
+          accept: 'text/html,text/plain,application/xhtml+xml,application/xml,text/xml,application/json',
           'accept-encoding': 'identity',
           'user-agent': 'DeepGeneResearch-Crawler/1.0',
         },
@@ -230,7 +230,7 @@ export async function fetchPublicText(
         }
 
         const contentType = String(response.headers['content-type'] || '').toLowerCase();
-        if (contentType && !/^(text\/|application\/xhtml\+xml)/.test(contentType)) {
+        if (contentType && !/^(text\/|application\/(?:xhtml\+xml|xml|json))(?:;|$)/.test(contentType)) {
           response.resume();
           reject(new Error(`Crawler upstream returned unsupported content type: ${contentType}`));
           return;

@@ -119,6 +119,9 @@ export function initMcpServer() {
       returnDetailsAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Details (workflow, sources, metadata) as a downloadable URL instead of inline content."),
       includeCodeXomicsAnnotationProposal: z.boolean().default(true).optional().describe("When true, include a CodeXomics-ready annotationProposal with conservative updates and evidence references."),
       forceRefresh: z.boolean().default(false).optional().describe("Bypass and invalidate a matching cached research result before running this task."),
+      userDocumentIds: z.array(z.string().regex(/^sha256:[a-f0-9]{64}$/i)).max(8).optional().describe(
+        "Content-addressed user PDFs uploaded through /api/mcp/documents. These are parsed and read before abstract-only evidence is used.",
+      ),
       target: z.object({
         workspaceId: z.string().min(1).max(512),
         genomeId: z.string().min(1).max(512),
@@ -169,6 +172,7 @@ export function initMcpServer() {
         returnDetailsAsUrl = false,
         includeCodeXomicsAnnotationProposal = true,
         forceRefresh = false,
+        userDocumentIds = [],
         target,
         currentAnnotation,
         idempotencyKey,
@@ -195,6 +199,7 @@ export function initMcpServer() {
           returnDetailsAsUrl,
           includeCodeXomicsAnnotationProposal,
           forceRefresh,
+          userDocumentIds,
           target,
           currentAnnotation,
           idempotencyKey,

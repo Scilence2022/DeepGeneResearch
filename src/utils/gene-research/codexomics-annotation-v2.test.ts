@@ -239,6 +239,87 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     expect(repeated.operations.some(operation => operation.field === 'note')).toBe(false);
   });
 
+  it('binds a user-PDF finding to canonical full text, exact offsets, and one PMID record', () => {
+    const text = `${'Background measurements established the experimental conditions. '.repeat(4)}The Escherichia coli lysC gene was tested. Deletion of lysC reduced growth under lysine limitation.`;
+    const excerpt = 'Deletion of lysC reduced growth under lysine limitation.';
+    const excerptStart = text.indexOf(excerpt);
+    const textSha256 = createHash('sha256').update(text).digest('hex');
+    const documentSha256 = createHash('sha256').update('pdf bytes').digest('hex');
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: { ...target, featureId: 'b4024', locusTag: 'b4024', geneSymbol: 'lysC' },
+      sources: [{
+        title: 'User-provided lysC study',
+        sourceId: `sha256:${documentSha256}`,
+        url: `urn:sha256:${documentSha256}`,
+        database: 'user_document',
+        pmid: '28751',
+        evidenceRole: 'reference',
+        structuredData: { targetRelevance: { accepted: true, directness: 'direct' } },
+        fullText: {
+          schema: 'dgr.full-text-document.v1',
+          origin: 'user_upload',
+          name: 'lysC-study.pdf',
+          documentSha256,
+          text,
+          textSha256,
+          textLength: text.length,
+          canonicalization: 'dgr.full-text.v1',
+          offsetEncoding: 'utf16_code_units',
+          identifiers: { pmid: '28751' },
+          retrievedAt: '2026-07-23T00:00:00.000Z',
+        },
+        fullTextEvidence: [{
+          kind: 'full_text_span',
+          category: 'phenotype',
+          excerpt,
+          excerptSha256: createHash('sha256').update(excerpt).digest('hex'),
+          excerptStart,
+          excerptEnd: excerptStart + excerpt.length,
+          textSha256,
+          textLength: text.length,
+          pageNumber: 2,
+          canonicalization: 'dgr.full-text.v1',
+          offsetEncoding: 'utf16_code_units',
+        }],
+      }],
+    });
+
+    const fact = proposal.researchSummary.facts.find(
+      candidate => candidate.literatureBasis?.kind === 'full_text_span'
+    );
+    expect(fact).toMatchObject({
+      statement: excerpt,
+      evidenceIds: [expect.any(String)],
+      citation: { type: 'pmid', id: '28751' },
+      literatureBasis: {
+        kind: 'full_text_span',
+        pmid: '28751',
+        documentSha256,
+        textSha256,
+        excerptStart,
+        excerptEnd: excerptStart + excerpt.length,
+        pageNumber: 2,
+      },
+    });
+    const record = proposal.evidenceManifest.sourceRecords.find(item => item.id === fact?.evidenceIds[0]);
+    expect(record).toMatchObject({
+      database: 'user_document',
+      identifiers: [{ scheme: 'pmid', value: '28751' }],
+      sourceBinding: {
+        selector: { database: 'user_document', identifier: { scheme: 'pmid', value: '28751' } },
+        content: {
+          relativeJsonPointer: '/fullText/text',
+          canonicalization: 'dgr.full-text.v1',
+          sha256: textSha256,
+          length: text.length,
+        },
+      },
+    });
+    expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).not.toThrow();
+  });
+
   it('retains a complete 38-paper exact-target bibliography in the evidence manifest', () => {
     const sources = Array.from({ length: 38 }, (_, index) => {
       const pmid = String(12000000 + index);

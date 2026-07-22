@@ -107,6 +107,12 @@ export class TaskQueue extends EventEmitter {
     boundedString(parameters.language, 'language', 64);
     boundedString(parameters.idempotencyKey, 'idempotencyKey', 256);
     boundedString(parameters.correlationId, 'correlationId', 256);
+    boundedStringArray(parameters.userDocumentIds, 'userDocumentIds', 8, 71);
+    for (const documentId of parameters.userDocumentIds || []) {
+      if (!/^sha256:[a-f0-9]{64}$/i.test(documentId)) {
+        throw new TaskValidationError('userDocumentIds must contain sha256 content identifiers');
+      }
+    }
     if (parameters.forceRefresh !== undefined && typeof parameters.forceRefresh !== 'boolean') {
       throw new TaskValidationError('forceRefresh must be a boolean');
     }
@@ -480,6 +486,7 @@ export class TaskQueue extends EventEmitter {
         specificAspects,
         diseaseContext,
         experimentalApproach,
+        userDocumentIds: task.parameters.userDocumentIds,
       }, abortController.signal, task.parameters.enableCitationImage !== false);
       if (await this.isCancellationRequested(task.id)) {
         await this.finishCancellation(task, 'cancelled-during-research');

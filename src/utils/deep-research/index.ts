@@ -604,6 +604,7 @@ class DeepResearch {
       specificAspects?: string[];
       diseaseContext?: string;
       experimentalApproach?: string;
+      userDocumentIds?: string[];
     },
     signal?: AbortSignal,
     enableVisualization = true
@@ -637,6 +638,7 @@ class DeepResearch {
         specificAspects: geneInfo.specificAspects,
         diseaseContext: geneInfo.diseaseContext,
         experimentalApproach: geneInfo.experimentalApproach,
+        userDocumentIds: explicitGeneInfo?.userDocumentIds,
         targetAudience: 'researchers',
         reportType: 'comprehensive',
         enableAPIIntegration: true,
@@ -718,7 +720,14 @@ class DeepResearch {
       const researchResult = {
         title: result.report.title,
         finalReport,
-        learnings: result.workflow.literatureReview.map(ref => ref.abstract),
+        learnings: [
+          ...result.sources.flatMap((source: any) =>
+            Array.isArray(source?.fullTextEvidence)
+              ? source.fullTextEvidence.map((finding: any) => finding.excerpt)
+              : []
+          ),
+          ...result.workflow.literatureReview.map(ref => ref.abstract),
+        ],
         sources,
         images,
         geneResearch: {
