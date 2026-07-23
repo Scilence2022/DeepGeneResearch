@@ -207,6 +207,7 @@ ACCESS_PASSWORD=replace_with_a_long_random_shared_secret
 
 # Durable queue settings for a long-lived, single-process Node deployment
 # MCP_TASK_STORAGE_FILE=/var/lib/deep-gene-research/tasks.json
+# MCP_RESEARCH_DOCUMENT_STORAGE_DIR=/var/lib/deep-gene-research/research-documents
 # DGR_MAX_CONCURRENT_RESEARCH=2
 # DGR_WORKER_COUNT=1
 # MCP_SERVER_BASE_URL=https://dgr.example.org
@@ -502,7 +503,10 @@ When the task completes, its result includes:
 - **Visualizations**: Mermaid diagrams for pathways, interactions, structures
 - **Research Report**: Structured sections with executive summary, molecular function, etc.
 - **Identity-aware bibliography**: exact NCBI Gene-linked PubMed records are kept separate from directly supported target papers; explicit homonyms, Lys-C digestion reagents, phage genes, off-organism results, and papers focused on another subject are rejected.
-- **Citation-bound findings**: biological literature facts are copied from direct PubMed abstract spans and carry an exact PMID/DOI, canonical abstract/span hashes, and exact UTF-16 offsets. Evidence records locate the canonical abstract in the full task `sources`, allowing CodeXomics to verify archived findings before use. Gene-linked-only context is never promoted to a biological claim.
+- **Full-text retrieval**: DGR parses authenticated user PDF uploads page by page, searches the web/database corpus independently, and retrieves Europe PMC XML full text for eligible PubMed records. Abstract-only coverage remains explicitly labeled.
+- **Citation-bound findings**: biological literature facts are copied from exact PubMed abstract or full-text spans and carry stable identifiers, canonical source/span hashes, exact UTF-16 offsets, and page locators for PDFs when available. Evidence records locate the canonical text in the full task `sources`, allowing CodeXomics to verify archived findings before use. Gene-linked-only context is never promoted to a biological claim.
+
+To supply PDFs programmatically, `POST` each file to `/api/mcp/documents` using the same bearer credential, `Content-Type: application/pdf`, and a URL-encoded `X-DGR-Document-Name`. Pass the returned `sha256:...` identifiers in `userDocumentIds` when calling `deep-gene-research`. The endpoint accepts at most 20 MiB per PDF; each task accepts at most eight. Use CodeXomics orchestration for normal annotation workflows so the PDFs are also registered as genome/gene-scoped attachments.
 
 ```json
 {
@@ -564,7 +568,7 @@ const response = await fetch('https://your-domain.com/api/mcp', {
 
 There are two supported integration paths:
 
-1. An external agent should normally call CodeXomics `start_annotation_research` and poll `get_annotation_research_workflow`; CodeXomics invokes DGR, archives the full task, verifies every citation-bound abstract span, and only then materializes the proposal. If the agent starts DGR directly, it must call CodeXomics `archive_annotation_research` with the exact task, correlation ID, and CDS identifier before calling `create_annotation_changeset` with `researchRun=taskId`.
+1. An external agent should normally call CodeXomics `start_annotation_research` and poll `get_annotation_research_workflow`; CodeXomics invokes DGR, archives the full task, verifies every citation-bound abstract/full-text span, and only then materializes the proposal. `researchDocumentPaths` imports user PDFs; `researchAttachmentIds` reuses existing gene PDF attachments. If the agent starts DGR directly, it must call CodeXomics `archive_annotation_research` with the exact task, correlation ID, and CDS identifier before calling `create_annotation_changeset` with `researchRun=taskId`.
 2. The CodeXomics ChatBox uses the same built-in `start_annotation_research` workflow. CodeXomics' Electron main process sends DGR requests through a credential-holding proxy configured with `DGR_MCP_URL` and `DGR_MCP_TOKEN`; the renderer never receives the bearer secret.
 
 A target-bound proposal is not a commit. CodeXomics validates the evidence and target again, creates a reviewable diff, requires a separate curator approval, and applies the ChangeSet only while its target hash and revision still match.

@@ -10,6 +10,11 @@ import { GeneResearchQualityControl, createGeneQualityControl } from './quality-
 import { GeneAPIIntegrations, createGeneAPIIntegrations } from './api-integrations';
 import { createSearchProvider } from '@/utils/deep-research/search';
 import { fetchPublicText } from '@/utils/safe-public-fetch';
+import {
+  buildFullTextEvidenceSpans,
+  parseUserResearchPdf,
+  retrieveEuropePmcFullText,
+} from './full-text';
 import type { CurrentAnnotationSnapshot, GenomeTargetRef } from '@/contracts/annotation-change-set';
 import { buildExactAnnotationFieldEvidence } from './current-annotation';
 import {
@@ -53,6 +58,7 @@ export interface GeneResearchConfig {
   language?: string;
   signal?: AbortSignal;
   onProgress?: (data: Record<string, any>) => void;
+  userDocumentIds?: string[];
 }
 
 export interface GeneResearchResult {
@@ -103,6 +109,9 @@ export interface GeneResearchResult {
         fullContentSources: number;
       }>;
       evidenceGaps?: string[];
+      fullTextSourceCount?: number;
+      fullTextEvidenceSpanCount?: number;
+      userDocumentCount?: number;
     };
   };
 }
@@ -113,6 +122,9 @@ interface ResearchCoverage {
   literatureSourceCount: number;
   discoverySourceCount: number;
   retrievedContentCount: number;
+  fullTextSourceCount: number;
+  fullTextEvidenceSpanCount: number;
+  userDocumentCount: number;
   linkedBibliographyRequested: number;
   linkedBibliographyRetrieved: number;
   linkedBibliographyComplete: boolean;
@@ -213,6 +225,7 @@ export class GeneResearchEngine {
       const searchResults = await this.resolveTargetIdentity();
       await this.resolvePubMedSeeds();
       await this.retrieveResolvedPubMedLiterature(searchResults);
+      await this.retrieveUserDocuments(searchResults);
 
       // Phase 2b: run each research question through its specialist adapter
       // and the configured academic discovery provider. Discovery is always
@@ -246,6 +259,7 @@ export class GeneResearchEngine {
         followUpQueryCount += followUpQueries.length;
         if (this.countUniqueSources(searchResults) <= sourcesBefore) break;
       }
+      await this.retrieveOpenFullText(searchResults);
       this.assertNotCancelled();
       
       // Phase 3: Extract and process data
@@ -321,6 +335,9 @@ export class GeneResearchEngine {
             literatureSourceCount: coverage.literatureSourceCount,
             discoverySourceCount: coverage.discoverySourceCount,
             retrievedContentCount: coverage.retrievedContentCount,
+            fullTextSourceCount: coverage.fullTextSourceCount,
+            fullTextEvidenceSpanCount: coverage.fullTextEvidenceSpanCount,
+            userDocumentCount: coverage.userDocumentCount,
             linkedBibliographyRequested: coverage.linkedBibliographyRequested,
             linkedBibliographyRetrieved: coverage.linkedBibliographyRetrieved,
             linkedBibliographyComplete: coverage.linkedBibliographyComplete,
@@ -583,6 +600,160 @@ export class GeneResearchEngine {
     }
   }
 
+  private fullTextTarget() {
+    return {
+      geneSymbol: this.config.geneSymbol,
+      organism: this.config.organism,
+      locusTag: this.config.target?.locusTag,
+      proteinId: this.config.target?.proteinId,
+      identityTerms: Array.from(this.identityTerms),
+    };
+  }
+
+  private async retrieveUserDocuments(searchResults: Map<string, any>): Promise<void> {
+    const documentIds = Array.from(new Set(this.config.userDocumentIds || [])).slice(0, 8);
+    for (const documentId of documentIds) {
+      this.assertNotCancelled();
+      const startedAt = Date.now();
+      try {
+        const fullText = await parseUserResearchPdf(documentId);
+        const relevance = this.assessSourceRelevance({ title: fullText.name, content: fullText.text });
+        const evidence = relevance.accepted
+          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), 18)
+          : [];
+        const accepted = relevance.accepted && evidence.length > 0;
+        const source = {
+          title: fullText.name,
+          url: `urn:${documentId}`,
+          database: 'user_document',
+          sourceId: documentId,
+          pmid: fullText.identifiers.pmid,
+          doi: fullText.identifiers.doi,
+          geneSymbol: this.config.geneSymbol,
+          organism: this.config.organism,
+          targetMatch: accepted,
+          authoritative: false,
+          provenance: {
+            provider: 'user_upload',
+            recordId: documentId,
+            matchedBy: accepted ? ['full_text_identity', 'full_text_result_span'] : [],
+          },
+          structuredData: { targetRelevance: relevance },
+          researchCategory: 'literature',
+          researchCategories: ['basic_info', 'function'],
+          evidenceRole: accepted ? 'reference' : 'excluded',
+          contentKind: 'user-pdf-full-text',
+          fullText,
+          fullTextEvidence: evidence,
+        };
+        searchResults.set(`user-document:${documentId}`, {
+          sources: [source],
+          images: [],
+          metadata: { database: 'user_document', category: 'literature', phase: 'retrieval' },
+        });
+        this.searchAttempts.push({
+          query: fullText.name,
+          provider: 'user_document',
+          phase: 'retrieval',
+          category: 'literature',
+          sourceCount: accepted ? 1 : 0,
+          durationMs: Date.now() - startedAt,
+          status: accepted ? 'success' : 'empty',
+          warnings: accepted ? [] : ['PDF parsed, but no exact-target result statement was found'],
+        });
+      } catch (error) {
+        this.searchAttempts.push({
+          query: documentId,
+          provider: 'user_document',
+          phase: 'retrieval',
+          category: 'literature',
+          sourceCount: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  private async retrieveOpenFullText(searchResults: Map<string, any>): Promise<void> {
+    // Preserve the source object held by searchResults. dedupeSources() returns
+    // merged copies, so enriching those copies would silently discard the
+    // retrieved full text before coverage, reporting, and archival.
+    const seen = new Set<string>();
+    const pubMedSources = Array.from(searchResults.values())
+      .flatMap((result: any) => result?.sources || [])
+      .filter(source => {
+        if (String(source?.database || '').toLowerCase() !== 'pubmed') return false;
+        const reference = source?.structuredData?.literatureReferences?.[0] || {};
+        const key = String(reference.pmid || source?.provenance?.recordId || source?.url || '').toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, Math.min(8, Math.max(1, this.config.maxSearchResults || 5)));
+
+    await Promise.all(pubMedSources.map(async source => {
+      this.assertNotCancelled();
+      const reference = source.structuredData?.literatureReferences?.[0] || {};
+      const pmid = String(reference.pmid || source.provenance?.recordId || '').trim();
+      if (!/^\d{5,10}$/.test(pmid)) return;
+      const startedAt = Date.now();
+      try {
+        const fullText = await retrieveEuropePmcFullText(pmid);
+        if (!fullText) {
+          this.searchAttempts.push({
+            query: `PMID:${pmid}`,
+            provider: 'europe_pmc_full_text',
+            phase: 'retrieval',
+            category: source.researchCategory || 'literature',
+            sourceCount: 0,
+            durationMs: Date.now() - startedAt,
+            status: 'empty',
+          });
+          return;
+        }
+        const relevance = this.assessSourceRelevance({ title: source.title, content: fullText.text });
+        const evidence = relevance.accepted
+          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), 18)
+          : [];
+        source.fullText = fullText;
+        source.fullTextEvidence = evidence;
+        // Keep one canonical full-text copy in the durable task. Duplicating it
+        // in source.content can push otherwise valid multi-document reports
+        // beyond CodeXomics' authenticated artifact limit.
+        delete source.content;
+        source.contentKind = 'pmc-xml-full-text';
+        source.structuredData = {
+          ...(source.structuredData || {}),
+          targetRelevance: relevance,
+        };
+        if (relevance.accepted && evidence.length > 0) source.evidenceRole = 'reference';
+        this.searchAttempts.push({
+          query: `PMID:${pmid}`,
+          provider: 'europe_pmc_full_text',
+          phase: 'retrieval',
+          category: source.researchCategory || 'literature',
+          sourceCount: 1,
+          durationMs: Date.now() - startedAt,
+          status: 'success',
+          warnings: evidence.length > 0 ? [] : ['Full text retrieved without an exact-target result span'],
+        });
+      } catch (error) {
+        this.searchAttempts.push({
+          query: `PMID:${pmid}`,
+          provider: 'europe_pmc_full_text',
+          phase: 'retrieval',
+          category: source.researchCategory || 'literature',
+          sourceCount: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }));
+  }
+
   private mergeSearchResultMaps(target: Map<string, any>, incoming: Map<string, any>): void {
     for (const [key, value] of incoming) {
       const current = target.get(key);
@@ -621,6 +792,12 @@ export class GeneResearchEngine {
     );
     const discoverySources = sources.filter(source => source?.evidenceRole === 'discovery');
     const retrievedSources = sources.filter(source => source?.contentKind === 'retrieved-content');
+    const fullTextSources = sources.filter(source => source?.fullText?.schema === 'dgr.full-text-document.v1');
+    const fullTextEvidenceSpanCount = fullTextSources.reduce(
+      (total, source) => total + (Array.isArray(source.fullTextEvidence) ? source.fullTextEvidence.length : 0),
+      0,
+    );
+    const userDocumentCount = fullTextSources.filter(source => source.fullText.origin === 'user_upload').length;
     const coverageByCategory: ResearchCoverage['coverageByCategory'] = {};
 
     for (const query of queries) {
@@ -643,7 +820,7 @@ export class GeneResearchEngine {
         ) {
           coverageByCategory[category].literatureSources += 1;
         }
-        if (source?.contentKind === 'retrieved-content' || source?.contentKind === 'abstract') {
+        if (source?.contentKind === 'retrieved-content' || source?.fullText?.schema === 'dgr.full-text-document.v1') {
           coverageByCategory[category].fullContentSources += 1;
         }
       }
@@ -682,6 +859,12 @@ export class GeneResearchEngine {
           : 'exact_gene_bibliography:not_retrieved'
       );
     }
+    if ((this.config.userDocumentIds?.length || 0) > 0 && userDocumentCount === 0) {
+      evidenceGaps.push('user_documents:no_exact_target_full_text_evidence');
+    }
+    if (literatureSources.length > 0 && fullTextSources.length === 0) {
+      evidenceGaps.push('literature:abstract_only');
+    }
 
     return {
       identityResolved: this.config.target ? authoritativeSources.length > 0 : sources.length > 0,
@@ -689,6 +872,9 @@ export class GeneResearchEngine {
       literatureSourceCount: literatureSources.length,
       discoverySourceCount: discoverySources.length,
       retrievedContentCount: retrievedSources.length,
+      fullTextSourceCount: fullTextSources.length,
+      fullTextEvidenceSpanCount,
+      userDocumentCount,
       linkedBibliographyRequested,
       linkedBibliographyRetrieved,
       linkedBibliographyComplete,
@@ -1177,7 +1363,7 @@ export class GeneResearchEngine {
       // a molecular-function or localization annotation.
       if (source.database === 'pubmed') continue;
       if (this.config.target && source.targetMatch !== true && source.authoritative !== true) continue;
-      const content = `${source.title}\n${source.content}`;
+      const content = `${source.title}\n${source.fullText?.text || source.content || ''}`;
       const partialData = await this.dataExtractor.extractFromContent(content, source.database || 'unknown');
       this.assertNotCancelled();
 
@@ -1414,6 +1600,11 @@ export class GeneResearchEngine {
     const functional = extractedData.functionalData;
     const protein = extractedData.proteinInfo;
     const references = extractedData.literatureReferences || [];
+    const fullTextSources = sources.filter(source => source?.fullText?.schema === 'dgr.full-text-document.v1');
+    const fullTextFindingCount = fullTextSources.reduce(
+      (total, source) => total + (Array.isArray(source.fullTextEvidence) ? source.fullTextEvidence.length : 0),
+      0,
+    );
     const authoritativeSources = sources.filter(source => source?.authoritative === true && source?.targetMatch === true);
     const sourceCitation = (source: any) => {
       const label = String(source?.sourceId || source?.title || source?.database || 'source').replace(/[\[\]]/g, '');
@@ -1459,6 +1650,7 @@ export class GeneResearchEngine {
       || functional.molecularFunction.length
       || functional.catalyticActivity
       || references.length
+      || fullTextFindingCount > 0
     );
     const bullet = (label: string, value: unknown, citations = '') => {
       const formatted = Array.isArray(value) ? value.filter(Boolean).join('; ') : String(value || '').trim();
@@ -1520,6 +1712,38 @@ export class GeneResearchEngine {
       .replace(/([\[\]*_`])/g, '\\$1')
       .replace(/[\r\n]+/g, ' ')
       .trim();
+    const fullTextFindingLines = fullTextFindingCount > 0
+      ? fullTextSources.flatMap(source => {
+          const reference = source.structuredData?.literatureReferences?.[0] || {};
+          const pmid = source.pmid || reference.pmid || source.fullText?.identifiers?.pmid;
+          const doi = source.doi || reference.doi || source.fullText?.identifiers?.doi;
+          const citation = pmid
+            ? `[PMID:${pmid}](https://pubmed.ncbi.nlm.nih.gov/${pmid}/)`
+            : doi
+              ? `[DOI:${doi}](https://doi.org/${doi})`
+              : `user PDF \`${escapeMarkdown(source.fullText?.name || source.title)}\``;
+          return (source.fullTextEvidence || []).map((finding: any) => {
+            const locator = finding.pageNumber ? `, PDF page ${finding.pageNumber}` : '';
+            return `- **${finding.category}**: ${escapeMarkdown(finding.excerpt)} — ${citation}${locator}; UTF-16 chars ${finding.excerptStart}-${finding.excerptEnd}; excerpt SHA-256 \`${finding.excerptSha256}\``;
+          });
+        }).join('\n')
+      : '- No exact-target statement was verified against parsed full text.';
+    const fullTextSourceLines = fullTextSources.length
+      ? fullTextSources.map(source => {
+          const document = source.fullText;
+          const origin = document.origin === 'user_upload' ? 'user-provided PDF' : 'Europe PMC open full text';
+          const pageCoverage = document.pageCount
+            ? `${document.parsedPageCount}/${document.pageCount} pages parsed`
+            : 'structured XML fully parsed';
+          const identifiers = [
+            document.identifiers?.pmid ? `PMID:${document.identifiers.pmid}` : '',
+            document.identifiers?.pmcid || '',
+            document.identifiers?.doi ? `DOI:${document.identifiers.doi}` : '',
+          ].filter(Boolean).join(', ');
+          const location = document.sourceUrl || source.url || '';
+          return `- **${escapeMarkdown(source.title)}** — ${origin}; ${pageCoverage}; parser \`${document.parser}\`${identifiers ? `; ${identifiers}` : ''}${location ? `; source ${escapeMarkdown(location)}` : ''}; document SHA-256 \`${document.documentSha256}\`; canonical text SHA-256 \`${document.textSha256}\``;
+        }).join('\n')
+      : '- No full-text source was available; retained literature evidence is abstract-only.';
     const findingLines = literatureFindings.length
       ? literatureFindings.map(finding =>
           `- **${finding.category}**: ${escapeMarkdown(finding.statement)} — [PMID:${finding.pmid}](${finding.url})`
@@ -1567,6 +1791,9 @@ export class GeneResearchEngine {
           `- **Literature records**: ${coverage.literatureSourceCount}`,
           `- **Discovery records**: ${coverage.discoverySourceCount}`,
           `- **Retrieved pages**: ${coverage.retrievedContentCount}`,
+          `- **Verified full-text sources**: ${coverage.fullTextSourceCount}`,
+          `- **User-provided PDFs retained**: ${coverage.userDocumentCount}`,
+          `- **Citation-bound full-text spans**: ${coverage.fullTextEvidenceSpanCount}`,
           `- **Exact GeneID bibliography**: ${coverage.linkedBibliographyRetrieved}/${coverage.linkedBibliographyRequested || 0} records retrieved (${coverage.linkedBibliographyComplete ? 'complete' : 'incomplete or unavailable'})`,
           `- **Degraded providers**: ${coverage.degradedProviders.length ? coverage.degradedProviders.join(', ') : 'none'}`,
           coverage.evidenceGaps.length
@@ -1593,7 +1820,7 @@ export class GeneResearchEngine {
       },
       {
         id: 'evidence', title: 'Evidence', priority: 'high', required: true,
-        content: `## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Citation-Bound Target Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their abstracts do not contain sufficiently direct target wording. They are included for bibliography coverage and are not used to generate biological claims or annotation operations.\n\n${linkedContextLines}`,
+        content: `## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Full-Text Sources (${fullTextSources.length})\n\n${fullTextSourceLines}\n\n## Citation-Bound Full-Text Findings (${fullTextFindingCount})\n\n${fullTextFindingLines}\n\n## Citation-Bound Abstract Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their retained evidence may be abstract-only or lack sufficiently direct target wording. They are included for bibliography coverage and are not used to generate unsupported annotation operations.\n\n${linkedContextLines}`,
         visualizations: [],
       },
       {
@@ -1617,6 +1844,8 @@ export class GeneResearchEngine {
         directLiteratureCount: relevantLiterature.length,
         geneLinkedContextCount: geneLinkedContext.length,
         citationBoundFindingCount: literatureFindings.length,
+        fullTextSourceCount: fullTextSources.length,
+        fullTextFindingCount,
       },
     };
   }

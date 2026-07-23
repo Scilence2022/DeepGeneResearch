@@ -13,6 +13,7 @@ import {
   PUBMED_ABSTRACT_CANONICALIZATION,
   PUBMED_ABSTRACT_OFFSET_ENCODING,
 } from './literature-findings';
+import { FULL_TEXT_CANONICALIZATION, FULL_TEXT_OFFSET_ENCODING } from './full-text';
 import {
   currentAnnotationHasValue,
   isMoreSpecificProduct,
@@ -67,6 +68,23 @@ export interface CodeXomicsResearchFact {
     abstractLength: number;
     canonicalization: typeof PUBMED_ABSTRACT_CANONICALIZATION;
     offsetEncoding: typeof PUBMED_ABSTRACT_OFFSET_ENCODING;
+  } | {
+    kind: 'full_text_span';
+    evidenceId: string;
+    pmid: string;
+    doi?: string;
+    documentSha256: string;
+    sourceOrigin: 'user_upload' | 'pmc_xml';
+    excerpt: string;
+    excerptSha256: string;
+    hashEncoding: 'utf8';
+    excerptStart: number;
+    excerptEnd: number;
+    textSha256: string;
+    textLength: number;
+    pageNumber?: number;
+    canonicalization: typeof FULL_TEXT_CANONICALIZATION;
+    offsetEncoding: typeof FULL_TEXT_OFFSET_ENCODING;
   };
 }
 
@@ -290,8 +308,8 @@ function evidenceIdentityKeys(value: {
     if (!clean) continue;
     keys.add(`raw:${clean.toLowerCase()}`);
 
-    const pmid = clean.match(/(?:\bPMID\s*:?\s*|pubmed\.ncbi\.nlm\.nih\.gov\/)(\d{6,10})(?:\/|\b)/i)?.[1]
-      || (/^\d{6,10}$/.test(clean) ? clean : undefined);
+    const pmid = clean.match(/(?:\bPMID\s*:?\s*|pubmed\.ncbi\.nlm\.nih\.gov\/)(\d{5,10})(?:\/|\b)/i)?.[1]
+      || (/^\d{5,10}$/.test(clean) ? clean : undefined);
     if (pmid) keys.add(`pmid:${pmid}`);
 
     const doi = clean.match(/(?:\bDOI\s*:?\s*|doi\.org\/)(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i)?.[1];
@@ -343,7 +361,7 @@ function extractEvidenceFromText(text: string): CodeXomicsEvidenceDetail[] {
   const details: CodeXomicsEvidenceDetail[] = [];
   const sourceText = String(text || '');
 
-  for (const match of sourceText.matchAll(/\bPMID[:\s]*(\d{6,10})\b/gi)) {
+  for (const match of sourceText.matchAll(/\bPMID[:\s]*(\d{5,10})\b/gi)) {
     addEvidenceDetail(details, {
       type: 'pmid',
       id: match[1],
@@ -579,8 +597,10 @@ function buildResearchSummary(
   );
   for (const finding of literatureFindings) {
     const evidenceIds = evidenceIdsForSource(finding.source, records);
-    if (evidenceIds.length !== 1) continue;
-    const evidenceRecord = records.find(record => record.id === evidenceIds[0]);
+    const evidenceRecord = records.find(record =>
+      evidenceIds.includes(record.id)
+      && record.sourceBinding?.content.canonicalization === PUBMED_ABSTRACT_CANONICALIZATION
+    );
     if (
       !evidenceRecord?.sourceBinding
       || evidenceRecord.sourceBinding.selector.identifier.value !== finding.pmid
@@ -597,7 +617,7 @@ function buildResearchSummary(
       field: 'literature_finding',
       value: finding.statement,
       statement: finding.statement,
-      evidenceIds,
+      evidenceIds: [evidenceRecord.id],
       // Retrieval relevance is not scientific confidence. Preserve the
       // abstract statement without manufacturing a quantitative certainty.
       confidence: null,
@@ -631,6 +651,93 @@ function buildResearchSummary(
     };
     factsByKey.set(key, fact);
     facts.push(fact);
+  }
+
+  let fullTextFactCount = 0;
+  for (const source of sources) {
+    if (!source || typeof source === 'string' || fullTextFactCount >= 18) continue;
+    const fullText = source.fullText;
+    const spans = Array.isArray(source.fullTextEvidence) ? source.fullTextEvidence : [];
+    const pmid = String(
+      source.pmid
+      || source.structuredData?.literatureReferences?.[0]?.pmid
+      || fullText?.identifiers?.pmid
+      || '',
+    ).trim();
+    if (fullText?.schema !== 'dgr.full-text-document.v1' || !/^\d{5,10}$/.test(pmid)) continue;
+    const evidenceIds = evidenceIdsForSource(source, records);
+    const evidenceRecord = records.find(record =>
+      evidenceIds.includes(record.id)
+      && record.sourceBinding?.content.canonicalization === FULL_TEXT_CANONICALIZATION
+      && record.sourceBinding.content.sha256 === fullText.textSha256
+      && record.sourceBinding.content.length === fullText.textLength
+    );
+    if (!evidenceRecord) continue;
+    const doi = String(
+      source.doi
+      || source.structuredData?.literatureReferences?.[0]?.doi
+      || fullText.identifiers?.doi
+      || '',
+    ).trim() || undefined;
+    for (const span of spans) {
+      if (fullTextFactCount >= 18) break;
+      if (
+        span?.kind !== 'full_text_span'
+        || span.textSha256 !== fullText.textSha256
+        || span.textLength !== fullText.textLength
+        || !Number.isSafeInteger(span.excerptStart)
+        || !Number.isSafeInteger(span.excerptEnd)
+        || span.excerptStart < 0
+        || span.excerptEnd <= span.excerptStart
+        || fullText.text.slice(span.excerptStart, span.excerptEnd) !== span.excerpt
+        || createHash('sha256').update(span.excerpt).digest('hex') !== span.excerptSha256
+      ) {
+        continue;
+      }
+      const key = `full_text:${span.category}:${pmid}:${span.excerpt}`.toLowerCase();
+      if (factsByKey.has(key)) continue;
+      const fact: CodeXomicsResearchFact = {
+        id: `fact_${facts.length + 1}`,
+        category: span.category,
+        field: 'literature_finding',
+        value: span.excerpt,
+        statement: span.excerpt,
+        evidenceIds: [evidenceRecord.id],
+        confidence: null,
+        directness: 'exact_target',
+        evidenceLevel: 'target_literature',
+        sourceDatabases: [String(source.database || 'user_document')],
+        citation: {
+          type: 'pmid',
+          id: pmid,
+          label: `PMID:${pmid}`,
+          url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+          title: String(source.title || fullText.name || `PubMed article ${pmid}`),
+          doi,
+        },
+        literatureBasis: {
+          kind: 'full_text_span',
+          evidenceId: evidenceRecord.id,
+          pmid,
+          doi,
+          documentSha256: String(fullText.documentSha256),
+          sourceOrigin: fullText.origin,
+          excerpt: span.excerpt,
+          excerptSha256: span.excerptSha256,
+          hashEncoding: 'utf8',
+          excerptStart: span.excerptStart,
+          excerptEnd: span.excerptEnd,
+          textSha256: fullText.textSha256,
+          textLength: fullText.textLength,
+          pageNumber: span.pageNumber,
+          canonicalization: FULL_TEXT_CANONICALIZATION,
+          offsetEncoding: FULL_TEXT_OFFSET_ENCODING,
+        },
+      };
+      factsByKey.set(key, fact);
+      facts.push(fact);
+      fullTextFactCount += 1;
+    }
   }
 
   const literature: CodeXomicsLiteratureHighlight[] = [];
@@ -862,7 +969,7 @@ function pubMedIdentifierFromDetail(detail: CodeXomicsEvidenceDetail): string | 
     identifier.scheme.toLowerCase() === 'pmid'
   )?.value;
   const candidate = String(structuredPmid || (detail.type === 'pmid' ? detail.id : '') || '').trim();
-  return /^\d{6,10}$/.test(candidate) ? candidate : undefined;
+  return /^\d{5,10}$/.test(candidate) ? candidate : undefined;
 }
 
 function pubMedIdentifierFromSource(source: Record<string, any>): string | undefined {
@@ -875,7 +982,7 @@ function pubMedIdentifierFromSource(source: Record<string, any>): string | undef
       : '')
     || ''
   ).trim();
-  return /^\d{6,10}$/.test(candidate) ? candidate : undefined;
+  return /^\d{5,10}$/.test(candidate) ? candidate : undefined;
 }
 
 function buildPubMedSourceBinding(
@@ -920,6 +1027,42 @@ function buildPubMedSourceBinding(
       hashEncoding: 'utf8',
       length: abstract.length,
       lengthEncoding: PUBMED_ABSTRACT_OFFSET_ENCODING,
+    },
+  };
+}
+
+function buildFullTextSourceBinding(
+  source: Record<string, any>,
+): NonNullable<EvidenceRecord['sourceBinding']> | undefined {
+  const fullText = source?.fullText;
+  if (
+    fullText?.schema !== 'dgr.full-text-document.v1'
+    || fullText.canonicalization !== FULL_TEXT_CANONICALIZATION
+    || typeof fullText.text !== 'string'
+    || fullText.text.length < 200
+    || !/^[a-f0-9]{64}$/i.test(String(fullText.documentSha256 || ''))
+    || createHash('sha256').update(fullText.text).digest('hex') !== fullText.textSha256
+  ) {
+    return undefined;
+  }
+  const pmid = pubMedIdentifierFromSource(source) || String(fullText.identifiers?.pmid || '').trim();
+  const selector = /^\d{5,10}$/.test(pmid)
+    ? { scheme: 'pmid' as const, value: pmid }
+    : { scheme: 'sha256' as const, value: String(fullText.documentSha256).toLowerCase() };
+  return {
+    schema: 'dgr.evidence-source-binding.v1',
+    sourceCollection: 'sources',
+    selector: {
+      database: String(source.database || 'user_document'),
+      identifier: selector,
+    },
+    content: {
+      relativeJsonPointer: '/fullText/text',
+      canonicalization: FULL_TEXT_CANONICALIZATION,
+      sha256: fullText.textSha256,
+      hashEncoding: 'utf8',
+      length: fullText.text.length,
+      lengthEncoding: FULL_TEXT_OFFSET_ENCODING,
     },
   };
 }
@@ -1105,6 +1248,33 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
       supporting: false,
     };
   });
+  for (const source of orderedSources) {
+    if (!source || typeof source === 'string') continue;
+    const sourceBinding = buildFullTextSourceBinding(source);
+    if (!sourceBinding) continue;
+    const pmid = sourceBinding.selector.identifier.scheme === 'pmid'
+      ? sourceBinding.selector.identifier.value
+      : undefined;
+    const doi = String(source.doi || source.fullText?.identifiers?.doi || '').trim() || undefined;
+    const id = `evidence_${sourceRecords.length + 1}`;
+    const identifiers = [
+      ...(pmid ? [{ scheme: 'pmid' as const, value: pmid }] : []),
+      ...(doi ? [{ scheme: 'doi' as const, value: doi }] : []),
+    ];
+    sourceRecords.push({
+      id,
+      type: pmid ? 'pmid' : 'citation',
+      label: pmid ? `PMID:${pmid} full text` : `${source.title || source.fullText?.name || 'User PDF'} full text`,
+      sourceId: source.sourceId || sourceBinding.selector.identifier.value,
+      url: source.url,
+      database: String(source.database || 'user_document'),
+      ...(identifiers.length > 0 ? { identifiers } : {}),
+      retrievedAt: String(source.fullText?.retrievedAt || generatedAt),
+      sourceHash: createHash('sha256').update(JSON.stringify({ sourceBinding })).digest('hex'),
+      sourceBinding,
+      supporting: false,
+    });
+  }
   const researchSummary = buildResearchSummary(input, orderedSources, sourceRecords, confidence, narrativeSummary);
   const summary = researchSummary.headline || narrativeSummary;
   const qualifiedCandidates = collectQualifiedMutationCandidates(sources, input.target, input.currentAnnotation);

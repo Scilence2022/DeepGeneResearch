@@ -62,15 +62,15 @@ export interface EvidenceRecord {
     schema: 'dgr.evidence-source-binding.v1';
     sourceCollection: 'sources';
     selector: {
-      database: 'pubmed';
+      database: string;
       identifier: {
-        scheme: 'pmid';
+        scheme: 'pmid' | 'doi' | 'sha256';
         value: string;
       };
     };
     content: {
-      relativeJsonPointer: '/structuredData/literatureReferences/0/abstract';
-      canonicalization: 'dgr.pubmed-abstract.v1';
+      relativeJsonPointer: string;
+      canonicalization: 'dgr.pubmed-abstract.v1' | 'dgr.full-text.v1';
       sha256: string;
       hashEncoding: 'utf8';
       length: number;
@@ -127,15 +127,25 @@ export function assertAnnotationChangeSetProposalIntegrity(proposal: AnnotationC
     const binding = evidence.sourceBinding;
     if (!binding) continue;
     const pmidIdentifier = evidence.identifiers?.find(identifier => identifier.scheme === 'pmid')?.value;
+    const selectorScheme = binding.selector.identifier.scheme;
+    const selectorValue = binding.selector.identifier.value;
+    const isPmidSelector = selectorScheme === 'pmid'
+      && /^[1-9]\d{0,9}$/.test(selectorValue)
+      && selectorValue === pmidIdentifier;
+    const isSha256Selector = selectorScheme === 'sha256' && /^[a-f0-9]{64}$/.test(selectorValue);
+    const isAbstractBinding = binding.selector.database === 'pubmed'
+      && isPmidSelector
+      && binding.content.relativeJsonPointer === '/structuredData/literatureReferences/0/abstract'
+      && binding.content.canonicalization === 'dgr.pubmed-abstract.v1';
+    const isFullTextBinding = Boolean(binding.selector.database)
+      && (isPmidSelector || isSha256Selector)
+      && binding.content.relativeJsonPointer === '/fullText/text'
+      && binding.content.canonicalization === 'dgr.full-text.v1';
     if (
       binding.schema !== 'dgr.evidence-source-binding.v1'
       || binding.sourceCollection !== 'sources'
-      || binding.selector.database !== 'pubmed'
-      || binding.selector.identifier.scheme !== 'pmid'
-      || !/^[1-9]\d{0,9}$/.test(binding.selector.identifier.value)
-      || binding.selector.identifier.value !== pmidIdentifier
-      || binding.content.relativeJsonPointer !== '/structuredData/literatureReferences/0/abstract'
-      || binding.content.canonicalization !== 'dgr.pubmed-abstract.v1'
+      || binding.selector.database.toLowerCase() !== String(evidence.database || '').toLowerCase()
+      || (!isAbstractBinding && !isFullTextBinding)
       || !/^[a-f0-9]{64}$/.test(binding.content.sha256)
       || binding.content.hashEncoding !== 'utf8'
       || !Number.isInteger(binding.content.length)
