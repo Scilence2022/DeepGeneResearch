@@ -193,6 +193,53 @@ describe('gene search provider evidence retrieval', () => {
     expect(result.sources[0].structuredData?.literatureReferences?.[0].pmid).toBe('8660667');
   });
 
+  it('pages through the full PubMed match set up to the literature budget and reports coverage', async () => {
+    const esearchCalls: Array<{ retstart: string; retmax: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (rawUrl: string | URL) => {
+      const url = new URL(String(rawUrl));
+      if (url.pathname.endsWith('/esearch.fcgi')) {
+        const retstart = Number(url.searchParams.get('retstart') || '0');
+        const retmax = Number(url.searchParams.get('retmax') || '0');
+        esearchCalls.push({ retstart: String(retstart), retmax: String(retmax) });
+        const totalMatches = 700;
+        const idlist = Array.from(
+          { length: Math.min(retmax, Math.max(0, totalMatches - retstart)) },
+          (_, index) => String(3_000_000 + retstart + index),
+        );
+        return new Response(JSON.stringify({
+          esearchresult: { count: String(totalMatches), idlist, usehistory: 'y' },
+        }), { status: 200 });
+      }
+      const ids = String(url.searchParams.get('id') || '').split(',').filter(Boolean);
+      const records = ids.map(pmid => `
+        <PubmedArticle><MedlineCitation><PMID>${pmid}</PMID><Article>
+          <ArticleTitle>thrB homoserine kinase study ${pmid}</ArticleTitle>
+          <Abstract><AbstractText>Functional study of thrB in Escherichia coli.</AbstractText></Abstract>
+          <Journal><ISOAbbreviation>J Bacteriol</ISOAbbreviation><JournalIssue><PubDate><Year>2001</Year></PubDate></JournalIssue></Journal>
+          <AuthorList><Author><ForeName>A</ForeName><LastName>Researcher</LastName></Author></AuthorList>
+        </Article></MedlineCitation></PubmedArticle>
+      `).join('');
+      return new Response(`<PubmedArticleSet>${records}</PubmedArticleSet>`, { status: 200 });
+    }));
+
+    const result = await searchPubMed({
+      provider: 'pubmed',
+      query: 'thrB Escherichia coli',
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      identityTerms: ['Homoserine kinase'],
+      literatureBudget: 600,
+    });
+
+    expect(esearchCalls).toEqual([
+      { retstart: '0', retmax: '500' },
+      { retstart: '500', retmax: '100' },
+    ]);
+    expect(result.sources).toHaveLength(600);
+    expect(result.metadata.totalMatchCount).toBe(700);
+    expect(result.metadata.literatureBudget).toBe(600);
+  });
+
   it('uses the journal publication year and decodes valid numeric XML entities', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(`
       <PubmedArticleSet><PubmedArticle><MedlineCitation>

@@ -45,6 +45,24 @@ export interface GeneResearchConfig {
   enableQualityControl?: boolean;
   enableVisualization?: boolean;
   maxSearchResults?: number;
+  /**
+   * Total PubMed abstracts retained across the run. Comprehensive analysis is
+   * the default; the budget exists to respect NCBI politeness windows, not to
+   * cap how much of the gene's literature is read.
+   */
+  literatureBudget?: number;
+  /** Open-access full texts attempted for verifiable evidence spans. */
+  fullTextBudget?: number;
+  /** Evidence-gap follow-up search rounds (early-stops when a round yields nothing new). */
+  followUpRounds?: number;
+  /** Gap queries issued per follow-up round. */
+  followUpGapQueries?: number;
+  /**
+   * LLM-generated queries derived from the user's research question. They run
+   * alongside the template queries so retrieval adapts to what the caller
+   * actually asked instead of only to fixed category templates.
+   */
+  supplementalQueries?: Array<{ query: string; researchGoal?: string }>;
   searchProviders?: string[];
   fallbackSearchProvider?: {
     provider: string;
@@ -82,7 +100,7 @@ export interface GeneResearchResult {
       attempts: Array<{
         query: string;
         provider: string;
-        phase?: 'identity' | 'research' | 'follow_up' | 'retrieval';
+        phase?: 'identity' | 'research' | 'follow_up' | 'retrieval' | 'curation';
         category?: string;
         sourceCount: number;
         durationMs: number;
@@ -92,6 +110,7 @@ export interface GeneResearchResult {
         seedPmidsRequested?: number;
         seedPmidsRetrieved?: number;
         seedRetrievalComplete?: boolean;
+        totalMatchCount?: number;
       }>;
       identityResolved?: boolean;
       authoritativeSourceCount?: number;
@@ -108,6 +127,15 @@ export interface GeneResearchResult {
         literatureSources: number;
         fullContentSources: number;
       }>;
+      /** Audit of how much of the gene's PubMed literature this run actually read. */
+      literatureCoverage?: {
+        literatureBudget: number;
+        pubmedTotalMatchCount: number | null;
+        retainedAbstractCount: number;
+        linkedBibliographyRequested: number;
+        linkedBibliographyRetrieved: number;
+        linkedBibliographyComplete: boolean;
+      };
       evidenceGaps?: string[];
       fullTextSourceCount?: number;
       fullTextEvidenceSpanCount?: number;
@@ -172,6 +200,20 @@ export class GeneResearchEngine {
     this.config.signal?.throwIfAborted();
   }
 
+  /** Effective PubMed abstract budget for this run (bounded by queue validation). */
+  private get literatureBudget(): number {
+    return Math.min(Math.max(this.config.literatureBudget ?? 300, 10), 2_000);
+  }
+
+  /**
+   * Citation-bound evidence spans per full text. Scales with the literature
+   * budget so comprehensive runs surface more verifiable result statements
+   * instead of the fixed legacy 18-span ceiling.
+   */
+  private get evidenceSpanBudget(): number {
+    return Math.min(Math.max(18, Math.round(this.literatureBudget / 10)), 120);
+  }
+
   private assertSupportedTarget(): void {
     if (!this.config.target) return;
     if (!isSupportedGeneAnnotationFeatureType(this.config.target.featureType)) {
@@ -223,6 +265,7 @@ export class GeneResearchEngine {
       // symbol for every focus area creates activity without new evidence.
       console.log('Phase 2a: Resolving exact target identity...');
       const searchResults = await this.resolveTargetIdentity();
+      await this.resolveCurationRecords(searchResults);
       await this.resolvePubMedSeeds();
       await this.retrieveResolvedPubMedLiterature(searchResults);
       await this.retrieveUserDocuments(searchResults);
@@ -236,18 +279,22 @@ export class GeneResearchEngine {
       this.mergeSearchResultMaps(searchResults, initialResults);
       await this.retrieveDiscoveryContent(searchResults);
 
-      // Phase 2c: inspect actual coverage and issue bounded follow-ups for
-      // missing high-priority evidence. Stop early when a round adds no new
-      // sources, which makes depth evidence-driven rather than time-driven.
+      // Phase 2c: inspect actual coverage and issue follow-ups for missing
+      // high-priority evidence. Rounds and per-round gap queries scale with
+      // the run's ambition; the loop still stops early when a round adds no
+      // new sources, which keeps depth evidence-driven rather than
+      // time-driven.
+      const followUpRounds = Math.min(Math.max(this.config.followUpRounds ?? 3, 1), 5);
+      const followUpGapQueries = Math.min(Math.max(this.config.followUpGapQueries ?? 6, 1), 12);
       const allResearchQueries = [...queries];
       let followUpQueryCount = 0;
-      for (let round = 1; round <= 2; round += 1) {
+      for (let round = 1; round <= followUpRounds; round += 1) {
         const coverageBefore = this.assessEvidenceCoverage(searchResults, allResearchQueries);
         const followUpQueries = this.buildEvidenceGapQueries(
           coverageBefore,
           allResearchQueries,
           round
-        ).slice(0, 4);
+        ).slice(0, followUpGapQueries);
         if (followUpQueries.length === 0) break;
 
         console.log(`Phase 2c.${round}: Executing ${followUpQueries.length} evidence-gap follow-up searches...`);
@@ -343,6 +390,17 @@ export class GeneResearchEngine {
             linkedBibliographyComplete: coverage.linkedBibliographyComplete,
             degradedProviders: coverage.degradedProviders,
             coverageByCategory: coverage.coverageByCategory,
+            literatureCoverage: {
+              literatureBudget: this.literatureBudget,
+              pubmedTotalMatchCount: Math.max(
+                0,
+                ...this.searchAttempts.map(attempt => attempt.totalMatchCount ?? 0),
+              ) || null,
+              retainedAbstractCount: coverage.literatureSourceCount,
+              linkedBibliographyRequested: coverage.linkedBibliographyRequested,
+              linkedBibliographyRetrieved: coverage.linkedBibliographyRetrieved,
+              linkedBibliographyComplete: coverage.linkedBibliographyComplete,
+            },
             evidenceGaps: coverage.evidenceGaps,
           },
         }
@@ -358,10 +416,20 @@ export class GeneResearchEngine {
       ...(this.config.researchFocus || []),
       ...(this.config.specificAspects || []),
     ];
-    if (requestedAspects.length > 0) {
-      return this.queryGenerator.generateFocusedQueries(requestedAspects);
-    }
-    return this.queryGenerator.generateComprehensiveQueries();
+    const baseQueries = requestedAspects.length > 0
+      ? this.queryGenerator.generateFocusedQueries(requestedAspects)
+      : this.queryGenerator.generateComprehensiveQueries();
+    const supplementalQueries = (this.config.supplementalQueries || [])
+      .filter(item => item && String(item.query || '').trim().length > 0)
+      .map(item => ({
+        query: String(item.query).trim(),
+        researchGoal: String(item.researchGoal || 'Answer the user-directed research question with primary literature.'),
+        database: 'pubmed',
+        priority: 'high' as const,
+        category: 'user_directed' as const,
+        status: 'pending' as const,
+      }));
+    return [...baseQueries, ...supplementalQueries];
   }
 
   private async resolveTargetIdentity(): Promise<Map<string, any>> {
@@ -485,6 +553,95 @@ export class GeneResearchEngine {
     return results;
   }
 
+  /**
+   * Curation-focused enrichment: GO annotations (QuickGO), InterPro domain
+   * architecture, IntAct interactions, and recent preprint abstracts. These
+   * run once against the resolved identity instead of per template query;
+   * each failure degrades to an empty result without breaking the run.
+   */
+  private async resolveCurationRecords(searchResults: Map<string, any>): Promise<void> {
+    const enabled = new Set(this.config.searchProviders || []);
+    if (enabled.size > 0
+      && !['quickgo', 'interpro', 'intact', 'europepmc_preprints'].some(provider => enabled.has(provider))) {
+      return;
+    }
+    const providers = [
+      { provider: 'quickgo', query: `${this.config.geneSymbol} GO annotations ${this.config.organism}` },
+      { provider: 'interpro', query: `${this.config.target?.proteinId || this.config.geneSymbol} domain architecture` },
+      { provider: 'intact', query: `${this.config.geneSymbol} protein interactions ${this.config.organism}` },
+      { provider: 'europepmc_preprints', query: `${this.config.geneSymbol} preprint evidence ${this.config.organism}` },
+    ].filter(item => enabled.size === 0 || enabled.has(item.provider));
+
+    for (const item of providers) {
+      this.assertNotCancelled();
+      const startedAt = Date.now();
+      this.config.onProgress?.({
+        step: 'gene-search', status: 'start', phase: 'curation', name: item.query, provider: item.provider,
+      });
+      try {
+        const result = await createGeneSearchProvider({
+          provider: item.provider,
+          query: item.query,
+          geneSymbol: this.config.geneSymbol,
+          organism: this.config.organism,
+          locusTag: this.config.target?.locusTag || undefined,
+          proteinId: this.config.target?.proteinId || undefined,
+          taxonId: this.config.target?.taxonId || undefined,
+          identityTerms: Array.from(this.identityTerms),
+          maxResult: this.config.maxSearchResults || 10,
+          signal: this.config.signal,
+        } as any);
+        const error = result?.metadata?.error;
+        const status = result?.metadata?.disabled
+          ? 'empty'
+          : error ? 'error' : result?.sources?.length ? 'success' : 'empty';
+        this.searchAttempts.push({
+          query: item.query,
+          provider: item.provider,
+          phase: 'curation',
+          category: 'basic_info',
+          sourceCount: result?.sources?.length || 0,
+          durationMs: Date.now() - startedAt,
+          status,
+          error,
+          warnings: result?.metadata?.warnings,
+        });
+        const sources = (result?.sources || []).map((source: any) => ({
+          ...source,
+          researchCategory: 'basic_info',
+          evidenceRole: 'reference',
+          contentKind: 'structured-record',
+        }));
+        if (sources.length > 0) {
+          searchResults.set(`curation:${item.provider}`, {
+            ...result,
+            sources,
+            metadata: { ...(result?.metadata || {}), category: 'basic_info', phase: 'curation' },
+          });
+        }
+        this.config.onProgress?.({
+          step: 'gene-search', status: 'end', phase: 'curation', name: item.query,
+          provider: item.provider, sourceCount: sources.length,
+        });
+      } catch (error) {
+        this.assertNotCancelled();
+        this.searchAttempts.push({
+          query: item.query,
+          provider: item.provider,
+          phase: 'curation',
+          category: 'basic_info',
+          sourceCount: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.config.onProgress?.({
+          step: 'gene-search', status: 'end', phase: 'curation', name: item.query, provider: item.provider, sourceCount: 0,
+        });
+      }
+    }
+  }
+
   private async resolvePubMedSeeds(): Promise<void> {
     for (const geneId of this.exactGeneIds) {
       this.assertNotCancelled();
@@ -494,6 +651,7 @@ export class GeneResearchEngine {
           apiKey: this.config.ncbiApiKey,
           signal: this.config.signal,
           maxResult: 100,
+          literatureBudget: this.literatureBudget,
         });
         this.pubMedSeedPmids = Array.from(new Set([...this.pubMedSeedPmids, ...pmids]));
         this.searchAttempts.push({
@@ -546,6 +704,7 @@ export class GeneResearchEngine {
         scope: 'seed_only',
         apiKey: this.config.ncbiApiKey,
         maxResult: 1,
+        literatureBudget: this.literatureBudget,
         signal: this.config.signal,
       });
       const sources = (result.sources || []).map((source: any) => ({
@@ -619,7 +778,7 @@ export class GeneResearchEngine {
         const fullText = await parseUserResearchPdf(documentId);
         const relevance = this.assessSourceRelevance({ title: fullText.name, content: fullText.text });
         const evidence = relevance.accepted
-          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), 18)
+          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
           : [];
         const accepted = relevance.accepted && evidence.length > 0;
         const source = {
@@ -691,7 +850,7 @@ export class GeneResearchEngine {
         seen.add(key);
         return true;
       })
-      .slice(0, Math.min(8, Math.max(1, this.config.maxSearchResults || 5)));
+      .slice(0, Math.max(1, this.config.fullTextBudget ?? 25));
 
     await Promise.all(pubMedSources.map(async source => {
       this.assertNotCancelled();
@@ -715,7 +874,7 @@ export class GeneResearchEngine {
         }
         const relevance = this.assessSourceRelevance({ title: source.title, content: fullText.text });
         const evidence = relevance.accepted
-          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), 18)
+          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
           : [];
         source.fullText = fullText;
         source.fullTextEvidence = evidence;
@@ -1087,7 +1246,7 @@ export class GeneResearchEngine {
     phase: 'research' | 'follow_up' = 'research'
   ): Promise<Map<string, any>> {
     const searchResults = new Map<string, any>();
-    const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'];
+    const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome', 'quickgo', 'interpro', 'intact', 'europepmc_preprints'];
     for (const query of queries) {
       this.assertNotCancelled();
       try {
@@ -1119,6 +1278,7 @@ export class GeneResearchEngine {
                 ? this.config.ncbiApiKey
                 : undefined,
               maxResult: this.config.maxSearchResults || 10,
+              literatureBudget: this.literatureBudget,
               signal: this.config.signal,
             } as any);
             if (result?.sources) {
@@ -1151,6 +1311,7 @@ export class GeneResearchEngine {
               seedPmidsRequested: result?.metadata?.seedPmidsRequested,
               seedPmidsRetrieved: result?.metadata?.seedPmidsRetrieved,
               seedRetrievalComplete: result?.metadata?.seedRetrievalComplete,
+              totalMatchCount: result?.metadata?.totalMatchCount,
             });
           } catch (error) {
             console.error(`Primary ${provider} search failed for query "${query.query}":`, error);
@@ -1705,7 +1866,8 @@ export class GeneResearchEngine {
         proteinId: this.config.target?.proteinId,
         identityTerms: Array.from(this.identityTerms),
       },
-      24,
+      Math.min(60, Math.max(24, Math.round(this.literatureBudget / 8))),
+      Math.max(2, Math.min(4, Math.round(this.literatureBudget / 150))),
     );
     const escapeMarkdown = (value: unknown) => String(value || '')
       .replace(/\\/g, '\\\\')
@@ -1931,7 +2093,7 @@ export const GENE_RESEARCH_PRESETS = {
     enableQualityControl: true,
     enableVisualization: true,
     maxSearchResults: 20,
-    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome']
+    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome', 'quickgo', 'interpro', 'intact', 'europepmc_preprints']
   },
   
   CLINICAL: {

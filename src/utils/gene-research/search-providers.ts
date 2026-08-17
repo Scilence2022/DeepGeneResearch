@@ -2,6 +2,12 @@
 // Specialized search capabilities for molecular biology databases
 
 import { createFetchSignal } from '@/utils/fetch-signal';
+import {
+  searchQuickGo,
+  searchInterPro,
+  searchIntAct,
+  searchEuropePmcPreprints,
+} from './curation-providers';
 
 // Database URLs and configurations
 const GENE_DATABASE_URLS = {
@@ -32,6 +38,12 @@ export interface GeneSearchProviderOptions {
   seedPmids?: string[];
   taxonId?: string | number;
   maxResult?: number;
+  /**
+   * Total abstracts this run may retain across PubMed queries. Drives
+   * paginated discovery so comprehensive literature analysis is bounded by
+   * NCBI politeness cost rather than a fixed low ceiling.
+   */
+  literatureBudget?: number;
   scope?: string;
   signal?: AbortSignal;
 }
@@ -100,6 +112,10 @@ export interface GeneSearchMetadata {
   seedPmidsRequested?: number;
   seedPmidsRetrieved?: number;
   seedRetrievalComplete?: boolean;
+  /** Total PubMed matches reported by esearch for the broadest discovery query. */
+  totalMatchCount?: number;
+  /** Abstract budget applied to this query's discovery pool. */
+  literatureBudget?: number;
   targetMatch?: boolean;
   disabled?: boolean;
 }
@@ -482,11 +498,13 @@ export function assessGeneTargetRelevance(
 /** Resolve literature linked by NCBI to an exact GeneID before free-text discovery. */
 export async function fetchPubMedIdsForGene(
   geneId: string,
-  options: { apiKey?: string; signal?: AbortSignal; maxResult?: number } = {},
+  options: { apiKey?: string; signal?: AbortSignal; maxResult?: number; literatureBudget?: number } = {},
 ): Promise<string[]> {
   const cleanGeneId = String(geneId || '').trim();
   if (!/^\d+$/.test(cleanGeneId)) return [];
-  const limit = Math.min(options.maxResult || 100, 200);
+  // The Gene-linked bibliography is the authoritative seed set; keep it whole
+  // within the run's literature budget instead of a fixed 100-record window.
+  const limit = Math.min(options.literatureBudget || options.maxResult || 300, 2_000);
   const params = new URLSearchParams({
     dbfrom: 'gene',
     db: 'pubmed',
@@ -587,6 +605,7 @@ export async function searchPubMed({
   identityTerms,
   seedPmids = [],
   maxResult = 20,
+  literatureBudget = 300,
   apiKey,
   scope,
   signal,
@@ -629,26 +648,46 @@ export async function searchPubMed({
               exactIdentityQuery ? `(${exactIdentityQuery})` : null,
             ].filter((searchQuery, index, values): searchQuery is string => Boolean(searchQuery) && values.indexOf(searchQuery) === index)
           : [query]);
-    const exactSeedPmids = Array.from(new Set(seedPmids.map(String))).slice(0, 100);
+    // Literature coverage is a curation requirement. Page through the full
+    // esearch match set (history server enabled) instead of keeping only the
+    // first retmax window, so an exhaustively studied gene's bibliography is
+    // bounded by the literature budget, not by a fixed 100-PMID ceiling.
+    const boundedLiteratureBudget = Math.min(Math.max(literatureBudget, 10), 2_000);
+    const exactSeedPmids = Array.from(new Set(seedPmids.map(String)))
+      .slice(0, Math.min(boundedLiteratureBudget * 2, 2_000));
     const discoveryPmidSet = new Set<string>();
     const attempts: string[] = [];
     const warnings: string[] = [];
-    const requestedPoolSize = Math.min(Math.max(maxResult * 4, 20), 100);
+    const esearchPageLimit = 500;
+    let totalMatchCount: number | null = null;
     for (const searchQuery of searchQueries) {
       attempts.push(searchQuery);
-      const queryParams = new URLSearchParams({
-        db: 'pubmed',
-        term: searchQuery,
-        retmax: String(requestedPoolSize),
-        retmode: 'json',
-      });
+      let retstart = 0;
       try {
-        const searchResponse = await fetchNcbi(
-          `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?${queryParams.toString()}`,
-          { apiKey, signal, init: { headers }, provider: 'PubMed esearch' },
-        );
-        const searchData = await searchResponse.json();
-        for (const pmid of searchData.esearchresult?.idlist || []) discoveryPmidSet.add(String(pmid));
+        while (retstart < boundedLiteratureBudget
+          && discoveryPmidSet.size < boundedLiteratureBudget * 2
+        ) {
+          const queryParams = new URLSearchParams({
+            db: 'pubmed',
+            term: searchQuery,
+            retmax: String(Math.min(esearchPageLimit, boundedLiteratureBudget - retstart)),
+            retstart: String(retstart),
+            retmode: 'json',
+            usehistory: 'y',
+          });
+          const searchResponse = await fetchNcbi(
+            `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?${queryParams.toString()}`,
+            { apiKey, signal, init: { headers }, provider: 'PubMed esearch' },
+          );
+          const searchData = await searchResponse.json();
+          const matchCount = Number(searchData.esearchresult?.count);
+          if (Number.isFinite(matchCount)) totalMatchCount = Math.max(totalMatchCount ?? 0, matchCount);
+          const page = (searchData.esearchresult?.idlist || []).map(String);
+          for (const pmid of page) discoveryPmidSet.add(pmid);
+          // A short page means this query's match set is exhausted.
+          if (page.length < esearchPageLimit) break;
+          retstart += page.length;
+        }
       } catch (error) {
         signal?.throwIfAborted();
         warnings.push(`${searchQuery}: ${errorMessage(error)}`);
@@ -656,7 +695,7 @@ export async function searchPubMed({
     }
     const discoveryPmids = Array.from(discoveryPmidSet)
       .filter(pmid => !exactSeedPmids.includes(pmid))
-      .slice(0, 100);
+      .slice(0, Math.min(boundedLiteratureBudget * 2, 2_000));
 
     if (exactSeedPmids.length === 0 && discoveryPmids.length === 0) {
       return {
@@ -715,7 +754,7 @@ export async function searchPubMed({
     const retrievedPmids = new Set(parsedSources.map(source => String(source.provenance?.recordId || '')).filter(Boolean));
     const seedPmidsRetrieved = exactSeedPmids.filter(pmid => retrievedPmids.has(pmid)).length;
     const seedRetrievalComplete = seedPmidsRetrieved === exactSeedPmids.length;
-    const resultLimit = Math.min(maxResult + exactSeedPmids.length, 200);
+    const resultLimit = Math.min(Math.max(boundedLiteratureBudget, maxResult) + exactSeedPmids.length, 2_000);
     const acceptedByPmid = new Map<string, GeneSource>();
     for (const source of parsedSources) {
       if (source.structuredData?.targetRelevance?.accepted !== true) continue;
@@ -750,6 +789,8 @@ export async function searchPubMed({
         seedPmidsRequested: exactSeedPmids.length,
         seedPmidsRetrieved,
         seedRetrievalComplete,
+        totalMatchCount: totalMatchCount ?? undefined,
+        literatureBudget: boundedLiteratureBudget,
         ...(sources.length === 0 && warnings.length ? { error: warnings.join('; ') } : {}),
         targetMatch: sources.length > 0,
       }
@@ -1320,6 +1361,7 @@ export async function createGeneSearchProvider({
   seedPmids,
   taxonId,
   maxResult = 10,
+  literatureBudget,
   scope,
   signal,
 }: GeneSearchProviderOptions): Promise<GeneSearchResult> {
@@ -1336,6 +1378,7 @@ export async function createGeneSearchProvider({
     seedPmids,
     taxonId,
     maxResult,
+    literatureBudget,
     scope,
     signal,
   };
@@ -1361,6 +1404,29 @@ export async function createGeneSearchProvider({
       return searchEnsembl(searchOptions);
     case "reactome":
       return searchReactome(searchOptions);
+    case "quickgo":
+      return searchQuickGo({
+        geneSymbol: searchOptions.geneSymbol,
+        taxonId: searchOptions.taxonId,
+        maxResult: searchOptions.maxResult,
+        signal: searchOptions.signal,
+      });
+    case "interpro":
+      return searchInterPro({
+        proteinId: searchOptions.proteinId,
+        geneSymbol: searchOptions.geneSymbol,
+        maxResult: searchOptions.maxResult,
+        signal: searchOptions.signal,
+      });
+    case "intact":
+      return searchIntAct({
+        geneSymbol: searchOptions.geneSymbol,
+        taxonId: searchOptions.taxonId,
+        maxResult: searchOptions.maxResult,
+        signal: searchOptions.signal,
+      });
+    case "europepmc_preprints":
+      return searchEuropePmcPreprints(searchOptions);
     default:
       throw new Error(`Unsupported gene research provider: ${provider}`);
   }

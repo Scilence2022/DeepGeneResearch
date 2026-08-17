@@ -134,6 +134,7 @@ export function extractCitationBoundLiteratureFindings(
   sources: Array<Record<string, any>>,
   target: LiteratureFindingTarget,
   maxFindings = 18,
+  perSourceLimit = 2,
 ): CitationBoundLiteratureFinding[] {
   const terms = targetIdentityTerms(target);
   const findings: CitationBoundLiteratureFinding[] = [];
@@ -160,7 +161,7 @@ export function extractCitationBoundLiteratureFindings(
     let sourceFindingCount = 0;
 
     for (let index = 0; index < sentences.length; index += 1) {
-      if (findings.length >= maxFindings || sourceFindingCount >= 2) break;
+      if (findings.length >= maxFindings || sourceFindingCount >= perSourceLimit) break;
       const sentence = sentences[index];
       if (NON_RESULT_LEAD.test(sentence.text) || !RESULT_PATTERN.test(sentence.text)) continue;
       const category = classifyFinding(sentence.text);
