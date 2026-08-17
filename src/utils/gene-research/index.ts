@@ -1871,6 +1871,10 @@ export class GeneResearchEngine {
       && source?.structuredData?.targetRelevance?.accepted === true
       && source?.structuredData?.targetRelevance?.directness === 'gene_linked_context'
     );
+    const preprintSources = sources.filter(source => String(source?.database || '').toLowerCase() === 'europepmc_preprints');
+    const userDocumentSources = sources.filter(source => String(source?.database || '').toLowerCase() === 'user_document');
+    const retainedLiteratureTotal = relevantLiterature.length + geneLinkedContext.length
+      + preprintSources.length + userDocumentSources.length;
     const literatureFindings = extractCitationBoundLiteratureFindings(
       relevantLiterature,
       {
@@ -1996,7 +2000,7 @@ export class GeneResearchEngine {
       },
       {
         id: 'evidence', title: 'Evidence', priority: 'high', required: true,
-        content: `## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Full-Text Sources (${fullTextSources.length})\n\n${fullTextSourceLines}\n\n## Citation-Bound Full-Text Findings (${fullTextFindingCount})\n\n${fullTextFindingLines}\n\n## Citation-Bound Abstract Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their retained evidence may be abstract-only or lack sufficiently direct target wording. They are included for bibliography coverage and are not used to generate unsupported annotation operations.\n\n${linkedContextLines}`,
+        content: `## Retained Literature (${retainedLiteratureTotal})\n\nDirect target: ${relevantLiterature.length}, gene-linked context: ${geneLinkedContext.length}, preprints: ${preprintSources.length}, user documents: ${userDocumentSources.length}.\n\n## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Full-Text Sources (${fullTextSources.length})\n\n${fullTextSourceLines}\n\n## Citation-Bound Full-Text Findings (${fullTextFindingCount})\n\n${fullTextFindingLines}\n\n## Citation-Bound Abstract Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their retained evidence may be abstract-only or lack sufficiently direct target wording. They are included for bibliography coverage and are not used to generate unsupported annotation operations.\n\n${linkedContextLines}`,
         visualizations: [],
       },
       {
@@ -2045,8 +2049,11 @@ export class GeneResearchEngine {
         reportType: this.config.reportType || 'comprehensive',
         targetAudience: this.config.targetAudience || 'researchers',
         complexity: 'advanced',
+        retainedLiteratureCount: retainedLiteratureTotal,
         directLiteratureCount: relevantLiterature.length,
         geneLinkedContextCount: geneLinkedContext.length,
+        preprintCount: preprintSources.length,
+        userDocumentCount: userDocumentSources.length,
         citationBoundFindingCount: literatureFindings.length,
         fullTextSourceCount: fullTextSources.length,
         fullTextFindingCount,

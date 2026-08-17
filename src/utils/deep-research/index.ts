@@ -687,13 +687,17 @@ class DeepResearch {
         const formattedCitation = ref.authors && ref.year
           ? `${ref.authors.slice(0, 3).join(', ')}${ref.authors.length > 3 ? ' et al.' : ''}. (${ref.year}). ${ref.title}. ${ref.journal || ''}.`
           : `${ref.title} (${ref.year || 'n.d.'})`;
-        
+
         return {
           title: ref.title,
           url: `https://pubmed.ncbi.nlm.nih.gov/${ref.pmid}/`,
           content: ref.abstract,
           database: 'pubmed',
-          formattedCitation // Add the formatted citation
+          formattedCitation, // Add the formatted citation
+          // The workflow literature review is the validated, target-bound
+          // bibliography. It must never be dropped by a second relevance
+          // pass over the bare title/abstract.
+          retainedFromLiteratureReview: true,
         };
       });
       const sourceMatchesRequestedGene = (source: {
@@ -705,9 +709,11 @@ class DeepResearch {
         organism?: string;
         targetMatch?: boolean;
         authoritative?: boolean;
+        retainedFromLiteratureReview?: boolean;
         structuredData?: Record<string, any>;
       }) => {
         if (source.targetMatch === true && source.authoritative === true) return true;
+        if (source.retainedFromLiteratureReview === true) return true;
         const retainedRelevance = source.structuredData?.targetRelevance;
         if (retainedRelevance) return retainedRelevance.accepted === true;
         return assessGeneTargetRelevance(
@@ -729,6 +735,28 @@ class DeepResearch {
             .map(source => [source.url, source])
         ).values()
       );
+
+      // Canonical literature counts. Every consumer (archived summary,
+      // proposal manifest, report sections) derives its "papers" number from
+      // this block so the displayed count can never diverge from the
+      // retained bibliography.
+      const literatureDatabase = (source: any) => String(source?.database || '').toLowerCase();
+      const literatureMetrics = {
+        totalPapers: sources.filter(source =>
+          ['pubmed', 'europepmc_preprints', 'user_document'].includes(literatureDatabase(source))
+        ).length,
+        pubmedPapers: sources.filter(source => literatureDatabase(source) === 'pubmed').length,
+        directPapers: sources.filter(source =>
+          literatureDatabase(source) === 'pubmed'
+          && source?.structuredData?.targetRelevance?.directness === 'direct'
+        ).length,
+        geneLinkedPapers: sources.filter(source =>
+          literatureDatabase(source) === 'pubmed'
+          && source?.structuredData?.targetRelevance?.directness === 'gene_linked_context'
+        ).length,
+        preprintPapers: sources.filter(source => literatureDatabase(source) === 'europepmc_preprints').length,
+        userDocumentPapers: sources.filter(source => literatureDatabase(source) === 'user_document').length,
+      };
 
       const images = enableVisualization ? result.visualizations.map(viz => ({
         url: `data:image/svg+xml;base64,${Buffer.from(viz.content).toString('base64')}`,
@@ -805,6 +833,7 @@ class DeepResearch {
         },
         metadata: {
           ...result.metadata,
+          literatureMetrics,
           llmSynthesis: {
             supplementalQueryCount: supplementalQueries.length,
             literatureLearningBatches: llmLearnings.length,

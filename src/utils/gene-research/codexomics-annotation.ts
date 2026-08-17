@@ -119,11 +119,25 @@ export interface CodeXomicsCurationNote {
   segments: CodeXomicsCurationNoteSegment[];
   factIds: string[];
   evidenceIds: string[];
+  /** Verbatim citation clause appended to the note text, listing every retained source. */
+  citationText?: string;
+  /** Complete citation list backing the note; every retained source is cited. */
+  allSourceCitations: Array<{
+    kind: 'pmid' | 'doi' | 'dbxref';
+    id: string;
+    label: string;
+    url: string;
+    title?: string;
+  }>;
   coverage: {
     availableFactCount: number;
     includedFactCount: number;
     includedCategories: CodeXomicsResearchFact['category'][];
     omittedFactIds: string[];
+    /** Citation coverage across the complete retained source set. */
+    citedSourceCount: number;
+    totalSourceCount: number;
+    omittedCitationLabels: string[];
   };
 }
 
@@ -750,21 +764,34 @@ function buildResearchSummary(
 
   const literature: CodeXomicsLiteratureHighlight[] = [];
   for (const source of sources) {
-    if (!source || typeof source === 'string' || source.database !== 'pubmed') continue;
+    if (!source || typeof source === 'string') continue;
+    const database = String(source.database || '').toLowerCase();
+    const isPubmed = database === 'pubmed';
+    const isPreprint = database === 'europepmc_preprints';
+    const isUserDocument = database === 'user_document';
+    if (!isPubmed && !isPreprint && !isUserDocument) continue;
     const relevance = source.structuredData?.targetRelevance;
-    if (relevance?.accepted !== true || relevance?.directness !== 'direct') continue;
+    // Every retained literature source belongs in the reviewable summary:
+    // both direct and Gene-linked records, plus preprints and user PDFs.
+    if (relevance?.accepted !== true) continue;
     const reference = source.structuredData?.literatureReferences?.[0] || {};
+    const pmid = (isPubmed || isUserDocument) && (reference.pmid || source.provenance?.recordId)
+      ? String(reference.pmid || source.provenance?.recordId)
+      : undefined;
+    const doi = reference.doi || source.structuredData?.doi || source.doi
+      ? String(reference.doi || source.structuredData?.doi || source.doi)
+      : undefined;
+    if (!pmid && !doi) continue;
     const evidenceIds = evidenceIdsForSource(source, records);
-    if (evidenceIds.length === 0) continue;
     literature.push({
-      title: String(source.title || reference.title || 'Untitled PubMed record'),
-      pmid: reference.pmid ? String(reference.pmid) : source.provenance?.recordId,
-      doi: reference.doi ? String(reference.doi) : undefined,
+      title: String(source.title || reference.title || 'Untitled literature record'),
+      pmid: pmid ? (/^\d{5,10}$/.test(pmid) ? pmid : undefined) : undefined,
+      doi: doi && /^10\.\d{4,9}\//.test(doi) ? doi : undefined,
       year: Number.isFinite(Number(reference.year)) && Number(reference.year) > 0
         ? Number(reference.year)
         : undefined,
       url: String(source.url),
-      relevance: relevance.score >= 11 ? 'high' : 'medium',
+      relevance: (relevance.score ?? 0) >= 11 ? 'high' : 'medium',
       relevanceReason: String(relevance.reason || 'matched the exact target and requested organism'),
       evidenceIds,
     });
@@ -779,7 +806,7 @@ function buildResearchSummary(
 
   const limitations: string[] = [];
   if (facts.length === 0) limitations.push('No exact-target authoritative facts were available.');
-  if (literature.length === 0) limitations.push('No PubMed records passed exact target-and-organism relevance filtering.');
+  if (literature.length === 0) limitations.push('No literature records passed exact target-and-organism relevance filtering.');
   if (literature.length > 0 && literatureFindings.length === 0) {
     limitations.push('No direct abstract sentence met the conservative result-statement criteria for a citation-bound literature fact.');
   }
@@ -787,7 +814,9 @@ function buildResearchSummary(
     schema: 'dgr.curation-summary.v1',
     headline,
     facts: facts.slice(0, 100),
-    literature: literature.slice(0, 30),
+    // The complete retained bibliography must stay visible for curator
+    // review; the proposal byte bound, not this list, protects the payload.
+    literature: literature.slice(0, 400),
     limitations,
   };
 }
@@ -889,9 +918,61 @@ function buildCurationNote(
   // being represented. An authoritative prose-only note would not satisfy the
   // curation contract promised by this field.
   if (!segments.some(segment => segment.citations.length > 0)) return undefined;
-  const text = segments.map(segment => segment.text).join(' ');
+  const narrativeText = segments.map(segment => segment.text).join(' ');
   const factIds = dedupe(segments.flatMap(segment => segment.factIds));
   const included = new Set(factIds);
+
+  // The note must cite every retained source, not only the sources behind the
+  // narrative segments. Enumerate the complete bibliography into a verbatim
+  // citation clause, bounded by the same length contract as the narrative.
+  const allSourceCitations: CodeXomicsCurationNote['allSourceCitations'] = [];
+  const seenCitations = new Set<string>();
+  for (const item of summary.literature) {
+    if (item.pmid) {
+      const citation = {
+        kind: 'pmid' as const,
+        id: String(item.pmid),
+        label: `PMID:${item.pmid}`,
+        url: `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/`,
+        title: item.title,
+      };
+      const key = citation.label.toLowerCase();
+      if (!seenCitations.has(key)) {
+        seenCitations.add(key);
+        allSourceCitations.push(citation);
+      }
+    } else if (item.doi) {
+      const citation = {
+        kind: 'doi' as const,
+        id: String(item.doi),
+        label: `DOI:${item.doi}`,
+        url: `https://doi.org/${item.doi}`,
+        title: item.title,
+      };
+      const key = citation.label.toLowerCase();
+      if (!seenCitations.has(key)) {
+        seenCitations.add(key);
+        allSourceCitations.push(citation);
+      }
+    }
+  }
+  const citationTextParts: string[] = [];
+  const omittedCitationLabels: string[] = [];
+  let citationTextLength = narrativeText.length;
+  for (const citation of allSourceCitations) {
+    const clause = `${citation.label}.`;
+    const separatorLength = citationTextParts.length > 0 ? 1 : 0;
+    if (citationTextLength + separatorLength + clause.length > NOTE_MAX_LENGTH) {
+      omittedCitationLabels.push(citation.label);
+      continue;
+    }
+    citationTextParts.push(clause);
+    citationTextLength += separatorLength + clause.length;
+  }
+  const citationText = citationTextParts.length > 0
+    ? `Supporting sources: ${citationTextParts.join(' ')}`
+    : undefined;
+  const text = citationText ? `${narrativeText} ${citationText}` : narrativeText;
   return {
     schema: 'dgr.curation-note.v1',
     text,
@@ -899,11 +980,16 @@ function buildCurationNote(
     segments,
     factIds,
     evidenceIds: dedupe(segments.flatMap(segment => segment.evidenceIds)),
+    citationText,
+    allSourceCitations,
     coverage: {
       availableFactCount: availableFacts.length,
       includedFactCount: factIds.length,
       includedCategories: dedupe(segments.map(segment => segment.category)) as CodeXomicsResearchFact['category'][],
       omittedFactIds: availableFacts.filter(fact => !included.has(fact.id)).map(fact => fact.id),
+      citedSourceCount: citationTextParts.length,
+      totalSourceCount: allSourceCitations.length,
+      omittedCitationLabels,
     },
   };
 }
@@ -915,13 +1001,19 @@ function assertCurationNoteIntegrity(
   if (!note) return;
   const facts = new Map(researchSummary.facts.map(fact => [fact.id, fact]));
   const joined = note.segments.map(segment => segment.text).join(' ');
+  const expectedText = note.citationText ? `${joined} ${note.citationText}` : joined;
   if (
     note.schema !== 'dgr.curation-note.v1'
-    || note.text !== joined
+    || note.text !== expectedText
     || note.text.length > NOTE_MAX_LENGTH
     || note.textSha256 !== createHash('sha256').update(note.text).digest('hex')
   ) {
     throw new Error('Curation note text is not bound to its structured segments');
+  }
+  for (const citation of note.allSourceCitations || []) {
+    if (!citation || !citation.id || !citation.label || !citation.url) {
+      throw new Error('Curation note contains an invalid all-source citation entry');
+    }
   }
   for (const segment of note.segments) {
     if (segment.factIds.length !== 1) throw new Error('Every curation note segment must bind exactly one fact');
