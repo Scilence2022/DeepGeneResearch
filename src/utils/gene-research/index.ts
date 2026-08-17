@@ -45,6 +45,14 @@ export interface GeneResearchConfig {
   enableQualityControl?: boolean;
   enableVisualization?: boolean;
   maxSearchResults?: number;
+  /**
+   * Total PubMed abstracts retained across the run. Comprehensive analysis is
+   * the default; the budget exists to respect NCBI politeness windows, not to
+   * cap how much of the gene's literature is read.
+   */
+  literatureBudget?: number;
+  /** Open-access full texts attempted for verifiable evidence spans. */
+  fullTextBudget?: number;
   searchProviders?: string[];
   fallbackSearchProvider?: {
     provider: string;
@@ -691,7 +699,7 @@ export class GeneResearchEngine {
         seen.add(key);
         return true;
       })
-      .slice(0, Math.min(8, Math.max(1, this.config.maxSearchResults || 5)));
+      .slice(0, Math.max(1, this.config.fullTextBudget ?? 25));
 
     await Promise.all(pubMedSources.map(async source => {
       this.assertNotCancelled();

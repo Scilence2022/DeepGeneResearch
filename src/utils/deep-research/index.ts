@@ -604,6 +604,9 @@ class DeepResearch {
       specificAspects?: string[];
       diseaseContext?: string;
       experimentalApproach?: string;
+      userPrompt?: string;
+      literatureBudget?: number;
+      fullTextBudget?: number;
       userDocumentIds?: string[];
     },
     signal?: AbortSignal,
@@ -638,13 +641,16 @@ class DeepResearch {
         specificAspects: geneInfo.specificAspects,
         diseaseContext: geneInfo.diseaseContext,
         experimentalApproach: geneInfo.experimentalApproach,
+        userPrompt: explicitGeneInfo?.userPrompt,
         userDocumentIds: explicitGeneInfo?.userDocumentIds,
+        literatureBudget: explicitGeneInfo?.literatureBudget,
+        fullTextBudget: explicitGeneInfo?.fullTextBudget,
         targetAudience: 'researchers',
         reportType: 'comprehensive',
         enableAPIIntegration: true,
         enableQualityControl: true,
         enableVisualization,
-        maxSearchResults: Math.min(20, Math.max(1, this.options.searchProvider.maxResult ?? 5)),
+        maxSearchResults: Math.min(100, Math.max(1, this.options.searchProvider.maxResult ?? 5)),
         searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'],
         fallbackSearchProvider: this.options.searchProvider,
         ncbiApiKey: process.env.NCBI_API_KEY || process.env.NCBI_EUTILS_API_KEY,

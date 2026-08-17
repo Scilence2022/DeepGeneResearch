@@ -34,6 +34,14 @@ export interface GeneResearchParameters {
   userPrompt?: string;
   language?: string;
   maxResult?: number;
+  /**
+   * Per-run budget of PubMed abstracts retained for synthesis. Literature
+   * coverage is a curation requirement, so this defaults generously and is
+   * bounded only by NCBI politeness limits, not by a fixed low ceiling.
+   */
+  literatureBudget?: number;
+  /** Per-run budget of open-access full texts attempted for evidence spans. */
+  fullTextBudget?: number;
   enableCitationImage?: boolean;
   enableReferences?: boolean;
   returnReportAsUrl?: boolean;

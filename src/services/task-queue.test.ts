@@ -333,7 +333,11 @@ describe.sequential('durable task queue lifecycle', () => {
     const queue = new TaskQueue();
     const base = { geneSymbol: 'thrL', organism: 'Escherichia coli' };
 
-    await expect(queue.addTask({ ...base, maxResult: 21 })).rejects.toBeInstanceOf(TaskValidationError);
+    await expect(queue.addTask({ ...base, maxResult: 101 })).rejects.toBeInstanceOf(TaskValidationError);
+    await expect(queue.addTask({ ...base, literatureBudget: 9 })).rejects.toBeInstanceOf(TaskValidationError);
+    await expect(queue.addTask({ ...base, literatureBudget: 2_001 })).rejects.toBeInstanceOf(TaskValidationError);
+    await expect(queue.addTask({ ...base, fullTextBudget: 0 })).rejects.toBeInstanceOf(TaskValidationError);
+    await expect(queue.addTask({ ...base, fullTextBudget: 101 })).rejects.toBeInstanceOf(TaskValidationError);
     await expect(queue.addTask({ ...base, userPrompt: 'x'.repeat(8_001) })).rejects.toBeInstanceOf(TaskValidationError);
     await expect(queue.addTask({ ...base, researchFocus: Array(21).fill('function') }))
       .rejects.toBeInstanceOf(TaskValidationError);

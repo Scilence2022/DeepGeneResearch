@@ -118,9 +118,21 @@ export class TaskQueue extends EventEmitter {
     }
     if (
       parameters.maxResult !== undefined &&
-      (!Number.isInteger(parameters.maxResult) || parameters.maxResult < 1 || parameters.maxResult > 20)
+      (!Number.isInteger(parameters.maxResult) || parameters.maxResult < 1 || parameters.maxResult > 100)
     ) {
-      throw new TaskValidationError('maxResult must be an integer from 1 to 20');
+      throw new TaskValidationError('maxResult must be an integer from 1 to 100');
+    }
+    if (
+      parameters.literatureBudget !== undefined &&
+      (!Number.isInteger(parameters.literatureBudget) || parameters.literatureBudget < 10 || parameters.literatureBudget > 2_000)
+    ) {
+      throw new TaskValidationError('literatureBudget must be an integer from 10 to 2000');
+    }
+    if (
+      parameters.fullTextBudget !== undefined &&
+      (!Number.isInteger(parameters.fullTextBudget) || parameters.fullTextBudget < 1 || parameters.fullTextBudget > 100)
+    ) {
+      throw new TaskValidationError('fullTextBudget must be an integer from 1 to 100');
     }
     if (parameters.currentAnnotation !== undefined) {
       if (!parameters.currentAnnotation || typeof parameters.currentAnnotation !== 'object' || Array.isArray(parameters.currentAnnotation)) {
@@ -453,6 +465,7 @@ export class TaskQueue extends EventEmitter {
       // target into the specialized research engine. It must never recover a
       // gene symbol from free text when CodeXomics already resolved it.
       const { geneSymbol, organism, researchFocus = [], specificAspects = [], diseaseContext, experimentalApproach, userPrompt } = task.parameters;
+
       let baseQuery = `Gene research: ${geneSymbol} in ${organism}`;
 
       if (researchFocus.length > 0) {
@@ -486,6 +499,9 @@ export class TaskQueue extends EventEmitter {
         specificAspects,
         diseaseContext,
         experimentalApproach,
+        userPrompt,
+        literatureBudget: task.parameters.literatureBudget,
+        fullTextBudget: task.parameters.fullTextBudget,
         userDocumentIds: task.parameters.userDocumentIds,
       }, abortController.signal, task.parameters.enableCitationImage !== false);
       if (await this.isCancellationRequested(task.id)) {
