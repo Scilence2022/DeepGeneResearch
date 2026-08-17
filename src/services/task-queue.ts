@@ -442,6 +442,15 @@ export class TaskQueue extends EventEmitter {
             case 'gene-search':
               progress = 60;
               break;
+            case 'gene-llm-queries':
+              progress = 62;
+              break;
+            case 'gene-llm-learnings':
+              progress = 68;
+              break;
+            case 'gene-llm-report':
+              progress = 82;
+              break;
           }
 
           if (data.status === 'end') {

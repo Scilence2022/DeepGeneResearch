@@ -277,7 +277,7 @@ export interface GeneSearchTask {
   researchGoal: string;
   database: string;
   priority: 'high' | 'medium' | 'low';
-  category: 'basic_info' | 'function' | 'structure' | 'expression' | 'interactions' | 'disease' | 'evolution' | 'pathway';
+  category: 'basic_info' | 'function' | 'structure' | 'expression' | 'interactions' | 'disease' | 'evolution' | 'pathway' | 'user_directed';
   status: 'pending' | 'processing' | 'completed' | 'failed';
   results?: any;
   learning?: string;

@@ -57,6 +57,12 @@ export interface GeneResearchConfig {
   followUpRounds?: number;
   /** Gap queries issued per follow-up round. */
   followUpGapQueries?: number;
+  /**
+   * LLM-generated queries derived from the user's research question. They run
+   * alongside the template queries so retrieval adapts to what the caller
+   * actually asked instead of only to fixed category templates.
+   */
+  supplementalQueries?: Array<{ query: string; researchGoal?: string }>;
   searchProviders?: string[];
   fallbackSearchProvider?: {
     provider: string;
@@ -409,10 +415,20 @@ export class GeneResearchEngine {
       ...(this.config.researchFocus || []),
       ...(this.config.specificAspects || []),
     ];
-    if (requestedAspects.length > 0) {
-      return this.queryGenerator.generateFocusedQueries(requestedAspects);
-    }
-    return this.queryGenerator.generateComprehensiveQueries();
+    const baseQueries = requestedAspects.length > 0
+      ? this.queryGenerator.generateFocusedQueries(requestedAspects)
+      : this.queryGenerator.generateComprehensiveQueries();
+    const supplementalQueries = (this.config.supplementalQueries || [])
+      .filter(item => item && String(item.query || '').trim().length > 0)
+      .map(item => ({
+        query: String(item.query).trim(),
+        researchGoal: String(item.researchGoal || 'Answer the user-directed research question with primary literature.'),
+        database: 'pubmed',
+        priority: 'high' as const,
+        category: 'user_directed' as const,
+        status: 'pending' as const,
+      }));
+    return [...baseQueries, ...supplementalQueries];
   }
 
   private async resolveTargetIdentity(): Promise<Map<string, any>> {

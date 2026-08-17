@@ -11,6 +11,10 @@ import {
   writeFinalReportPrompt,
   getSERPQuerySchema,
   isGeneResearchQuery,
+  getGeneResearchSystemPrompt,
+  generateGeneSerpQueriesPrompt,
+  processGeneSearchResultPrompt,
+  writeGeneFinalReportPrompt,
 } from "./prompts";
 import { outputGuidelinesPrompt } from "@/constants/prompts";
 import { isNetworkingModel } from "@/utils/model";
@@ -630,7 +634,15 @@ class DeepResearch {
       // MCP and CodeXomics provide an already resolved target. Never re-infer
       // its gene or organism from an LLM-facing free-text query.
       const geneInfo = explicitGeneInfo || this.extractGeneInfo(query);
-      
+
+      // The user's research question finally drives retrieval: LLM-generated
+      // supplemental queries run alongside the template categories.
+      const supplementalQueries = await this.generateGeneSupplementalQueries(
+        geneInfo,
+        explicitGeneInfo?.userPrompt,
+        signal
+      );
+
       // Create gene research engine
       const geneEngine = createGeneResearchEngine({
         geneSymbol: geneInfo.geneSymbol,
@@ -645,6 +657,7 @@ class DeepResearch {
         userDocumentIds: explicitGeneInfo?.userDocumentIds,
         literatureBudget: explicitGeneInfo?.literatureBudget,
         fullTextBudget: explicitGeneInfo?.fullTextBudget,
+        supplementalQueries,
         targetAudience: 'researchers',
         reportType: 'comprehensive',
         enableAPIIntegration: true,
@@ -721,12 +734,38 @@ class DeepResearch {
         description: viz.title
       })) : [];
 
-      const finalReport = result.report.title + '\n\n' + result.report.sections.map((s: any) => s.content).join('\n\n');
+      const templateReport = result.report.title + '\n\n' + result.report.sections.map((s: any) => s.content).join('\n\n');
+
+      // Map-reduce every retained abstract into learnings, then let the LLM
+      // synthesize the report from verified evidence. Both degrade silently
+      // to the deterministic template output on failure.
+      const llmLearnings = await this.summarizeGeneLiterature(
+        result.workflow.literatureReview || [],
+        geneInfo,
+        explicitGeneInfo?.userPrompt,
+        signal
+      );
+      const literatureCoverage = (result.metadata as any)?.searchDiagnostics?.literatureCoverage;
+      const coverageSummary = literatureCoverage
+        ? `Literature coverage audit: budget ${literatureCoverage.literatureBudget} abstracts, PubMed total matches ${literatureCoverage.pubmedTotalMatchCount ?? 'unknown'}, retained ${literatureCoverage.retainedAbstractCount} abstracts, Gene-linked bibliography ${literatureCoverage.linkedBibliographyRetrieved}/${literatureCoverage.linkedBibliographyRequested}${literatureCoverage.linkedBibliographyComplete ? ' (complete)' : ' (partial)'}.`
+        : '';
+      const synthesizedReport = await this.synthesizeGeneReport({
+        geneInfo,
+        userPrompt: explicitGeneInfo?.userPrompt,
+        templateReport,
+        learnings: llmLearnings,
+        sources,
+        coverageSummary,
+        signal,
+        enableReferences: true,
+      });
+      const finalReport = synthesizedReport || templateReport;
 
       const researchResult = {
         title: result.report.title,
         finalReport,
         learnings: [
+          ...llmLearnings,
           ...result.sources.flatMap((source: any) =>
             Array.isArray(source?.fullTextEvidence)
               ? source.fullTextEvidence.map((finding: any) => finding.excerpt)
@@ -741,7 +780,14 @@ class DeepResearch {
           visualizations: enableVisualization ? result.visualizations : [],
           workflow: result.workflow
         },
-        metadata: result.metadata,
+        metadata: {
+          ...result.metadata,
+          llmSynthesis: {
+            supplementalQueryCount: supplementalQueries.length,
+            literatureLearningBatches: llmLearnings.length,
+            synthesizedReport: Boolean(synthesizedReport),
+          },
+        },
       };
       
       // Update task status if taskId is provided
@@ -770,6 +816,245 @@ class DeepResearch {
         message: errorMessage,
       });
       throw err;
+    }
+  }
+
+  /**
+   * LLM-generated supplemental queries derived from the user's actual
+   * research question. Template queries remain the retrieval backbone; these
+   * adapt it to what the caller asked. Returns [] on any failure.
+   */
+  private async generateGeneSupplementalQueries(
+    geneInfo: {
+      geneSymbol: string;
+      organism: string;
+      target?: { locusTag?: string | null; proteinId?: string | null };
+      researchFocus?: string[];
+      specificAspects?: string[];
+    },
+    userPrompt?: string,
+    signal?: AbortSignal
+  ): Promise<DeepResearchSearchTask[]> {
+    const researchQuestion = userPrompt
+      ?.replace("{geneSymbol}", geneInfo.geneSymbol)
+      .replace("{organism}", geneInfo.organism)
+      .trim();
+    if (!researchQuestion) return [];
+    try {
+      signal?.throwIfAborted();
+      this.onMessage("progress", { step: "gene-llm-queries", status: "start" });
+      const plan = [
+        `Target gene: ${geneInfo.geneSymbol} (${geneInfo.organism})`,
+        geneInfo.target?.locusTag ? `Locus tag: ${geneInfo.target.locusTag}` : "",
+        geneInfo.target?.proteinId ? `Protein accession: ${geneInfo.target.proteinId}` : "",
+        geneInfo.researchFocus?.length ? `Requested focus areas: ${geneInfo.researchFocus.join(", ")}` : "",
+        geneInfo.specificAspects?.length ? `Specific aspects: ${geneInfo.specificAspects.join(", ")}` : "",
+        `User research question: ${researchQuestion}`,
+      ].filter(Boolean).join("\n");
+      const { text } = await generateText({
+        model: await this.getThinkingModel(),
+        system: getGeneResearchSystemPrompt(),
+        prompt: [generateGeneSerpQueriesPrompt(plan), this.getResponseLanguagePrompt()].join("\n\n"),
+        abortSignal: signal,
+      });
+      const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
+      let content = "";
+      thinkTagStreamProcessor.processChunk(text, (data) => {
+        content += data;
+      });
+      thinkTagStreamProcessor.end();
+      const parsed = JSON.parse(removeJsonMarkdown(content));
+      if (!getSERPQuerySchema().safeParse(parsed).success) return [];
+      const tasks: DeepResearchSearchTask[] = parsed
+        .map((item: { query: string; researchGoal?: string }) => ({
+          query: String(item.query || "").trim(),
+          researchGoal: String(item.researchGoal || "").trim(),
+        }))
+        .filter((item: DeepResearchSearchTask) => item.query.length > 0);
+      this.onMessage("progress", {
+        step: "gene-llm-queries",
+        status: "end",
+        data: { count: tasks.length },
+      });
+      return tasks.slice(0, 8);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      console.warn("Gene supplemental query generation failed; template queries stand alone:", error);
+      this.onMessage("progress", {
+        step: "gene-llm-queries",
+        status: "end",
+        data: { count: 0, fallback: true },
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Map-reduce the retained abstracts into LLM learnings so every paper in
+   * the literature budget contributes to synthesis instead of only the
+   * handful that survived fixed evidence-span caps. Returns [] on failure;
+   * template evidence stands alone.
+   */
+  private async summarizeGeneLiterature(
+    literature: Array<{ title?: string; abstract?: string; pmid?: string }>,
+    geneInfo: { geneSymbol: string; organism: string },
+    userPrompt?: string,
+    signal?: AbortSignal
+  ): Promise<string[]> {
+    try {
+      signal?.throwIfAborted();
+      const abstracts = literature.filter(ref => ref?.abstract && String(ref.abstract).trim().length > 40);
+      if (abstracts.length === 0) return [];
+      const batchSize = 20;
+      const batches: typeof abstracts[] = [];
+      for (let offset = 0; offset < abstracts.length && batches.length < 12; offset += batchSize) {
+        batches.push(abstracts.slice(offset, offset + batchSize));
+      }
+      this.onMessage("progress", {
+        step: "gene-llm-learnings",
+        status: "start",
+        data: { batches: batches.length, abstracts: abstracts.length },
+      });
+      const query = `Gene research: ${geneInfo.geneSymbol} in ${geneInfo.organism}`;
+      const researchGoal = (userPrompt
+        ? userPrompt.replace("{geneSymbol}", geneInfo.geneSymbol).replace("{organism}", geneInfo.organism)
+        : `Extract the key experimental findings about ${geneInfo.geneSymbol} in ${geneInfo.organism}, including function, regulation, pathway role, complexes, and phenotypes.`)
+        + " Report only statements supported by the provided abstracts, each with its citation index.";
+      const learnings: string[] = [];
+      for (const [index, batch] of batches.entries()) {
+        signal?.throwIfAborted();
+        const sources: Source[] = batch
+          .map(ref => ({
+            title: String(ref.title || ""),
+            url: ref.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${ref.pmid}/` : "",
+            content: String(ref.abstract || "").slice(0, 1_500),
+          }))
+          .filter(source => source.url && source.content);
+        if (sources.length === 0) continue;
+        const { text } = await generateText({
+          model: await this.getTaskModel(),
+          system: getGeneResearchSystemPrompt(),
+          prompt: [processGeneSearchResultPrompt(query, researchGoal, sources, true), this.getResponseLanguagePrompt()].join("\n\n"),
+          abortSignal: signal,
+        });
+        const learning = text.trim();
+        if (learning) learnings.push(`[literature batch ${index + 1}/${batches.length}]\n${learning}`);
+      }
+      this.onMessage("progress", {
+        step: "gene-llm-learnings",
+        status: "end",
+        data: { learnings: learnings.length },
+      });
+      return learnings;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      console.warn("Gene literature summarization failed; template evidence stands alone:", error);
+      this.onMessage("progress", {
+        step: "gene-llm-learnings",
+        status: "end",
+        data: { learnings: 0, fallback: true },
+      });
+      return [];
+    }
+  }
+
+  /**
+   * LLM synthesis of the final gene report from the deterministic engine's
+   * structured evidence plus the batch learnings. Streams like the generic
+   * report writer; returns null on any failure so the template report is
+   * kept verbatim.
+   */
+  private async synthesizeGeneReport(options: {
+    geneInfo: {
+      geneSymbol: string;
+      organism: string;
+      target?: { locusTag?: string | null; proteinId?: string | null };
+      researchFocus?: string[];
+      specificAspects?: string[];
+    };
+    userPrompt?: string;
+    templateReport: string;
+    learnings: string[];
+    sources: Source[];
+    coverageSummary?: string;
+    signal?: AbortSignal;
+    enableReferences: boolean;
+  }): Promise<string | null> {
+    const { geneInfo, userPrompt, templateReport, learnings, sources, coverageSummary, signal, enableReferences } = options;
+    try {
+      signal?.throwIfAborted();
+      this.onMessage("progress", { step: "gene-llm-report", status: "start" });
+      const requirement = userPrompt
+        ? userPrompt.replace("{geneSymbol}", geneInfo.geneSymbol).replace("{organism}", geneInfo.organism)
+        : "";
+      const plan = [
+        `Target gene: ${geneInfo.geneSymbol} (${geneInfo.organism})`,
+        geneInfo.target?.locusTag ? `Locus tag: ${geneInfo.target.locusTag}` : "",
+        geneInfo.target?.proteinId ? `Protein accession: ${geneInfo.target.proteinId}` : "",
+        geneInfo.researchFocus?.length ? `Requested focus areas: ${geneInfo.researchFocus.join(", ")}` : "",
+        geneInfo.specificAspects?.length ? `Specific aspects: ${geneInfo.specificAspects.join(", ")}` : "",
+        coverageSummary || "",
+        `Verified structured evidence compiled by the deterministic pipeline (treat as authoritative; reconcile conflicts and weigh uncertainty explicitly):\n\n${templateReport.slice(0, 20_000)}`,
+      ].filter(Boolean).join("\n\n");
+      const result = streamText({
+        model: await this.getThinkingModel(),
+        system: [getGeneResearchSystemPrompt(), outputGuidelinesPrompt].join("\n\n"),
+        prompt: [
+          writeGeneFinalReportPrompt(
+            plan,
+            learnings,
+            sources.map(item => pick(item, ["title", "url"])),
+            [],
+            requirement,
+            false,
+            sources.length > 0 && enableReferences
+          ),
+          this.getResponseLanguagePrompt(),
+        ].join("\n\n"),
+        abortSignal: signal,
+      });
+      const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
+      let content = "";
+      this.onMessage("message", { type: "text", text: "<final-report>\n" });
+      for await (const part of result.fullStream) {
+        if (part.type === "text-delta") {
+          thinkTagStreamProcessor.processChunk(
+            part.textDelta,
+            (data) => {
+              content += data;
+              this.onMessage("message", { type: "text", text: data });
+            },
+            (data) => {
+              this.onMessage("reasoning", { type: "text", text: data });
+            }
+          );
+        } else if (part.type === "reasoning") {
+          this.onMessage("reasoning", { type: "text", text: part.textDelta });
+        }
+      }
+      this.onMessage("message", { type: "text", text: "\n</final-report>\n\n" });
+      thinkTagStreamProcessor.end();
+      if (!content.trim()) return null;
+      if (sources.length > 0 && enableReferences) {
+        const hasFormattedCitations = sources.some(source => source.formattedCitation);
+        content += "\n\n---\n\n";
+        content += hasFormattedCitations ? "## References\n\n" : "";
+        content += sources
+          .map((source, idx) => {
+            if (source.formattedCitation) {
+              return `[${idx + 1}]: ${source.formattedCitation}`;
+            }
+            return `[${idx + 1}]: ${source.url}${source.title ? ` "${source.title.replaceAll('"', " ")}"` : ""}`;
+          })
+          .join("\n");
+      }
+      this.onMessage("progress", { step: "gene-llm-report", status: "end" });
+      return content;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      console.warn("Gene report synthesis failed; keeping the template report:", error);
+      this.onMessage("progress", { step: "gene-llm-report", status: "end", data: { fallback: true } });
+      return null;
     }
   }
 
