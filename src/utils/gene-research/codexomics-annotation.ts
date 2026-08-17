@@ -114,6 +114,8 @@ export interface CodeXomicsCurationNoteSegment {
 
 export interface CodeXomicsCurationNote {
   schema: 'dgr.curation-note.v1';
+  /** 'standard' notes are evidence-bound narratives; 'no_information_found' notes record the search itself. */
+  kind?: 'standard' | 'no_information_found';
   text: string;
   textSha256: string;
   segments: CodeXomicsCurationNoteSegment[];
@@ -129,6 +131,14 @@ export interface CodeXomicsCurationNote {
     url: string;
     title?: string;
   }>;
+  /** Verbatim agent/timestamp clause appended to every note. */
+  provenance?: {
+    agent: 'Deep Gene Research';
+    updatedAt: string;
+    clause: string;
+  };
+  /** ISO timestamp of the literature search (no_information_found notes). */
+  searchConductedAt?: string;
   coverage: {
     availableFactCount: number;
     includedFactCount: number;
@@ -138,6 +148,52 @@ export interface CodeXomicsCurationNote {
     citedSourceCount: number;
     totalSourceCount: number;
     omittedCitationLabels: string[];
+  };
+}
+
+const NOTE_AGENT_NAME = 'Deep Gene Research';
+
+function formatEnglishDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function buildNoteProvenance(updatedAt: string): CodeXomicsCurationNote['provenance'] {
+  const formatted = formatEnglishDate(updatedAt);
+  if (!formatted) return undefined;
+  return {
+    agent: NOTE_AGENT_NAME,
+    updatedAt,
+    clause: `Annotation by ${NOTE_AGENT_NAME} on ${formatted}.`,
+  };
+}
+
+function buildNoInformationFoundNote(nowIso: string): CodeXomicsCurationNote {
+  const searchDate = formatEnglishDate(nowIso);
+  const provenance = buildNoteProvenance(nowIso);
+  const baseText = `No information about this protein was found by a literature search conducted on ${searchDate}.`;
+  const text = provenance ? `${baseText} ${provenance.clause}` : baseText;
+  return {
+    schema: 'dgr.curation-note.v1',
+    kind: 'no_information_found',
+    text,
+    textSha256: createHash('sha256').update(text).digest('hex'),
+    segments: [],
+    factIds: [],
+    evidenceIds: [],
+    allSourceCitations: [],
+    ...(provenance ? { provenance } : {}),
+    searchConductedAt: nowIso,
+    coverage: {
+      availableFactCount: 0,
+      includedFactCount: 0,
+      includedCategories: [],
+      omittedFactIds: [],
+      citedSourceCount: 0,
+      totalSourceCount: 0,
+      omittedCitationLabels: [],
+    },
   };
 }
 
@@ -951,10 +1007,16 @@ function buildCurationNote(
     }
   }
 
-  // Fail closed when no segment exists, or when neither the segments nor the
-  // complete bibliography carry a single citation. A zero-literature run can
-  // therefore never produce a mutation-ready note.
-  if (segments.length === 0) return undefined;
+  // When the research retained nothing usable at all — no note-eligible
+  // facts and no retained bibliography — record the search itself instead of
+  // leaving the /note qualifier stale. A RefSeq-style provenance statement
+  // makes no biological claim, so it needs no literature citation. Runs that
+  // DID retain authoritative facts or literature stay on the note contract
+  // above and never claim "no information was found".
+  const nowIso = new Date().toISOString();
+  if (segments.length === 0) {
+    return allSourceCitations.length === 0 ? buildNoInformationFoundNote(nowIso) : undefined;
+  }
   if (allSourceCitations.length === 0 && !segments.some(segment => segment.citations.length > 0)) {
     return undefined;
   }
@@ -978,9 +1040,16 @@ function buildCurationNote(
   const citationText = citationTextParts.length > 0
     ? `Supporting sources: ${citationTextParts.join(' ')}`
     : undefined;
-  const text = citationText ? `${narrativeText} ${citationText}` : narrativeText;
+  // Every note ends with an agent/timestamp clause so curators and GenBank
+  // consumers can see who produced it and when.
+  const provenance = buildNoteProvenance(nowIso);
+  const baseText = citationText ? `${narrativeText} ${citationText}` : narrativeText;
+  const text = provenance && citationTextLength + 1 + provenance.clause.length <= NOTE_MAX_LENGTH
+    ? `${baseText} ${provenance.clause}`
+    : baseText;
   return {
     schema: 'dgr.curation-note.v1',
+    kind: 'standard',
     text,
     textSha256: createHash('sha256').update(text).digest('hex'),
     segments,
@@ -988,6 +1057,7 @@ function buildCurationNote(
     evidenceIds: dedupe(segments.flatMap(segment => segment.evidenceIds)),
     citationText,
     allSourceCitations,
+    ...(provenance && text === `${baseText} ${provenance.clause}` ? { provenance } : {}),
     coverage: {
       availableFactCount: availableFacts.length,
       includedFactCount: factIds.length,
@@ -1005,9 +1075,28 @@ function assertCurationNoteIntegrity(
   researchSummary: CodeXomicsAnnotationProposal['researchSummary'],
 ): void {
   if (!note) return;
+  if (note.kind === 'no_information_found') {
+    const searchDate = formatEnglishDate(String(note.searchConductedAt || ''));
+    const baseText = `No information about this protein was found by a literature search conducted on ${searchDate}.`;
+    const expectedText = note.provenance ? `${baseText} ${note.provenance.clause}` : baseText;
+    if (
+      note.schema !== 'dgr.curation-note.v1'
+      || note.segments.length !== 0
+      || note.factIds.length !== 0
+      || note.evidenceIds.length !== 0
+      || note.allSourceCitations.length !== 0
+      || note.text !== expectedText
+      || note.text.length > NOTE_MAX_LENGTH
+      || note.textSha256 !== createHash('sha256').update(note.text).digest('hex')
+    ) {
+      throw new Error('No-information curation note is not bound to its search provenance');
+    }
+    return;
+  }
   const facts = new Map(researchSummary.facts.map(fact => [fact.id, fact]));
   const joined = note.segments.map(segment => segment.text).join(' ');
-  const expectedText = note.citationText ? `${joined} ${note.citationText}` : joined;
+  const withCitations = note.citationText ? `${joined} ${note.citationText}` : joined;
+  const expectedText = note.provenance ? `${withCitations} ${note.provenance.clause}` : withCitations;
   if (
     note.schema !== 'dgr.curation-note.v1'
     || note.text !== expectedText
@@ -1417,7 +1506,14 @@ export function formatGenomeAnnotationNoteSection(options: {
     `Key summary of **${geneSymbol}** in *${organism}*, suitable for the GenBank \`/note\` qualifier after human review. Every statement is derived from exact-target evidence; the note never reopens already-applied annotation qualifiers.`,
     '',
   ];
-  if (curationNote?.text) {
+  if (curationNote?.kind === 'no_information_found' && curationNote.text) {
+    lines.push('### Proposed note text (no reliable information found, mutation-ready)');
+    lines.push('');
+    lines.push(curationNote.text);
+    lines.push('');
+    lines.push('The research retained no citation-bound literature or authoritative facts for this feature. The note records the search itself — a provenance statement that makes no biological claim — following the RefSeq convention.');
+    lines.push('');
+  } else if (curationNote?.text) {
     lines.push('### Proposed note text (citation-bound, mutation-ready)');
     lines.push('');
     lines.push(curationNote.text);
@@ -1430,6 +1526,9 @@ export function formatGenomeAnnotationNoteSection(options: {
         .map(citation => citation.id),
     ));
     lines.push(`- **Citations**: ${citedPmids.map(pmid => `[PMID:${pmid}](https://pubmed.ncbi.nlm.nih.gov/${pmid}/)`).join(', ') || 'none'}`);
+    if (curationNote.provenance) {
+      lines.push(`- **Provenance**: ${curationNote.provenance.clause}`);
+    }
     lines.push('');
   } else {
     lines.push('### Informational summary (not mutation-ready)');
