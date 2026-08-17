@@ -100,6 +100,7 @@ export interface GeneResearchResult {
         seedPmidsRequested?: number;
         seedPmidsRetrieved?: number;
         seedRetrievalComplete?: boolean;
+        totalMatchCount?: number;
       }>;
       identityResolved?: boolean;
       authoritativeSourceCount?: number;
@@ -116,6 +117,15 @@ export interface GeneResearchResult {
         literatureSources: number;
         fullContentSources: number;
       }>;
+      /** Audit of how much of the gene's PubMed literature this run actually read. */
+      literatureCoverage?: {
+        literatureBudget: number;
+        pubmedTotalMatchCount: number | null;
+        retainedAbstractCount: number;
+        linkedBibliographyRequested: number;
+        linkedBibliographyRetrieved: number;
+        linkedBibliographyComplete: boolean;
+      };
       evidenceGaps?: string[];
       fullTextSourceCount?: number;
       fullTextEvidenceSpanCount?: number;
@@ -178,6 +188,11 @@ export class GeneResearchEngine {
 
   private assertNotCancelled(): void {
     this.config.signal?.throwIfAborted();
+  }
+
+  /** Effective PubMed abstract budget for this run (bounded by queue validation). */
+  private get literatureBudget(): number {
+    return Math.min(Math.max(this.config.literatureBudget ?? 300, 10), 2_000);
   }
 
   private assertSupportedTarget(): void {
@@ -351,6 +366,17 @@ export class GeneResearchEngine {
             linkedBibliographyComplete: coverage.linkedBibliographyComplete,
             degradedProviders: coverage.degradedProviders,
             coverageByCategory: coverage.coverageByCategory,
+            literatureCoverage: {
+              literatureBudget: this.literatureBudget,
+              pubmedTotalMatchCount: Math.max(
+                0,
+                ...this.searchAttempts.map(attempt => attempt.totalMatchCount ?? 0),
+              ) || null,
+              retainedAbstractCount: coverage.literatureSourceCount,
+              linkedBibliographyRequested: coverage.linkedBibliographyRequested,
+              linkedBibliographyRetrieved: coverage.linkedBibliographyRetrieved,
+              linkedBibliographyComplete: coverage.linkedBibliographyComplete,
+            },
             evidenceGaps: coverage.evidenceGaps,
           },
         }
@@ -502,6 +528,7 @@ export class GeneResearchEngine {
           apiKey: this.config.ncbiApiKey,
           signal: this.config.signal,
           maxResult: 100,
+          literatureBudget: this.literatureBudget,
         });
         this.pubMedSeedPmids = Array.from(new Set([...this.pubMedSeedPmids, ...pmids]));
         this.searchAttempts.push({
@@ -554,6 +581,7 @@ export class GeneResearchEngine {
         scope: 'seed_only',
         apiKey: this.config.ncbiApiKey,
         maxResult: 1,
+        literatureBudget: this.literatureBudget,
         signal: this.config.signal,
       });
       const sources = (result.sources || []).map((source: any) => ({
@@ -1127,6 +1155,7 @@ export class GeneResearchEngine {
                 ? this.config.ncbiApiKey
                 : undefined,
               maxResult: this.config.maxSearchResults || 10,
+              literatureBudget: this.literatureBudget,
               signal: this.config.signal,
             } as any);
             if (result?.sources) {
@@ -1159,6 +1188,7 @@ export class GeneResearchEngine {
               seedPmidsRequested: result?.metadata?.seedPmidsRequested,
               seedPmidsRetrieved: result?.metadata?.seedPmidsRetrieved,
               seedRetrievalComplete: result?.metadata?.seedRetrievalComplete,
+              totalMatchCount: result?.metadata?.totalMatchCount,
             });
           } catch (error) {
             console.error(`Primary ${provider} search failed for query "${query.query}":`, error);
