@@ -356,7 +356,9 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
 
     expect(proposal.evidenceManifest.sourceRecords).toHaveLength(38);
     expect(proposal.evidenceDetails).toHaveLength(38);
-    expect(proposal.researchSummary.literature).toHaveLength(30);
+    // The complete retained bibliography stays visible instead of the legacy
+    // 30-entry truncation.
+    expect(proposal.researchSummary.literature).toHaveLength(38);
     expect(proposal.operations).toEqual([
       expect.objectContaining({ op: 'addQualifier', field: 'note' }),
     ]);
@@ -369,6 +371,20 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     expect(proposal.researchSummary.facts
       .filter(fact => fact.evidenceLevel === 'target_literature'))
       .toHaveLength(18);
+    // The note cites the complete 38-source bibliography, not only the
+    // sources behind its narrative segments.
+    expect(proposal.curationNote?.allSourceCitations).toHaveLength(38);
+    expect(proposal.curationNote?.coverage).toMatchObject({
+      citedSourceCount: 38,
+      totalSourceCount: 38,
+      omittedCitationLabels: [],
+    });
+    expect(proposal.curationNote?.text).toContain('Supporting sources:');
+    expect(proposal.curationNote?.text).toContain('PMID:12000000.');
+    expect(proposal.curationNote?.text).toContain('PMID:12000037.');
+    // The integrity assert must accept the citation clause as part of the
+    // hash-bound text.
+    expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).not.toThrow();
   });
 
   it('deduplicates report citations against structured source records by exact identifiers', () => {
