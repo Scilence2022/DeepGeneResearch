@@ -2,6 +2,12 @@
 // Specialized search capabilities for molecular biology databases
 
 import { createFetchSignal } from '@/utils/fetch-signal';
+import {
+  searchQuickGo,
+  searchInterPro,
+  searchIntAct,
+  searchEuropePmcPreprints,
+} from './curation-providers';
 
 // Database URLs and configurations
 const GENE_DATABASE_URLS = {
@@ -1398,6 +1404,29 @@ export async function createGeneSearchProvider({
       return searchEnsembl(searchOptions);
     case "reactome":
       return searchReactome(searchOptions);
+    case "quickgo":
+      return searchQuickGo({
+        geneSymbol: searchOptions.geneSymbol,
+        taxonId: searchOptions.taxonId,
+        maxResult: searchOptions.maxResult,
+        signal: searchOptions.signal,
+      });
+    case "interpro":
+      return searchInterPro({
+        proteinId: searchOptions.proteinId,
+        geneSymbol: searchOptions.geneSymbol,
+        maxResult: searchOptions.maxResult,
+        signal: searchOptions.signal,
+      });
+    case "intact":
+      return searchIntAct({
+        geneSymbol: searchOptions.geneSymbol,
+        taxonId: searchOptions.taxonId,
+        maxResult: searchOptions.maxResult,
+        signal: searchOptions.signal,
+      });
+    case "europepmc_preprints":
+      return searchEuropePmcPreprints(searchOptions);
     default:
       throw new Error(`Unsupported gene research provider: ${provider}`);
   }

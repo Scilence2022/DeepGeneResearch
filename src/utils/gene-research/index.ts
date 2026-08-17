@@ -100,7 +100,7 @@ export interface GeneResearchResult {
       attempts: Array<{
         query: string;
         provider: string;
-        phase?: 'identity' | 'research' | 'follow_up' | 'retrieval';
+        phase?: 'identity' | 'research' | 'follow_up' | 'retrieval' | 'curation';
         category?: string;
         sourceCount: number;
         durationMs: number;
@@ -265,6 +265,7 @@ export class GeneResearchEngine {
       // symbol for every focus area creates activity without new evidence.
       console.log('Phase 2a: Resolving exact target identity...');
       const searchResults = await this.resolveTargetIdentity();
+      await this.resolveCurationRecords(searchResults);
       await this.resolvePubMedSeeds();
       await this.retrieveResolvedPubMedLiterature(searchResults);
       await this.retrieveUserDocuments(searchResults);
@@ -550,6 +551,95 @@ export class GeneResearchEngine {
       }
     }
     return results;
+  }
+
+  /**
+   * Curation-focused enrichment: GO annotations (QuickGO), InterPro domain
+   * architecture, IntAct interactions, and recent preprint abstracts. These
+   * run once against the resolved identity instead of per template query;
+   * each failure degrades to an empty result without breaking the run.
+   */
+  private async resolveCurationRecords(searchResults: Map<string, any>): Promise<void> {
+    const enabled = new Set(this.config.searchProviders || []);
+    if (enabled.size > 0
+      && !['quickgo', 'interpro', 'intact', 'europepmc_preprints'].some(provider => enabled.has(provider))) {
+      return;
+    }
+    const providers = [
+      { provider: 'quickgo', query: `${this.config.geneSymbol} GO annotations ${this.config.organism}` },
+      { provider: 'interpro', query: `${this.config.target?.proteinId || this.config.geneSymbol} domain architecture` },
+      { provider: 'intact', query: `${this.config.geneSymbol} protein interactions ${this.config.organism}` },
+      { provider: 'europepmc_preprints', query: `${this.config.geneSymbol} preprint evidence ${this.config.organism}` },
+    ].filter(item => enabled.size === 0 || enabled.has(item.provider));
+
+    for (const item of providers) {
+      this.assertNotCancelled();
+      const startedAt = Date.now();
+      this.config.onProgress?.({
+        step: 'gene-search', status: 'start', phase: 'curation', name: item.query, provider: item.provider,
+      });
+      try {
+        const result = await createGeneSearchProvider({
+          provider: item.provider,
+          query: item.query,
+          geneSymbol: this.config.geneSymbol,
+          organism: this.config.organism,
+          locusTag: this.config.target?.locusTag || undefined,
+          proteinId: this.config.target?.proteinId || undefined,
+          taxonId: this.config.target?.taxonId || undefined,
+          identityTerms: Array.from(this.identityTerms),
+          maxResult: this.config.maxSearchResults || 10,
+          signal: this.config.signal,
+        } as any);
+        const error = result?.metadata?.error;
+        const status = result?.metadata?.disabled
+          ? 'empty'
+          : error ? 'error' : result?.sources?.length ? 'success' : 'empty';
+        this.searchAttempts.push({
+          query: item.query,
+          provider: item.provider,
+          phase: 'curation',
+          category: 'basic_info',
+          sourceCount: result?.sources?.length || 0,
+          durationMs: Date.now() - startedAt,
+          status,
+          error,
+          warnings: result?.metadata?.warnings,
+        });
+        const sources = (result?.sources || []).map((source: any) => ({
+          ...source,
+          researchCategory: 'basic_info',
+          evidenceRole: 'reference',
+          contentKind: 'structured-record',
+        }));
+        if (sources.length > 0) {
+          searchResults.set(`curation:${item.provider}`, {
+            ...result,
+            sources,
+            metadata: { ...(result?.metadata || {}), category: 'basic_info', phase: 'curation' },
+          });
+        }
+        this.config.onProgress?.({
+          step: 'gene-search', status: 'end', phase: 'curation', name: item.query,
+          provider: item.provider, sourceCount: sources.length,
+        });
+      } catch (error) {
+        this.assertNotCancelled();
+        this.searchAttempts.push({
+          query: item.query,
+          provider: item.provider,
+          phase: 'curation',
+          category: 'basic_info',
+          sourceCount: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.config.onProgress?.({
+          step: 'gene-search', status: 'end', phase: 'curation', name: item.query, provider: item.provider, sourceCount: 0,
+        });
+      }
+    }
   }
 
   private async resolvePubMedSeeds(): Promise<void> {
@@ -1156,7 +1246,7 @@ export class GeneResearchEngine {
     phase: 'research' | 'follow_up' = 'research'
   ): Promise<Map<string, any>> {
     const searchResults = new Map<string, any>();
-    const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'];
+    const searchProviders = this.config.searchProviders || ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome', 'quickgo', 'interpro', 'intact', 'europepmc_preprints'];
     for (const query of queries) {
       this.assertNotCancelled();
       try {
@@ -2003,7 +2093,7 @@ export const GENE_RESEARCH_PRESETS = {
     enableQualityControl: true,
     enableVisualization: true,
     maxSearchResults: 20,
-    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome']
+    searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome', 'quickgo', 'interpro', 'intact', 'europepmc_preprints']
   },
   
   CLINICAL: {

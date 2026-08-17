@@ -664,7 +664,7 @@ class DeepResearch {
         enableQualityControl: true,
         enableVisualization,
         maxSearchResults: Math.min(100, Math.max(1, this.options.searchProvider.maxResult ?? 5)),
-        searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome'],
+        searchProviders: ['pubmed', 'uniprot', 'ncbi_gene', 'geo', 'pdb', 'kegg', 'string', 'omim', 'ensembl', 'reactome', 'quickgo', 'interpro', 'intact', 'europepmc_preprints'],
         fallbackSearchProvider: this.options.searchProvider,
         ncbiApiKey: process.env.NCBI_API_KEY || process.env.NCBI_EUTILS_API_KEY,
         language: this.options.language,
