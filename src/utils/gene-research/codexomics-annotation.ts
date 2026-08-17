@@ -172,6 +172,14 @@ interface BuildProposalInput {
   confidence?: number | null;
   reportUrl?: string;
   detailsUrl?: string;
+  /**
+   * Prebuilt curation artifacts from the research engine. Passing both keeps
+   * the archived report's note text and the proposal's note mutation
+   * byte-identical; passing neither rebuilds them here. `prebuiltCurationNote`
+   * may be null to explicitly state "no mutation-ready note was derived".
+   */
+  prebuiltResearchSummary?: CodeXomicsAnnotationProposal['researchSummary'];
+  prebuiltCurationNote?: CodeXomicsCurationNote | null;
 }
 
 type MutationField = 'product' | 'EC_number' | 'go_terms' | 'ko' | 'pathway' | 'db_xref';
@@ -1195,10 +1203,21 @@ function collectQualifiedMutationCandidates(
   return Array.from(candidates.values());
 }
 
-export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): CodeXomicsAnnotationProposal {
+export interface CurationSummaryBundle {
+  orderedSources: SourceLike[];
+  evidenceDetails: CodeXomicsEvidenceDetail[];
+  sourceRecords: EvidenceRecord[];
+  researchSummary: CodeXomicsAnnotationProposal['researchSummary'];
+  curationNote: CodeXomicsCurationNote | undefined;
+}
+
+/**
+ * Shared curation pipeline used by both the CodeXomics proposal builder and
+ * the report's Genome Annotation Note section, so the two can never drift.
+ */
+export function buildAnnotationCurationSummary(input: BuildProposalInput): CurationSummaryBundle {
   const finalReport = input.finalReport || '';
   const sources = input.sources || [];
-  const narrativeSummary = extractSummary(finalReport);
   // Prioritize authoritative structured records so a long literature list
   // cannot crowd the exact UniProt/KEGG identity record out of the bounded
   // annotation manifest.
@@ -1275,7 +1294,85 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
       supporting: false,
     });
   }
-  const researchSummary = buildResearchSummary(input, orderedSources, sourceRecords, confidence, narrativeSummary);
+  const researchSummary = buildResearchSummary(input, orderedSources, sourceRecords, confidence, extractSummary(finalReport));
+  const curationNote = input.target ? buildCurationNote(researchSummary) : undefined;
+  return { orderedSources, evidenceDetails, sourceRecords, researchSummary, curationNote };
+}
+
+/**
+ * Deterministic markdown section summarizing the gene for the GenBank /note
+ * qualifier. When a citation-bound curation note exists it is reproduced
+ * verbatim (it is hash-bound and must never be paraphrased); otherwise the
+ * authoritative key facts are presented as an informational summary that is
+ * explicitly not mutation-ready.
+ */
+export function formatGenomeAnnotationNoteSection(options: {
+  geneSymbol: string;
+  organism: string;
+  researchSummary: CodeXomicsAnnotationProposal['researchSummary'];
+  curationNote?: CodeXomicsCurationNote | null;
+}): string {
+  const { geneSymbol, organism, researchSummary, curationNote } = options;
+  const lines: string[] = [
+    '## Genome Annotation Note',
+    '',
+    `Key summary of **${geneSymbol}** in *${organism}*, suitable for the GenBank \`/note\` qualifier after human review. Every statement is derived from exact-target evidence; the note never reopens already-applied annotation qualifiers.`,
+    '',
+  ];
+  if (curationNote?.text) {
+    lines.push('### Proposed note text (citation-bound, mutation-ready)');
+    lines.push('');
+    lines.push(curationNote.text);
+    lines.push('');
+    lines.push(`- **Included facts**: ${curationNote.coverage.includedFactCount} of ${curationNote.coverage.availableFactCount}`);
+    lines.push(`- **Categories**: ${curationNote.coverage.includedCategories.join(', ') || 'none'}`);
+    const citedPmids = Array.from(new Set(
+      curationNote.segments
+        .flatMap(segment => segment.citations || [])
+        .map(citation => citation.id),
+    ));
+    lines.push(`- **Citations**: ${citedPmids.map(pmid => `[PMID:${pmid}](https://pubmed.ncbi.nlm.nih.gov/${pmid}/)`).join(', ') || 'none'}`);
+    lines.push('');
+  } else {
+    lines.push('### Informational summary (not mutation-ready)');
+    lines.push('');
+    lines.push(`> ${researchSummary.headline || `Evidence-based research summary for ${geneSymbol} in ${organism}.`}`);
+    lines.push('');
+    if (researchSummary.facts.length > 0) {
+      lines.push('Key exact-target facts:');
+      lines.push('');
+      for (const fact of researchSummary.facts.slice(0, 12)) {
+        lines.push(`- ${fact.statement.replace(/\s+/g, ' ').trim()}`);
+      }
+      lines.push('');
+    }
+    lines.push('No citation-bound literature statement satisfied the conservative curation criteria, so no automatic `/note` text is proposed. The facts above are provided for a human curator to compose the note.');
+    lines.push('');
+  }
+  if (researchSummary.limitations.length > 0) {
+    lines.push('**Limitations**: ' + researchSummary.limitations.join(' '));
+    lines.push('');
+  }
+  return lines.join('\n').trimEnd();
+}
+
+export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): CodeXomicsAnnotationProposal {
+  const finalReport = input.finalReport || '';
+  const sources = input.sources || [];
+  const narrativeSummary = extractSummary(finalReport);
+  const bundle = buildAnnotationCurationSummary(input);
+  const orderedSources = bundle.orderedSources;
+  const evidenceDetails = bundle.evidenceDetails;
+  const sourceRecords = bundle.sourceRecords;
+  // The engine can provide the exact summary/note pair already embedded in the
+  // archived report. Reusing them keeps the report and the proposal
+  // byte-identical; otherwise the pair is rebuilt from the same inputs.
+  const researchSummary = input.prebuiltResearchSummary ?? bundle.researchSummary;
+  const proposedCurationNote = input.prebuiltCurationNote !== undefined
+    ? input.prebuiltCurationNote
+    : buildCurationNote(researchSummary);
+  const generatedAt = new Date().toISOString();
+  const confidence = normalizeConfidence(input.confidence);
   const summary = researchSummary.headline || narrativeSummary;
   const qualifiedCandidates = collectQualifiedMutationCandidates(sources, input.target, input.currentAnnotation);
   const claims: AnnotationChangeSetProposal['claims'] = [];
@@ -1340,7 +1437,9 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
     }
   }
 
-  const proposedCurationNote = input.target ? buildCurationNote(researchSummary) : undefined;
+  // The note is only mutated when the target's current annotation does not
+  // already carry identical text; an already-applied annotation is never
+  // reopened by a repeated research run.
   const curationNote = proposedCurationNote && !currentAnnotationHasValue(
     input.currentAnnotation,
     'note',

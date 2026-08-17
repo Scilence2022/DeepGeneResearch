@@ -1,7 +1,11 @@
 import { createHash } from 'crypto';
 import { describe, expect, it } from 'vitest';
 import { assertAnnotationChangeSetProposalIntegrity } from '@/contracts/annotation-change-set';
-import { buildCodeXomicsAnnotationProposal } from './codexomics-annotation';
+import {
+  buildAnnotationCurationSummary,
+  buildCodeXomicsAnnotationProposal,
+  formatGenomeAnnotationNoteSection,
+} from './codexomics-annotation';
 import { canonicalizePubMedAbstract } from './literature-findings';
 
 const target = {
@@ -670,5 +674,122 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     proposal.claims[0].evidenceIds = [];
 
     expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).toThrow('has no supporting evidence');
+  });
+});
+
+describe('Genome Annotation Note reporting', () => {
+  const lysCLiteratureSource = {
+    title: 'Direct control of the Escherichia coli lysC riboswitch',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/38253429/',
+    database: 'pubmed',
+    provenance: { provider: 'pubmed', recordId: '38253429' },
+    structuredData: {
+      targetRelevance: { accepted: true, score: 12, directness: 'direct', reason: 'exact target and organism' },
+      literatureReferences: [{
+        pmid: '38253429',
+        abstract: 'In Escherichia coli, lysC expression is repressed by a lysine-responsive regulatory mechanism.',
+      }],
+    },
+  };
+  const lysCTarget = { ...target, featureId: 'b4024', locusTag: 'b4024', geneSymbol: 'lysC' };
+
+  it('derives a shared summary/note bundle usable by both report and proposal', () => {
+    const bundle = buildAnnotationCurationSummary({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: lysCTarget,
+      finalReport: 'lysC regulation summary PMID:38253429',
+      sources: [lysCLiteratureSource],
+    });
+
+    expect(bundle.curationNote?.text).toContain('(PMID:38253429)');
+    expect(bundle.researchSummary.headline.length).toBeGreaterThan(0);
+  });
+
+  it('formats a mutation-ready note section that reproduces the note verbatim', () => {
+    const bundle = buildAnnotationCurationSummary({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: lysCTarget,
+      finalReport: 'lysC regulation summary PMID:38253429',
+      sources: [lysCLiteratureSource],
+    });
+
+    const section = formatGenomeAnnotationNoteSection({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      researchSummary: bundle.researchSummary,
+      curationNote: bundle.curationNote,
+    });
+
+    expect(section).toContain('## Genome Annotation Note');
+    expect(section).toContain('mutation-ready');
+    expect(section).toContain(String(bundle.curationNote?.text));
+    expect(section).toContain('[PMID:38253429](https://pubmed.ncbi.nlm.nih.gov/38253429/)');
+  });
+
+  it('formats an informational summary and refuses to invent mutation text without citations', () => {
+    const bundle = buildAnnotationCurationSummary({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target,
+      finalReport: 'Structured evidence without citation-bound literature findings.',
+      sources: [exactStructuredSource()],
+    });
+
+    expect(bundle.curationNote).toBeUndefined();
+    const section = formatGenomeAnnotationNoteSection({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      researchSummary: bundle.researchSummary,
+      curationNote: bundle.curationNote,
+    });
+    expect(section).toContain('## Genome Annotation Note');
+    expect(section).toContain('not mutation-ready');
+    expect(section).not.toContain('### Proposed note text');
+  });
+
+  it('reuses the prebuilt summary/note so the proposal matches the archived report byte-for-byte', () => {
+    const bundle = buildAnnotationCurationSummary({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: lysCTarget,
+      finalReport: 'lysC regulation summary PMID:38253429',
+      sources: [lysCLiteratureSource],
+    });
+
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: lysCTarget,
+      currentAnnotation: { product: 'aspartate kinase III' },
+      finalReport: 'A later narrative that would no longer surface the finding on its own.',
+      sources: [lysCLiteratureSource],
+      prebuiltResearchSummary: bundle.researchSummary,
+      prebuiltCurationNote: bundle.curationNote,
+    });
+
+    expect(proposal.updates.note).toBe(bundle.curationNote?.text);
+    expect(proposal.curationNote?.text).toBe(bundle.curationNote?.text);
+    expect(proposal.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ op: 'addQualifier', field: 'note', value: bundle.curationNote?.text }),
+    ]));
+    expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).not.toThrow();
+  });
+
+  it('honours an explicit null prebuilt note so an applied annotation is never reopened', () => {
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'lysC',
+      organism: 'Escherichia coli',
+      target: lysCTarget,
+      currentAnnotation: { product: 'aspartate kinase III' },
+      finalReport: 'lysC regulation summary PMID:38253429',
+      sources: [lysCLiteratureSource],
+      prebuiltCurationNote: null,
+    });
+
+    expect(proposal.curationNote).toBeUndefined();
+    expect(proposal.operations.some(operation => operation.field === 'note')).toBe(false);
+    expect(proposal.updates.note).toBeUndefined();
   });
 });
