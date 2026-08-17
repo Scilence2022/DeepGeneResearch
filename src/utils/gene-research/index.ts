@@ -18,6 +18,14 @@ import {
 import type { CurrentAnnotationSnapshot, GenomeTargetRef } from '@/contracts/annotation-change-set';
 import { buildExactAnnotationFieldEvidence } from './current-annotation';
 import {
+  buildAnnotationCurationSummary,
+  formatGenomeAnnotationNoteSection,
+} from './codexomics-annotation';
+import type {
+  CodeXomicsAnnotationProposal,
+  CodeXomicsCurationNote,
+} from './codexomics-annotation';
+import {
   hasStableGeneResearchIdentity,
   isProteinCodingFeatureType,
   isSupportedGeneAnnotationFeatureType,
@@ -85,6 +93,10 @@ export interface GeneResearchResult {
   visualizations: any[];
   report: any;
   sources: any[];
+  /** Citation-bound /note text derived from exact-target facts, or null. */
+  annotationNote?: CodeXomicsCurationNote | null;
+  /** Structured facts/literature highlights backing the annotation note. */
+  researchSummary?: CodeXomicsAnnotationProposal['researchSummary'];
   metadata: {
     researchTime: number;
     dataSources: string[];
@@ -364,6 +376,8 @@ export class GeneResearchEngine {
         visualizations,
         report,
         sources,
+        annotationNote: (report as any)?.annotationNote ?? null,
+        researchSummary: (report as any)?.researchSummary ?? null,
         metadata: {
           researchTime,
           dataSources: this.getDataSources(searchResults, apiData),
@@ -1994,9 +2008,37 @@ export class GeneResearchEngine {
     if (visualizations.length > 0 && hasEvidence) {
       sections[0].visualizations.push(...visualizations.filter(viz => viz.metadata?.geneSymbol === this.config.geneSymbol));
     }
+    const title = `Evidence-based Gene Function Research Report: ${this.config.geneSymbol} in ${this.config.organism}`;
+    // Build the curation summary from the assembled template text so the note
+    // section is derived from exactly the evidence the report presents.
+    const templateReportText = `${title}\n\n${sections.map(section => section.content).join('\n\n')}`;
+    const curationBundle = buildAnnotationCurationSummary({
+      geneSymbol: this.config.geneSymbol,
+      organism: this.config.organism,
+      target: this.config.target as GenomeTargetRef | undefined,
+      currentAnnotation: this.config.currentAnnotation,
+      finalReport: templateReportText,
+      sources: sources as any[],
+      confidence: qualityMetrics.overallQuality,
+    });
+    sections.push({
+      id: 'genome-annotation-note',
+      title: 'Genome Annotation Note',
+      priority: 'high',
+      required: false,
+      content: formatGenomeAnnotationNoteSection({
+        geneSymbol: this.config.geneSymbol,
+        organism: this.config.organism,
+        researchSummary: curationBundle.researchSummary,
+        curationNote: curationBundle.curationNote,
+      }),
+      visualizations: [],
+    });
     return {
-      title: `Evidence-based Gene Function Research Report: ${this.config.geneSymbol} in ${this.config.organism}`,
+      title,
       sections,
+      annotationNote: curationBundle.curationNote ?? null,
+      researchSummary: curationBundle.researchSummary,
       metadata: {
         geneSymbol: this.config.geneSymbol,
         organism: this.config.organism,

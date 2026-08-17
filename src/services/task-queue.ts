@@ -300,6 +300,11 @@ export class TaskQueue extends EventEmitter {
           result.qualityMetrics?.overallQuality ??
           result.geneResearch?.qualityMetrics?.overallQuality ??
           null,
+        // Reuse the note/summary pair embedded in the archived report so the
+        // proposal's /note mutation is byte-identical to the report section.
+        // Legacy cached results without the fields rebuild them here.
+        prebuiltResearchSummary: result?.researchSummary ?? undefined,
+        prebuiltCurationNote: result?.annotationNote !== undefined ? result.annotationNote : undefined,
       }),
     };
   }

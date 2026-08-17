@@ -22,6 +22,7 @@ import { ThinkTagStreamProcessor, removeJsonMarkdown } from "@/utils/text";
 import { pick, unique, flat, isFunction } from "radash";
 import { createGeneResearchEngine } from "@/utils/gene-research";
 import { assessGeneTargetRelevance } from "@/utils/gene-research/search-providers";
+import { formatGenomeAnnotationNoteSection } from "@/utils/gene-research/codexomics-annotation";
 import type { CurrentAnnotationSnapshot } from "@/contracts/annotation-change-set";
 
 export interface DeepResearchOptions {
@@ -759,11 +760,33 @@ class DeepResearch {
         signal,
         enableReferences: true,
       });
-      const finalReport = synthesizedReport || templateReport;
+      let finalReport = synthesizedReport || templateReport;
+
+      // The Genome Annotation Note is a hash-bound, citation-bound artifact.
+      // It must reach the archived report verbatim, so a synthesized narrative
+      // can never paraphrase, relocate, or drop it.
+      const annotationNote = (result as any)?.annotationNote ?? null;
+      const researchSummary = (result as any)?.researchSummary ?? null;
+      if (annotationNote?.text || researchSummary?.headline) {
+        const noteSection = formatGenomeAnnotationNoteSection({
+          geneSymbol: geneInfo.geneSymbol,
+          organism: geneInfo.organism,
+          researchSummary,
+          curationNote: annotationNote,
+        });
+        const alreadyPresent = annotationNote?.text
+          ? finalReport.includes(annotationNote.text)
+          : finalReport.includes('## Genome Annotation Note');
+        if (!alreadyPresent) {
+          finalReport = `${finalReport.trimEnd()}\n\n${noteSection}`;
+        }
+      }
 
       const researchResult = {
         title: result.report.title,
         finalReport,
+        annotationNote,
+        researchSummary,
         learnings: [
           ...llmLearnings,
           ...result.sources.flatMap((source: any) =>
