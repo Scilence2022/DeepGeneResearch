@@ -124,6 +124,12 @@ export interface SearchProviderOptions {
   query: string;
   maxResult?: number;
   scope?: string;
+  /**
+   * Google-style time-range filter (e.g. "qdr:y" for the past year). Search is
+   * unrestricted by default: literature research must not silently exclude
+   * older, still-authoritative publications.
+   */
+  timeRange?: string;
   signal?: AbortSignal;
 }
 
@@ -134,6 +140,7 @@ export async function createSearchProvider({
   query,
   maxResult = 5,
   scope,
+  timeRange,
   signal,
 }: SearchProviderOptions) {
   const headers: HeadersInit = {
@@ -183,7 +190,7 @@ export async function createSearchProvider({
         body: JSON.stringify({
           query,
           limit: maxResult,
-          tbs: "qdr:w",
+          ...(timeRange ? { tbs: timeRange } : {}),
           origin: "api",
           scrapeOptions: {
             formats: ["markdown"],
