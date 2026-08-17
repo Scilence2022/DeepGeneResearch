@@ -161,8 +161,18 @@ export function assertAnnotationChangeSetProposalIntegrity(proposal: AnnotationC
     throw new Error('Annotation proposal contains duplicate claim IDs');
   }
 
+  // A no-information-found note records the search itself rather than a
+  // biological claim, so its note claim carries no evidence records. Every
+  // other claim still requires supporting evidence.
+  const noInformationNoteText = (proposal as any)?.curationNote?.kind === 'no_information_found'
+    ? String((proposal as any)?.curationNote?.text || '')
+    : null;
+
   for (const claim of proposal.claims) {
     if (claim.evidenceIds.length === 0) {
+      if (noInformationNoteText !== null && claim.field === 'note' && claim.value === noInformationNoteText) {
+        continue;
+      }
       throw new Error(`Annotation claim ${claim.id} has no supporting evidence`);
     }
     for (const evidenceId of claim.evidenceIds) {

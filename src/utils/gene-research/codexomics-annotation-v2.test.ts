@@ -382,6 +382,12 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     expect(proposal.curationNote?.text).toContain('Supporting sources:');
     expect(proposal.curationNote?.text).toContain('PMID:12000000.');
     expect(proposal.curationNote?.text).toContain('PMID:12000037.');
+    // Standard notes end with the agent/timestamp provenance clause.
+    expect(proposal.curationNote?.kind).toBe('standard');
+    expect(proposal.curationNote?.provenance?.agent).toBe('Deep Gene Research');
+    expect(proposal.curationNote?.text).toMatch(
+      / Annotation by Deep Gene Research on [A-Z][a-z]+ \d{1,2}, \d{4}\.$/
+    );
     // The integrity assert must accept the citation clause as part of the
     // hash-bound text.
     expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).not.toThrow();
@@ -503,7 +509,7 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
       .toEqual([]);
   });
 
-  it('rejects report text and Searx snippets as mutation evidence', () => {
+  it('rejects report text and Searx snippets as mutation evidence and records the fruitless search as a no-information note', () => {
     const proposal = buildCodeXomicsAnnotationProposal({
       geneSymbol: 'thrB',
       organism: 'Escherichia coli',
@@ -518,15 +524,28 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
       }],
     });
 
-    expect(proposal.status).toBe('draft_requires_evidence');
-    expect(proposal.operations).toEqual([]);
-    expect(proposal.claims).toEqual([]);
-    expect(proposal.updates).toEqual({});
+    // Junk evidence never becomes a biological claim: no qualifiers change.
     expect(proposal.ecNumbers).toEqual([]);
     expect(proposal.goTerms).toEqual([]);
     expect(proposal.pathwayTerms).toEqual([]);
     expect(proposal.dbXrefs).toEqual([]);
     expect(proposal.evidenceManifest.sourceRecords.every(record => !record.supporting)).toBe(true);
+    // The search itself is recorded so the /note qualifier stops being stale.
+    expect(proposal.status).toBe('ready_for_validation');
+    expect(proposal.curationNote?.kind).toBe('no_information_found');
+    expect(proposal.curationNote?.text).toMatch(
+      /^No information about this protein was found by a literature search conducted on [A-Z][a-z]+ \d{1,2}, \d{4}\. Annotation by Deep Gene Research on [A-Z][a-z]+ \d{1,2}, \d{4}\.$/
+    );
+    expect(proposal.curationNote?.segments).toEqual([]);
+    expect(proposal.curationNote?.evidenceIds).toEqual([]);
+    expect(proposal.operations).toEqual([
+      expect.objectContaining({ op: 'addQualifier', field: 'note' }),
+    ]);
+    expect(proposal.claims).toEqual([
+      expect.objectContaining({ field: 'note', evidenceIds: [] }),
+    ]);
+    expect(proposal.updates.note).toBe(proposal.curationNote?.text);
+    expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).not.toThrow();
   });
 
   it('rejects an authoritative-looking source that is not matched to the exact target', () => {

@@ -4,10 +4,12 @@ import packageMetadata from '../../package.json';
 import { normalizeAnnotationQualifierValue } from '@/utils/gene-research/current-annotation';
 import type { CurrentAnnotationSnapshot } from '@/contracts/annotation-change-set';
 
-// v6 invalidates results built before the annotation-note, literature-metrics,
+// v7 invalidates results built before no-information notes and the agent/timestamp
+// provenance clause. v6 invalidated pre-note results; v6-era results lack the
+// provenance suffix and must not be reused.
 // and all-source-citation semantics. Older cached results lack the note
 // artifact and would silently suppress the Genome Annotation Note update.
-const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v6';
+const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v7';
 const NON_SEMANTIC_PARAMETER_KEYS = new Set([
   'idempotencyKey',
   'correlationId',
