@@ -252,11 +252,15 @@ export function buildFullTextEvidenceSpans(
   const results: FullTextEvidenceSpan[] = [];
   const seen = new Set<string>();
   const perCategory = new Map<string, number>();
+  // The per-category cap keeps one prolific category from crowding out the
+  // rest, but scales with the requested budget so comprehensive runs surface
+  // more verifiable result statements per document.
+  const perCategoryLimit = Math.max(3, Math.ceil(maxFindings / 6));
   for (let index = 0; index < sentences.length && results.length < maxFindings; index += 1) {
     const sentence = sentences[index];
     if (sentence.text.length < 30 || sentence.text.length > 900 || !RESULT_PATTERN.test(sentence.text)) continue;
     const category = CATEGORY_PATTERNS.find(([, pattern]) => pattern.test(sentence.text))?.[0];
-    if (!category || (perCategory.get(category) || 0) >= 3) continue;
+    if (!category || (perCategory.get(category) || 0) >= perCategoryLimit) continue;
     const contextIndex = hasIdentity(sentence.text, terms)
       ? index
       : index > 0 && hasIdentity(sentences[index - 1].text, terms)

@@ -53,6 +53,10 @@ export interface GeneResearchConfig {
   literatureBudget?: number;
   /** Open-access full texts attempted for verifiable evidence spans. */
   fullTextBudget?: number;
+  /** Evidence-gap follow-up search rounds (early-stops when a round yields nothing new). */
+  followUpRounds?: number;
+  /** Gap queries issued per follow-up round. */
+  followUpGapQueries?: number;
   searchProviders?: string[];
   fallbackSearchProvider?: {
     provider: string;
@@ -195,6 +199,15 @@ export class GeneResearchEngine {
     return Math.min(Math.max(this.config.literatureBudget ?? 300, 10), 2_000);
   }
 
+  /**
+   * Citation-bound evidence spans per full text. Scales with the literature
+   * budget so comprehensive runs surface more verifiable result statements
+   * instead of the fixed legacy 18-span ceiling.
+   */
+  private get evidenceSpanBudget(): number {
+    return Math.min(Math.max(18, Math.round(this.literatureBudget / 10)), 120);
+  }
+
   private assertSupportedTarget(): void {
     if (!this.config.target) return;
     if (!isSupportedGeneAnnotationFeatureType(this.config.target.featureType)) {
@@ -259,18 +272,22 @@ export class GeneResearchEngine {
       this.mergeSearchResultMaps(searchResults, initialResults);
       await this.retrieveDiscoveryContent(searchResults);
 
-      // Phase 2c: inspect actual coverage and issue bounded follow-ups for
-      // missing high-priority evidence. Stop early when a round adds no new
-      // sources, which makes depth evidence-driven rather than time-driven.
+      // Phase 2c: inspect actual coverage and issue follow-ups for missing
+      // high-priority evidence. Rounds and per-round gap queries scale with
+      // the run's ambition; the loop still stops early when a round adds no
+      // new sources, which keeps depth evidence-driven rather than
+      // time-driven.
+      const followUpRounds = Math.min(Math.max(this.config.followUpRounds ?? 3, 1), 5);
+      const followUpGapQueries = Math.min(Math.max(this.config.followUpGapQueries ?? 6, 1), 12);
       const allResearchQueries = [...queries];
       let followUpQueryCount = 0;
-      for (let round = 1; round <= 2; round += 1) {
+      for (let round = 1; round <= followUpRounds; round += 1) {
         const coverageBefore = this.assessEvidenceCoverage(searchResults, allResearchQueries);
         const followUpQueries = this.buildEvidenceGapQueries(
           coverageBefore,
           allResearchQueries,
           round
-        ).slice(0, 4);
+        ).slice(0, followUpGapQueries);
         if (followUpQueries.length === 0) break;
 
         console.log(`Phase 2c.${round}: Executing ${followUpQueries.length} evidence-gap follow-up searches...`);
@@ -655,7 +672,7 @@ export class GeneResearchEngine {
         const fullText = await parseUserResearchPdf(documentId);
         const relevance = this.assessSourceRelevance({ title: fullText.name, content: fullText.text });
         const evidence = relevance.accepted
-          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), 18)
+          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
           : [];
         const accepted = relevance.accepted && evidence.length > 0;
         const source = {
@@ -751,7 +768,7 @@ export class GeneResearchEngine {
         }
         const relevance = this.assessSourceRelevance({ title: source.title, content: fullText.text });
         const evidence = relevance.accepted
-          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), 18)
+          ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
           : [];
         source.fullText = fullText;
         source.fullTextEvidence = evidence;
@@ -1743,7 +1760,8 @@ export class GeneResearchEngine {
         proteinId: this.config.target?.proteinId,
         identityTerms: Array.from(this.identityTerms),
       },
-      24,
+      Math.min(60, Math.max(24, Math.round(this.literatureBudget / 8))),
+      Math.max(2, Math.min(4, Math.round(this.literatureBudget / 150))),
     );
     const escapeMarkdown = (value: unknown) => String(value || '')
       .replace(/\\/g, '\\\\')
