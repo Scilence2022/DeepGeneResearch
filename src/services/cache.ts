@@ -4,7 +4,10 @@ import packageMetadata from '../../package.json';
 import { normalizeAnnotationQualifierValue } from '@/utils/gene-research/current-annotation';
 import type { CurrentAnnotationSnapshot } from '@/contracts/annotation-change-set';
 
-const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v5';
+// v6 invalidates results built before the annotation-note, literature-metrics,
+// and all-source-citation semantics. Older cached results lack the note
+// artifact and would silently suppress the Genome Annotation Note update.
+const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v6';
 const NON_SEMANTIC_PARAMETER_KEYS = new Set([
   'idempotencyKey',
   'correlationId',

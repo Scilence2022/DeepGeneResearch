@@ -793,6 +793,72 @@ describe('Genome Annotation Note reporting', () => {
     expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).not.toThrow();
   });
 
+  it('builds a citation-backed note from authoritative facts when only Gene-linked literature exists', () => {
+    const ylbHTarget = { ...target, featureId: 'b0499', locusTag: 'b0499', geneSymbol: 'ylbH' };
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'ylbH',
+      organism: 'Escherichia coli',
+      target: ylbHTarget,
+      currentAnnotation: { product: 'putative RHS domain-containing protein YlbH' },
+      sources: [
+        exactStructuredSource({
+          matchedTarget: ylbHTarget,
+          currentProduct: 'putative RHS domain-containing protein YlbH',
+        }),
+        {
+          title: 'The complete genome sequence of Escherichia coli K-12.',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/9278503/',
+          database: 'pubmed',
+          provenance: { provider: 'pubmed', recordId: '9278503' },
+          structuredData: {
+            targetRelevance: {
+              accepted: true,
+              score: 11,
+              directness: 'gene_linked_context',
+              reason: 'linked from the exact NCBI Gene record',
+            },
+            literatureReferences: [{
+              pmid: '9278503',
+              year: 1997,
+              abstract: 'The complete genome sequence of Escherichia coli K-12 includes the ylbH locus.',
+            }],
+          },
+        },
+      ],
+    });
+
+    // No direct literature finding exists, but the authoritative facts plus
+    // the complete Gene-linked bibliography must still yield a reviewable
+    // citation-backed note.
+    expect(proposal.curationNote).toBeDefined();
+    expect(proposal.curationNote?.allSourceCitations).toHaveLength(1);
+    expect(proposal.curationNote?.allSourceCitations[0]).toMatchObject({
+      kind: 'pmid',
+      id: '9278503',
+    });
+    expect(proposal.curationNote?.text).toContain('Supporting sources: PMID:9278503.');
+    expect(proposal.curationNote?.segments.length).toBeGreaterThan(0);
+    expect(proposal.updates.note).toBe(proposal.curationNote?.text);
+    expect(proposal.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ op: 'addQualifier', field: 'note', value: proposal.curationNote?.text }),
+    ]));
+    expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).not.toThrow();
+  });
+
+  it('stays fail-closed when no literature citation exists at all', () => {
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'thrB',
+      organism: 'Escherichia coli',
+      target,
+      currentAnnotation: { product: 'legacy kinase annotation' },
+      sources: [exactStructuredSource()],
+    });
+
+    expect(proposal.curationNote).toBeUndefined();
+    expect(proposal.operations.some(operation => operation.field === 'note')).toBe(false);
+    expect(proposal.updates.note).toBeUndefined();
+  });
+
   it('honours an explicit null prebuilt note so an applied annotation is never reopened', () => {
     const proposal = buildCodeXomicsAnnotationProposal({
       geneSymbol: 'lysC',

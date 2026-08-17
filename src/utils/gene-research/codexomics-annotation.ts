@@ -827,6 +827,7 @@ const NOTE_AUTHORITATIVE_FIELDS = new Set([
   'catalytic_activity',
   'enzyme_classification',
   'biological_process',
+  'pathway_identifiers',
   'family_or_domains',
   'cellular_component',
   'subcellular_location',
@@ -856,13 +857,14 @@ function noteSentence(statement: string): string {
 function buildCurationNote(
   summary: CodeXomicsAnnotationProposal['researchSummary'],
 ): CodeXomicsCurationNote | undefined {
-  // A mutation-ready note must contain at least one exact, citation-bound
-  // literature result. Authoritative-only records still populate the normal
-  // structured qualifiers but do not create an uncited narrative annotation.
+  // A mutation-ready note must contain at least one segment and must stay
+  // citation-bound. Direct literature statements supply per-segment PMIDs;
+  // when none exist, authoritative database facts may form the narrative as
+  // long as the complete retained bibliography still backs the note through
+  // the Supporting sources clause. Zero-literature runs remain fail-closed.
   const literatureFacts = summary.facts.filter(fact =>
     fact.evidenceLevel === 'target_literature' && fact.citation?.type === 'pmid'
   );
-  if (literatureFacts.length === 0) return undefined;
 
   const authoritativeFieldSeen = new Set<string>();
   const authoritativeFacts = summary.facts.filter(fact => {
@@ -914,17 +916,9 @@ function buildCurationNote(
     });
   }
 
-  // Fail closed if the length bound prevented every literature citation from
-  // being represented. An authoritative prose-only note would not satisfy the
-  // curation contract promised by this field.
-  if (!segments.some(segment => segment.citations.length > 0)) return undefined;
-  const narrativeText = segments.map(segment => segment.text).join(' ');
-  const factIds = dedupe(segments.flatMap(segment => segment.factIds));
-  const included = new Set(factIds);
-
   // The note must cite every retained source, not only the sources behind the
-  // narrative segments. Enumerate the complete bibliography into a verbatim
-  // citation clause, bounded by the same length contract as the narrative.
+  // narrative segments. Build the complete bibliography citations before the
+  // fail-closed check so they can back an authoritative-fact narrative.
   const allSourceCitations: CodeXomicsCurationNote['allSourceCitations'] = [];
   const seenCitations = new Set<string>();
   for (const item of summary.literature) {
@@ -956,6 +950,18 @@ function buildCurationNote(
       }
     }
   }
+
+  // Fail closed when no segment exists, or when neither the segments nor the
+  // complete bibliography carry a single citation. A zero-literature run can
+  // therefore never produce a mutation-ready note.
+  if (segments.length === 0) return undefined;
+  if (allSourceCitations.length === 0 && !segments.some(segment => segment.citations.length > 0)) {
+    return undefined;
+  }
+  const narrativeText = segments.map(segment => segment.text).join(' ');
+  const factIds = dedupe(segments.flatMap(segment => segment.factIds));
+  const included = new Set(factIds);
+
   const citationTextParts: string[] = [];
   const omittedCitationLabels: string[] = [];
   let citationTextLength = narrativeText.length;
