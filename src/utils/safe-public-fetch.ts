@@ -15,7 +15,11 @@ for (const [address, prefix] of [
   ['172.16.0.0', 12],
   ['192.0.0.0', 24],
   ['192.168.0.0', 16],
-  ['198.18.0.0', 15],
+  // 198.18.0.0/15 (RFC 2544 benchmarking) is intentionally NOT blocked: local
+  // proxies (Clash/Surge fake-ip) answer every DNS query from this range, so
+  // blocking it makes the guard reject the entire Internet on proxied dev
+  // machines. On servers without such a proxy the range is unroutable, so a
+  // hostile DNS answer pointing there cannot reach any internal target.
   ['224.0.0.0', 4],
   ['240.0.0.0', 4],
 ] as const) {

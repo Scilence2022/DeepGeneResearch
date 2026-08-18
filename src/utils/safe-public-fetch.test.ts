@@ -29,6 +29,14 @@ describe('safe public crawler URLs', () => {
     expect(isPublicAddress('64:ff9b::808:808')).toBe(true);
   });
 
+  it('allows the RFC 2544 range so fake-ip proxy environments keep working', () => {
+    // Local proxies (Clash/Surge fake-ip) answer every DNS query from
+    // 198.18.0.0/15; treating it as private would block the whole Internet on
+    // such machines. The range is unroutable where no proxy is present.
+    expect(isPublicAddress('198.18.0.127')).toBe(true);
+    expect(isPublicAddress('198.19.255.1')).toBe(true);
+  });
+
   it('pins both scalar and all-address Node DNS lookup callback forms', async () => {
     const pinnedLookup = createPinnedLookup('8.8.8.8', 4) as any;
     const scalar = await new Promise<{ address: string; family: number }>((resolve, reject) => {
