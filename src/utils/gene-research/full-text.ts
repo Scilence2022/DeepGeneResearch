@@ -189,7 +189,15 @@ export async function retrieveEuropePmcFullText(pmid: string): Promise<FullTextD
   if (!/^PMC\d+$/.test(pmcid)) return null;
 
   const sourceUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/fullTextXML`;
-  const response = await fetchPublicText(sourceUrl, { maxBytes: 12_000_000, timeoutMs: 25_000 });
+  let response: Awaited<ReturnType<typeof fetchPublicText>>;
+  try {
+    response = await fetchPublicText(sourceUrl, { maxBytes: 12_000_000, timeoutMs: 25_000 });
+  } catch (error) {
+    // A PMC record without publisher-open full text answers 404. That is the
+    // normal "no open full text" outcome, not a retrieval failure.
+    if (/404\b/.test(error instanceof Error ? error.message : String(error))) return null;
+    throw error;
+  }
   const text = pmcXmlToText(response.body);
   if (text.length < 1_000) return null;
   if (text.length > MAX_FULL_TEXT_CHARACTERS) {

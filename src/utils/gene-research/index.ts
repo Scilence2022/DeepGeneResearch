@@ -25,6 +25,7 @@ import type {
   CodeXomicsAnnotationProposal,
   CodeXomicsCurationNote,
 } from './codexomics-annotation';
+import type { EvidenceRecord } from '@/contracts/annotation-change-set';
 import {
   hasStableGeneResearchIdentity,
   isProteinCodingFeatureType,
@@ -97,6 +98,8 @@ export interface GeneResearchResult {
   annotationNote?: CodeXomicsCurationNote | null;
   /** Structured facts/literature highlights backing the annotation note. */
   researchSummary?: CodeXomicsAnnotationProposal['researchSummary'];
+  /** Evidence-record set the prebuilt summary/note IDs refer to. */
+  evidenceRecords?: EvidenceRecord[] | null;
   metadata: {
     researchTime: number;
     dataSources: string[];
@@ -378,6 +381,7 @@ export class GeneResearchEngine {
         sources,
         annotationNote: (report as any)?.annotationNote ?? null,
         researchSummary: (report as any)?.researchSummary ?? null,
+        evidenceRecords: (report as any)?.evidenceRecords ?? null,
         metadata: {
           researchTime,
           dataSources: this.getDataSources(searchResults, apiData),
@@ -1066,8 +1070,14 @@ export class GeneResearchEngine {
   ): GeneSearchTask[] {
     const gene = this.config.geneSymbol;
     const organism = this.config.organism;
+    // Bare numeric identifiers (a GeneID such as 2847703 numerically equals
+    // an unrelated PMID) must never become the subject of a PubMed query:
+    // PubMed resolves them as UID matches and retrieves an off-target paper.
+    const isBareOrPrefixedId = (term: string) => /^(?:geneid|ncbi_gene?)[:\s]*\d+$/i.test(term) || /^\d+$/.test(term);
     const product = Array.from(this.identityTerms)
-      .find(term => term !== gene.toLowerCase() && term !== String(this.config.target?.locusTag || '').toLowerCase());
+      .find(term => term !== gene.toLowerCase()
+        && term !== String(this.config.target?.locusTag || '').toLowerCase()
+        && !isBareOrPrefixedId(term));
     const subject = product || gene;
     const templates: Record<string, string> = {
       basic_info: `${gene} ${this.config.target?.locusTag || ''} ${this.config.target?.proteinId || ''} accession locus identity ${organism}`,
@@ -2043,6 +2053,10 @@ export class GeneResearchEngine {
       sections,
       annotationNote: curationBundle.curationNote ?? null,
       researchSummary: curationBundle.researchSummary,
+      // The evidence-record set the prebuilt summary/note IDs refer to. It
+      // must travel with them so downstream proposal assembly never renumbers
+      // records out from under the citation bindings.
+      evidenceRecords: curationBundle.sourceRecords,
       metadata: {
         geneSymbol: this.config.geneSymbol,
         organism: this.config.organism,
