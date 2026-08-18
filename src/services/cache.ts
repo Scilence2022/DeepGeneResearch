@@ -9,7 +9,7 @@ import type { CurrentAnnotationSnapshot } from '@/contracts/annotation-change-se
 // provenance suffix and must not be reused.
 // and all-source-citation semantics. Older cached results lack the note
 // artifact and would silently suppress the Genome Annotation Note update.
-const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v7';
+const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v8';
 const NON_SEMANTIC_PARAMETER_KEYS = new Set([
   'idempotencyKey',
   'correlationId',
@@ -223,6 +223,39 @@ function isTargetRelevantLiterature(source: any): boolean {
 }
 
 /**
+ * CodeXomics archival rejects a citation-bound full-text fact unless it
+ * resolves to exactly one full-text evidence record (matching PMID and
+ * supporting flag). Results cached by older builds may violate that
+ * invariant; never reuse them.
+ */
+function citationBoundFullTextFactsIntact(result: any): boolean {
+  const facts = Array.isArray(result?.researchSummary?.facts) ? result.researchSummary.facts : [];
+  const records = Array.isArray(result?.evidenceRecords) ? result.evidenceRecords : [];
+  const noteSegments = Array.isArray(result?.annotationNote?.segments) ? result.annotationNote.segments : [];
+  const noteEvidenceIds = new Set<string>(
+    noteSegments.flatMap((segment: any) =>
+      Array.isArray(segment?.evidenceIds) ? segment.evidenceIds.map(String) : []),
+  );
+  for (const fact of facts) {
+    const basis = fact?.literatureBasis;
+    if (fact?.evidenceLevel !== 'target_literature' || basis?.kind !== 'full_text_span') continue;
+    const pmid = String(basis?.pmid || '');
+    const evidenceIds: unknown[] = Array.isArray(fact.evidenceIds) ? fact.evidenceIds : [];
+    const factRecords = records.filter((record: any) => evidenceIds.includes(record?.id));
+    const expectedSupporting = evidenceIds.some(id => noteEvidenceIds.has(String(id)));
+    const matching = factRecords.filter((record: any) =>
+      record?.supporting === expectedSupporting
+      && record?.sourceBinding?.content?.canonicalization === 'dgr.full-text.v1'
+      && Array.isArray(record?.identifiers)
+      && record.identifiers.some(
+        (identifier: any) => identifier?.scheme === 'pmid' && String(identifier?.value) === pmid,
+      ));
+    if (matching.length !== 1) return false;
+  }
+  return true;
+}
+
+/**
  * Cache reuse is intentionally stricter than result delivery. A fresh run may
  * honestly return limited evidence, but only exact-target, multi-record results
  * with at least one authoritative record may be reused later.
@@ -235,6 +268,8 @@ export function isReusableResearchResult(
 
   const report = String(result?.finalReport || '').trim();
   if (!report || PLACEHOLDER_PATTERN.test(report)) return false;
+
+  if (!citationBoundFullTextFactsIntact(result)) return false;
 
   const diagnostics = result?.metadata?.searchDiagnostics;
   if (diagnostics && Number(diagnostics.successfulSearches || 0) < 1) return false;
