@@ -131,6 +131,7 @@ MCP_SERVER_TIMEOUT=600
 SSE_API_TIMEOUT=600
 
 # ---- Full-text evidence layer providers ----
+# Full configuration guide: docs/full-text-providers.md
 # (Optional) NCBI API key, raises PubTator/E-utilities rate limits (3/s -> 10/s)
 NCBI_API_KEY=
 # (Optional) Contact email for the Crossref polite pool
@@ -144,7 +145,9 @@ OPENALEX_API_KEY=
 # (Optional) CORE API key (free for academics), enables green-OA repository fallback
 CORE_API_KEY=
 # (Optional) Comma-separated whitelist of full-text providers to enable.
+# FULL OVERRIDE: when set, exactly the listed providers run, in waterfall order
+# (Tier 1 providers you omit are turned off; Tier 3 providers only run when named).
 # Default: all Tier 1 providers plus configured Tier 2 providers.
-# Possible values: europe_pmc,pubtator,crossref,unpaywall,asta,openalex,core,biorxiv,bioc_pmc,ncbi_idconv,pmc_oa,semantic_scholar,arxiv
+# Possible values: europe_pmc,europe_pmc_annotations,pubtator,crossref,unpaywall,asta,openalex,core,biorxiv,bioc_pmc,ncbi_idconv,pmc_oa,semantic_scholar,arxiv
 FULL_TEXT_PROVIDERS=
 
