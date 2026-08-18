@@ -8,7 +8,9 @@ import {
   getSearchProviderApiKey,
 } from "../../utils";
 
-export const runtime = "edge";
+// The research engine relies on Node-only modules (fs, dns, http, crypto) for
+// task storage, SSRF-hardened fetching, and evidence hashing, so this route
+// must run on the Node.js runtime; the edge bundle cannot resolve them.
 export const dynamic = "force-dynamic";
 export const preferredRegion = [
   "cle1",
