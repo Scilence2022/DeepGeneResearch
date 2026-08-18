@@ -129,3 +129,22 @@ HEAD_SCRIPTS=
 MCP_SERVER_TIMEOUT=600
 # (Optional) SSE API timeout configuration (in seconds)
 SSE_API_TIMEOUT=600
+
+# ---- Full-text evidence layer providers ----
+# (Optional) NCBI API key, raises PubTator/E-utilities rate limits (3/s -> 10/s)
+NCBI_API_KEY=
+# (Optional) Contact email for the Crossref polite pool
+CROSSREF_MAILTO=
+# (Required for Unpaywall) Contact email passed as the `email` parameter
+UNPAYWALL_EMAIL=
+# (Optional) Ai2 Asta MCP API key (free), enables snippet_search evidence
+ASTA_API_KEY=
+# (Optional) OpenAlex API key, enables GROBID TEI/PDF full-text fallback (paid downloads)
+OPENALEX_API_KEY=
+# (Optional) CORE API key (free for academics), enables green-OA repository fallback
+CORE_API_KEY=
+# (Optional) Comma-separated whitelist of full-text providers to enable.
+# Default: all Tier 1 providers plus configured Tier 2 providers.
+# Possible values: europe_pmc,pubtator,crossref,unpaywall,asta,openalex,core,biorxiv,bioc_pmc,ncbi_idconv,pmc_oa,semantic_scholar,arxiv
+FULL_TEXT_PROVIDERS=
+

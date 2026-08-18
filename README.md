@@ -197,6 +197,15 @@ EXA_API_KEY=your_exa_api_key
 # DGR still rate-limits and retries requests when this is unset.
 NCBI_API_KEY=your_ncbi_eutilities_api_key
 
+# Optional full-text evidence layer providers (all unset = Tier 1 free
+# providers only: Europe PMC JATS, PubTator BioC, Crossref metadata)
+# CROSSREF_MAILTO=you@example.org          # Crossref polite pool
+# UNPAYWALL_EMAIL=you@example.org          # OA PDF locator + download fallback
+# ASTA_API_KEY=your_asta_key               # Ai2 Asta snippet evidence (free key)
+# OPENALEX_API_KEY=your_openalex_key       # GROBID TEI fallback ($0.01/download, ~100 free/day)
+# CORE_API_KEY=your_core_key               # green-OA repository fallback (free for academics)
+# FULL_TEXT_PROVIDERS=europe_pmc,pubtator  # explicit whitelist override
+
 # Required for MCP and crawler routes (at least 16 characters)
 ACCESS_PASSWORD=replace_with_a_long_random_shared_secret
 
@@ -503,7 +512,7 @@ When the task completes, its result includes:
 - **Visualizations**: Mermaid diagrams for pathways, interactions, structures
 - **Research Report**: Structured sections with executive summary, molecular function, etc.
 - **Identity-aware bibliography**: exact NCBI Gene-linked PubMed records are kept separate from directly supported target papers; explicit homonyms, Lys-C digestion reagents, phage genes, off-organism results, and papers focused on another subject are rejected.
-- **Full-text retrieval**: DGR parses authenticated user PDF uploads page by page, searches the web/database corpus independently, and retrieves Europe PMC XML full text for eligible PubMed records. Abstract-only coverage remains explicitly labeled.
+- **Full-text retrieval**: DGR parses authenticated user PDF uploads page by page, searches the web/database corpus independently, and runs eligible PubMed records through the full-text provider waterfall: Europe PMC JATS XML, then PubTator BioC (pre-sectioned, entity-annotated), then an open-access PDF copy located via Unpaywall/CORE/OpenAlex, with GROBID TEI from OpenAlex as a structured fallback. Crossref metadata (license, text-mining links, retraction signals) is attached to every candidate; retracted works are excluded from evidence. Abstract-only coverage remains explicitly labeled.
 - **Citation-bound findings**: biological literature facts are copied from exact PubMed abstract or full-text spans and carry stable identifiers, canonical source/span hashes, exact UTF-16 offsets, and page locators for PDFs when available. Evidence records locate the canonical text in the full task `sources`, allowing CodeXomics to verify archived findings before use. Gene-linked-only context is never promoted to a biological claim.
 
 To supply PDFs programmatically, `POST` each file to `/api/mcp/documents` using the same bearer credential, `Content-Type: application/pdf`, and a URL-encoded `X-DGR-Document-Name`. Pass the returned `sha256:...` identifiers in `userDocumentIds` when calling `deep-gene-research`. The endpoint accepts at most 20 MiB per PDF; each task accepts at most eight. Use CodeXomics orchestration for normal annotation workflows so the PDFs are also registered as genome/gene-scoped attachments.

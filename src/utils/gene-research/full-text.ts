@@ -6,7 +6,7 @@ export const FULL_TEXT_CANONICALIZATION = 'dgr.full-text.v1' as const;
 export const FULL_TEXT_OFFSET_ENCODING = 'utf16_code_units' as const;
 export const MAX_FULL_TEXT_CHARACTERS = 750_000;
 
-export type FullTextOrigin = 'user_upload' | 'pmc_xml';
+export type FullTextOrigin = 'user_upload' | 'pmc_xml' | 'bioc' | 'tei' | 'pdf' | 'snippet';
 
 export interface FullTextPage {
   pageNumber: number;
@@ -93,83 +93,20 @@ function decodeXmlEntities(value: string): string {
   });
 }
 
-function extractIdentifiers(text: string): { pmid?: string; doi?: string } {
-  const pmid = text.match(/\bPMID\s*[: ]\s*(\d{5,10})\b/i)?.[1];
-  const doi = text.match(/\b(10\.\d{4,9}\/[\-._;()/:A-Z0-9]+)\b/i)?.[1]?.replace(/[),.;\]]+$/, '');
-  return { pmid, doi };
-}
-
 export async function parseUserResearchPdf(documentId: string): Promise<FullTextDocument> {
   const { descriptor, bytes } = await loadResearchDocument(documentId);
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(bytes),
-    disableFontFace: true,
-    isEvalSupported: false,
-    useSystemFonts: true,
-  });
-  const document = await loadingTask.promise;
-  const pageCount = document.numPages;
-  const pageTexts: string[] = [];
-  try {
-    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-      const page = await document.getPage(pageNumber);
-      const textContent = await page.getTextContent();
-      const text = canonicalizeFullText(
-        textContent.items
-          .filter((item: any) => typeof item?.str === 'string')
-          .map((item: any) => item.str)
-          .join(' '),
-      );
-      pageTexts.push(text);
-      page.cleanup();
-    }
-  } finally {
-    await document.destroy();
-  }
-
-  const pages: FullTextPage[] = [];
-  let text = '';
-  for (let index = 0; index < pageTexts.length; index += 1) {
-    if (text && pageTexts[index]) text += '\n\n';
-    const start = text.length;
-    text += pageTexts[index];
-    pages.push({
-      pageNumber: index + 1,
-      start,
-      end: text.length,
-      textSha256: createHash('sha256').update(pageTexts[index]).digest('hex'),
-    });
-  }
-  if (text.length < 200) {
-    throw new Error(`${descriptor.name} did not contain extractable PDF text; OCR is required`);
-  }
-  if (text.length > MAX_FULL_TEXT_CHARACTERS) {
-    throw new Error(`${descriptor.name} exceeds the ${MAX_FULL_TEXT_CHARACTERS}-character full-text limit`);
-  }
-  const parsedPageCount = pageTexts.filter(page => page.length >= 20).length;
-  return {
-    schema: 'dgr.full-text-document.v1',
-    origin: 'user_upload',
+  const { segmentPdfDocument } = await import('@/utils/full-text/segment/pdf');
+  return segmentPdfDocument({
+    bytes: new Uint8Array(bytes),
     name: descriptor.name,
     mediaType: descriptor.mediaType,
     documentSha256: descriptor.sha256,
-    text,
-    textSha256: createHash('sha256').update(text).digest('hex'),
-    textLength: text.length,
-    canonicalization: FULL_TEXT_CANONICALIZATION,
-    offsetEncoding: FULL_TEXT_OFFSET_ENCODING,
-    pageCount,
-    parsedPageCount,
-    parseCoverage: pageCount > 0 ? parsedPageCount / pageCount : 0,
-    pages,
-    identifiers: extractIdentifiers(text.slice(0, 30_000)),
     retrievedAt: descriptor.uploadedAt,
-    parser: 'pdfjs-dist',
-  };
+    origin: 'user_upload',
+  });
 }
 
-function pmcXmlToText(xml: string): string {
+export function pmcXmlToText(xml: string): string {
   const body = xml.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] || xml;
   return canonicalizeFullText(decodeXmlEntities(
     body
@@ -180,50 +117,17 @@ function pmcXmlToText(xml: string): string {
   ));
 }
 
+/**
+ * Compatibility wrapper kept for the gene-research engine and its tests. The
+ * acquisition logic lives in the full-text provider layer; the dynamic import
+ * avoids a static cycle (the provider reuses pmcXmlToText from this module).
+ */
 export async function retrieveEuropePmcFullText(pmid: string): Promise<FullTextDocument | null> {
   if (!/^\d{5,10}$/.test(pmid)) return null;
-  const searchUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(`EXT_ID:${pmid} AND SRC:MED`)}&format=json`;
-  const search = await fetchPublicText(searchUrl, { maxBytes: 1_000_000, timeoutMs: 15_000 });
-  const result = JSON.parse(search.body)?.resultList?.result?.[0];
-  const pmcid = String(result?.pmcid || '').trim().toUpperCase();
-  if (!/^PMC\d+$/.test(pmcid)) return null;
-
-  const sourceUrl = `https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/fullTextXML`;
-  let response: Awaited<ReturnType<typeof fetchPublicText>>;
-  try {
-    response = await fetchPublicText(sourceUrl, { maxBytes: 12_000_000, timeoutMs: 25_000 });
-  } catch (error) {
-    // A PMC record without publisher-open full text answers 404. That is the
-    // normal "no open full text" outcome, not a retrieval failure.
-    if (/404\b/.test(error instanceof Error ? error.message : String(error))) return null;
-    throw error;
-  }
-  const text = pmcXmlToText(response.body);
-  if (text.length < 1_000) return null;
-  if (text.length > MAX_FULL_TEXT_CHARACTERS) {
-    throw new Error(`${pmcid} exceeds the ${MAX_FULL_TEXT_CHARACTERS}-character full-text limit`);
-  }
-  const documentSha256 = createHash('sha256').update(response.body).digest('hex');
-  return {
-    schema: 'dgr.full-text-document.v1',
-    origin: 'pmc_xml',
-    name: `${pmcid}.xml`,
-    mediaType: 'application/xml',
-    documentSha256,
-    text,
-    textSha256: createHash('sha256').update(text).digest('hex'),
-    textLength: text.length,
-    canonicalization: FULL_TEXT_CANONICALIZATION,
-    offsetEncoding: FULL_TEXT_OFFSET_ENCODING,
-    pageCount: null,
-    parsedPageCount: null,
-    parseCoverage: 1,
-    pages: [],
-    identifiers: { pmid, pmcid, doi: result?.doi ? String(result.doi) : undefined },
-    sourceUrl,
-    retrievedAt: new Date().toISOString(),
-    parser: 'europe-pmc-xml',
-  };
+  const { resolveEuropePmcWork, acquireEuropePmcJats } = await import('@/utils/full-text/providers/europe-pmc');
+  const work = await resolveEuropePmcWork({ pmid });
+  if (!work?.pmcid) return null;
+  return acquireEuropePmcJats({ ...work, pmid: work.pmid ?? pmid });
 }
 
 function escapeRegExp(value: string): string {

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { IncomingMessage } from 'node:http';
 import { describe, expect, it } from 'vitest';
-import { createPinnedLookup, isPublicAddress, readBoundedTextResponse, resolvePublicUrl } from './safe-public-fetch';
+import { createPinnedLookup, fetchPublicBytes, isPublicAddress, readBoundedBufferResponse, readBoundedTextResponse, resolvePublicUrl } from './safe-public-fetch';
 
 describe('safe public crawler URLs', () => {
   it('rejects loopback, link-local, private, carrier-grade NAT, and IPv4-mapped IPv6 addresses', async () => {
@@ -68,5 +68,28 @@ describe('safe public crawler URLs', () => {
     const erroredRead = readBoundedTextResponse(errored, 1024);
     errored.emit('error', new Error('upstream reset'));
     await expect(erroredRead).rejects.toThrow('upstream reset');
+  });
+
+  it('returns raw buffers and enforces the byte bound for binary reads', async () => {
+    const message = new EventEmitter() as IncomingMessage;
+    message.complete = true;
+    const read = readBoundedBufferResponse(message, 1024);
+    message.emit('data', Buffer.from([0x25, 0x50, 0x44, 0x46])); // %PDF
+    message.emit('end');
+    const body = await read;
+    expect(Buffer.isBuffer(body)).toBe(true);
+    expect(body.toString('latin1')).toBe('%PDF');
+
+    const oversized = new EventEmitter() as IncomingMessage;
+    oversized.complete = false;
+    oversized.destroy = (() => oversized) as any;
+    const oversizedRead = readBoundedBufferResponse(oversized, 4);
+    oversized.emit('data', Buffer.from('too many bytes'));
+    await expect(oversizedRead).rejects.toThrow('exceeded 4 bytes');
+  });
+
+  it('applies the same private-network guard to binary downloads', async () => {
+    await expect(fetchPublicBytes('http://127.0.0.1/paper.pdf')).rejects.toThrow('Private-network URLs are not allowed');
+    await expect(fetchPublicBytes('http://10.0.0.1/supp.zip')).rejects.toThrow('Private-network URLs are not allowed');
   });
 });

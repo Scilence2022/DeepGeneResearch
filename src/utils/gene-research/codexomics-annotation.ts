@@ -14,6 +14,7 @@ import {
   PUBMED_ABSTRACT_OFFSET_ENCODING,
 } from './literature-findings';
 import { FULL_TEXT_CANONICALIZATION, FULL_TEXT_OFFSET_ENCODING } from './full-text';
+import type { FullTextOrigin } from './full-text';
 import {
   currentAnnotationHasValue,
   isMoreSpecificProduct,
@@ -74,7 +75,7 @@ export interface CodeXomicsResearchFact {
     pmid: string;
     doi?: string;
     documentSha256: string;
-    sourceOrigin: 'user_upload' | 'pmc_xml';
+    sourceOrigin: FullTextOrigin;
     excerpt: string;
     excerptSha256: string;
     hashEncoding: 'utf8';
