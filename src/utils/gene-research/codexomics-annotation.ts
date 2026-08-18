@@ -243,13 +243,16 @@ interface BuildProposalInput {
   reportUrl?: string;
   detailsUrl?: string;
   /**
-   * Prebuilt curation artifacts from the research engine. Passing both keeps
-   * the archived report's note text and the proposal's note mutation
-   * byte-identical; passing neither rebuilds them here. `prebuiltCurationNote`
-   * may be null to explicitly state "no mutation-ready note was derived".
+   * Prebuilt curation artifacts from the research engine. Passing all three
+   * keeps the archived report's note text, summary citations, and evidence
+   * record IDs byte-identical in the proposal; passing none rebuilds them
+   * here. `prebuiltCurationNote` may be null to explicitly state "no
+   * mutation-ready note was derived".
    */
   prebuiltResearchSummary?: CodeXomicsAnnotationProposal['researchSummary'];
   prebuiltCurationNote?: CodeXomicsCurationNote | null;
+  /** The evidence-record set the prebuilt summary/note IDs refer to. */
+  prebuiltEvidenceRecords?: EvidenceRecord[];
 }
 
 type MutationField = 'product' | 'EC_number' | 'go_terms' | 'ko' | 'pathway' | 'db_xref';
@@ -1560,14 +1563,61 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
   const bundle = buildAnnotationCurationSummary(input);
   const orderedSources = bundle.orderedSources;
   const evidenceDetails = bundle.evidenceDetails;
-  const sourceRecords = bundle.sourceRecords;
   // The engine can provide the exact summary/note pair already embedded in the
-  // archived report. Reusing them keeps the report and the proposal
-  // byte-identical; otherwise the pair is rebuilt from the same inputs.
-  const researchSummary = input.prebuiltResearchSummary ?? bundle.researchSummary;
-  const proposedCurationNote = input.prebuiltCurationNote !== undefined
-    ? input.prebuiltCurationNote
-    : buildCurationNote(researchSummary);
+  // archived report, together with the evidence-record set their IDs refer
+  // to. Reusing all three keeps the report and the proposal byte-identical;
+  // rebuilding records from a different source order would silently renumber
+  // them and rebind the prebuilt citations to unrelated evidence.
+  const prebuiltRecordIds = new Set(
+    (input.prebuiltEvidenceRecords || []).map(record => String(record?.id || '')),
+  );
+  const prebuiltIdsResolve = input.prebuiltResearchSummary !== undefined
+    && Array.isArray(input.prebuiltEvidenceRecords)
+    && input.prebuiltEvidenceRecords.length > 0
+    && [
+      ...input.prebuiltResearchSummary.facts,
+      ...input.prebuiltResearchSummary.literature,
+    ].every(item => (item?.evidenceIds || []).every(id => prebuiltRecordIds.has(String(id))))
+    && (input.prebuiltCurationNote === undefined
+      || input.prebuiltCurationNote === null
+      || (input.prebuiltCurationNote.evidenceIds || []).every(id => prebuiltRecordIds.has(String(id))));
+  const usePrebuiltRecords = prebuiltIdsResolve;
+  const sourceRecords: EvidenceRecord[] = usePrebuiltRecords
+    ? JSON.parse(JSON.stringify(input.prebuiltEvidenceRecords))
+    : bundle.sourceRecords;
+  // An inconsistent prebuilt triple is discarded entirely: keeping a prebuilt
+  // summary over rebuilt records renumbers its citation IDs and binds them to
+  // unrelated evidence.
+  const researchSummary: CodeXomicsAnnotationProposal['researchSummary'] = prebuiltIdsResolve
+    ? (input.prebuiltResearchSummary as CodeXomicsAnnotationProposal['researchSummary'])
+    : bundle.researchSummary;
+  const proposedCurationNote = input.prebuiltCurationNote === null
+    // An explicit null states "the engine derived no note"; it must suppress
+    // the mutation regardless of record-set consistency (a null note has no
+    // citation IDs to rebind).
+    ? undefined
+    : prebuiltIdsResolve && input.prebuiltCurationNote !== undefined
+      ? input.prebuiltCurationNote
+      : buildCurationNote(researchSummary);
+  // When the prebuilt record set is in play, a mutation candidate whose
+  // evidence already exists in that set reuses the existing record ID instead
+  // of appending a duplicate.
+  const reuseOrAppendRecord = (record: EvidenceRecord): string => {
+    if (usePrebuiltRecords) {
+      const recordKeys = evidenceIdentityKeys(record);
+      const existing = sourceRecords.find(candidate => {
+        if (candidate.type !== record.type) return false;
+        const candidateKeys = evidenceIdentityKeys(candidate);
+        const shared = Array.from(recordKeys).filter(key => candidateKeys.has(key));
+        return shared.some(key => key.startsWith('url:') || key.startsWith('raw:'));
+      });
+      if (existing) return existing.id;
+    }
+    const id = `evidence_${sourceRecords.length + 1}`;
+    record.id = id;
+    sourceRecords.push(record);
+    return id;
+  };
   const generatedAt = new Date().toISOString();
   const confidence = normalizeConfidence(input.confidence);
   const summary = researchSummary.headline || narrativeSummary;
@@ -1576,36 +1626,32 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
   const operations: AnnotationOperation[] = [];
   const updates: Record<string, string | string[]> = {};
   for (const candidate of qualifiedCandidates) {
-    const evidenceIds = candidate.evidence.map(({ source, provenance }) => {
-      const id = `evidence_${sourceRecords.length + 1}`;
-      sourceRecords.push({
-        id,
-        type: 'database',
-        label: `${provenance.sourceId} ${candidate.field}=${candidate.value}`,
-        sourceId: String(provenance.sourceId),
-        url: String(provenance.url),
-        database: String(provenance.database),
-        retrievedAt: typeof provenance.retrievedAt === 'string' ? provenance.retrievedAt : generatedAt,
-        sourceHash: createHash('sha256')
-          .update(JSON.stringify({
-            field: candidate.field,
-            value: candidate.value,
-            target: input.target,
-            source: {
-              sourceId: source.sourceId,
-              database: source.database,
-              url: source.url,
-              targetMatch: source.targetMatch,
-              target: source.target || source.targetRef || source.annotation?.target,
-              annotation: source.annotation,
-            },
-            provenance,
-          }))
-          .digest('hex'),
-        supporting: true,
-      });
-      return id;
-    });
+    const evidenceIds = candidate.evidence.map(({ source, provenance }) => reuseOrAppendRecord({
+      id: '',
+      type: 'database',
+      label: `${provenance.sourceId} ${candidate.field}=${candidate.value}`,
+      sourceId: String(provenance.sourceId),
+      url: String(provenance.url),
+      database: String(provenance.database),
+      retrievedAt: typeof provenance.retrievedAt === 'string' ? provenance.retrievedAt : generatedAt,
+      sourceHash: createHash('sha256')
+        .update(JSON.stringify({
+          field: candidate.field,
+          value: candidate.value,
+          target: input.target,
+          source: {
+            sourceId: source.sourceId,
+            database: source.database,
+            url: source.url,
+            targetMatch: source.targetMatch,
+            target: source.target || source.targetRef || source.annotation?.target,
+            annotation: source.annotation,
+          },
+          provenance,
+        }))
+        .digest('hex'),
+      supporting: true,
+    }));
 
     const claim = {
       id: `claim_${claims.length + 1}`,

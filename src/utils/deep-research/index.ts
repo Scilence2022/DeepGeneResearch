@@ -681,8 +681,28 @@ class DeepResearch {
 
       this.onMessage("progress", { step: "gene-research", status: "end" });
 
-      // Convert gene research result to standard format
-      const literatureSources = result.workflow.literatureReview.map(ref => {
+      // Convert gene research result to standard format. Only references the
+      // engine actually verified against the exact target are eligible: the
+      // extractor's free-text citation mining can surface arbitrary PMIDs
+      // (for example a dermatology paper whose number collides with a
+      // GeneID), and those must never enter the research bibliography.
+      const verifiedPmids = new Set(
+        (result.sources || [])
+          .filter((source: any) => String(source?.database || '').toLowerCase() === 'pubmed')
+          .filter((source: any) => {
+            const relevance = source?.structuredData?.targetRelevance;
+            return relevance?.accepted === true;
+          })
+          .map((source: any) => String(
+            source?.structuredData?.literatureReferences?.[0]?.pmid
+            || source?.provenance?.recordId
+            || '',
+          ).trim())
+          .filter(Boolean),
+      );
+      const literatureSources = (result.workflow.literatureReview || [])
+        .filter(ref => verifiedPmids.has(String(ref?.pmid || '').trim()))
+        .map(ref => {
         // Create a simple formatted citation string
         const formattedCitation = ref.authors && ref.year
           ? `${ref.authors.slice(0, 3).join(', ')}${ref.authors.length > 3 ? ' et al.' : ''}. (${ref.year}). ${ref.title}. ${ref.journal || ''}.`
@@ -815,6 +835,7 @@ class DeepResearch {
         finalReport,
         annotationNote,
         researchSummary,
+        evidenceRecords: (result as any)?.evidenceRecords ?? null,
         learnings: [
           ...llmLearnings,
           ...result.sources.flatMap((source: any) =>

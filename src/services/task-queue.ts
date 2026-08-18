@@ -300,11 +300,15 @@ export class TaskQueue extends EventEmitter {
           result.qualityMetrics?.overallQuality ??
           result.geneResearch?.qualityMetrics?.overallQuality ??
           null,
-        // Reuse the note/summary pair embedded in the archived report so the
-        // proposal's /note mutation is byte-identical to the report section.
-        // Legacy cached results without the fields rebuild them here.
+        // Reuse the note/summary/record set embedded in the archived report so
+        // the proposal's citations and /note mutation stay byte-identical to
+        // the report. The record set must travel together with the summary:
+        // rebuilding records from a different source order renumbers them and
+        // silently rebinds citation evidence. Legacy results without all
+        // three fields rebuild everything here.
         prebuiltResearchSummary: result?.researchSummary ?? undefined,
         prebuiltCurationNote: result?.annotationNote !== undefined ? result.annotationNote : undefined,
+        prebuiltEvidenceRecords: Array.isArray(result?.evidenceRecords) ? result.evidenceRecords : undefined,
       }),
     };
   }
