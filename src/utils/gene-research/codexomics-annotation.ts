@@ -857,6 +857,18 @@ function buildResearchSummary(
     });
   }
 
+  // CodeXomics archival requires a citation-bound full-text fact to resolve
+  // to exactly one full-text evidence record (matching PMID and supporting
+  // flag). The builders bind exactly one record at construction; re-assert
+  // the invariant here so future fact merging can never ship a multi-bound
+  // fact that fails archival downstream.
+  for (const fact of facts) {
+    const basis = fact.literatureBasis;
+    if (basis?.kind === 'full_text_span' && basis.evidenceId) {
+      fact.evidenceIds = [basis.evidenceId];
+    }
+  }
+
   const product = facts.find(fact => fact.field === 'product')?.value;
   const catalyticActivity = facts.find(fact => fact.field === 'catalytic_activity')?.value;
   const headline = truncate([

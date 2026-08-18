@@ -195,6 +195,64 @@ describe('research cache quality boundary', () => {
     })).toBe(false);
   });
 
+  it('rejects cached results whose citation-bound full-text facts break the archival invariant', () => {
+    const fullTextRecord = (id: string) => ({
+      id,
+      type: 'pmid',
+      label: 'PMID:8660667',
+      database: 'pubmed',
+      identifiers: [{ scheme: 'pmid', value: '8660667' }],
+      retrievedAt: '2026-01-01T00:00:00.000Z',
+      sourceHash: 'x'.repeat(64),
+      supporting: true,
+      sourceBinding: {
+        schema: 'dgr.evidence-source-binding.v1',
+        sourceCollection: 'sources',
+        selector: { database: 'pubmed', identifier: { scheme: 'pmid', value: '8660667' } },
+        content: {
+          relativeJsonPointer: '/fullText/text',
+          canonicalization: 'dgr.full-text.v1',
+          sha256: 'a'.repeat(64),
+          hashEncoding: 'utf8',
+          length: 1000,
+          lengthEncoding: 'utf16_code_units',
+        },
+      },
+    });
+    const fullTextFact = (evidenceIds: string[]) => ({
+      id: 'fact_1',
+      category: 'function',
+      field: 'literature_finding',
+      evidenceLevel: 'target_literature',
+      evidenceIds,
+      literatureBasis: { kind: 'full_text_span', evidenceId: evidenceIds[0], pmid: '8660667' },
+    });
+    const withFact = (fact: unknown, records: unknown[]) => ({
+      ...substantiveResult(),
+      researchSummary: { facts: [fact] },
+      evidenceRecords: records,
+      annotationNote: { segments: [{ evidenceIds: ['ev-ft-1'] }] },
+    });
+
+    // Exactly one matching full-text record: reusable.
+    expect(isReusableResearchResult(parameters(), withFact(
+      fullTextFact(['ev-ft-1']),
+      [fullTextRecord('ev-ft-1')],
+    ))).toBe(true);
+
+    // Two matching full-text records (stale merged fact): not reusable.
+    expect(isReusableResearchResult(parameters(), withFact(
+      fullTextFact(['ev-ft-1', 'ev-ft-2']),
+      [fullTextRecord('ev-ft-1'), fullTextRecord('ev-ft-2')],
+    ))).toBe(false);
+
+    // Zero matching full-text records: not reusable.
+    expect(isReusableResearchResult(parameters(), withFact(
+      fullTextFact(['ev-ft-1']),
+      [{ ...fullTextRecord('ev-ft-1'), identifiers: [{ scheme: 'pmid', value: '99999999' }] }],
+    ))).toBe(false);
+  });
+
   it('does not store placeholder or snippet-only results', async () => {
     const request = parameters();
     await cacheService.setCachedResult(request, {

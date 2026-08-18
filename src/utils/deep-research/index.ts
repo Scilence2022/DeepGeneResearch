@@ -50,6 +50,7 @@ interface FinalReportResult {
   learnings: string[];
   sources: Source[];
   images: ImageSource[];
+  llmUsage: LlmUsageSummary;
 }
 
 export interface DeepResearchSearchTask {
@@ -78,14 +79,68 @@ function addQuoteBeforeAllLine(text: string = "") {
     .join("\n");
 }
 
+export interface LlmPhaseUsage {
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface LlmUsageSummary extends LlmPhaseUsage {
+  phases: Record<string, LlmPhaseUsage>;
+}
+
+type TokenUsageLike = {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+} | null | undefined;
+
 class DeepResearch {
   protected options: DeepResearchOptions;
   onMessage: (event: string, data: any) => void = () => {};
+  private llmUsageByPhase = new Map<string, LlmPhaseUsage>();
   constructor(options: DeepResearchOptions) {
     this.options = options;
     if (isFunction(options.onMessage)) {
       this.onMessage = options.onMessage;
     }
+  }
+
+  /** Accumulate one LLM call's provider-reported token usage under its phase. */
+  protected recordLlmUsage(phase: string, usage: TokenUsageLike) {
+    if (!usage) return;
+    const current = this.llmUsageByPhase.get(phase) || {
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    };
+    current.calls += 1;
+    current.promptTokens += usage.promptTokens ?? 0;
+    current.completionTokens += usage.completionTokens ?? 0;
+    current.totalTokens += usage.totalTokens ?? 0;
+    this.llmUsageByPhase.set(phase, current);
+  }
+
+  /** Aggregated token usage across every LLM call made by this run. */
+  getLlmUsage(): LlmUsageSummary {
+    const phases: Record<string, LlmPhaseUsage> = {};
+    const total: LlmUsageSummary = {
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      phases,
+    };
+    for (const [phase, usage] of this.llmUsageByPhase) {
+      phases[phase] = { ...usage };
+      total.calls += usage.calls;
+      total.promptTokens += usage.promptTokens;
+      total.completionTokens += usage.completionTokens;
+      total.totalTokens += usage.totalTokens;
+    }
+    return total;
   }
 
   async getThinkingModel() {
@@ -146,6 +201,8 @@ class DeepResearch {
         );
       } else if (part.type === "reasoning") {
         this.onMessage("reasoning", { type: "text", text: part.textDelta });
+      } else if (part.type === "finish") {
+        this.recordLlmUsage("report-plan", part.usage);
       }
     }
     this.onMessage("message", { type: "text", text: "\n</report-plan>\n\n" });
@@ -162,7 +219,7 @@ class DeepResearch {
   ): Promise<DeepResearchSearchTask[]> {
     this.onMessage("progress", { step: "serp-query", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
-    const { text } = await generateText({
+    const { text, usage } = await generateText({
       model: await this.getThinkingModel(),
       system: getSystemPrompt(),
       prompt: [
@@ -170,6 +227,7 @@ class DeepResearch {
         this.getResponseLanguagePrompt(),
       ].join("\n\n"),
     });
+    this.recordLlmUsage("serp-query", usage);
     const querySchema = getSERPQuerySchema();
     let content = "";
     thinkTagStreamProcessor.processChunk(text, (data) => {
@@ -315,6 +373,7 @@ class DeepResearch {
         } else if (part.type === "source") {
           sources.push(part.source);
         } else if (part.type === "finish") {
+          this.recordLlmUsage("search-task", part.usage);
           if (part.providerMetadata?.google) {
             const { groundingMetadata } = part.providerMetadata.google;
             const googleGroundingMetadata =
@@ -443,6 +502,7 @@ class DeepResearch {
       } else if (part.type === "source") {
         sources.push(part.source);
       } else if (part.type === "finish") {
+        this.recordLlmUsage("final-report", part.usage);
         if (sources.length > 0) {
           // Check if we have formatted citations (from gene research)
           const hasFormattedCitations = sources.some(source => source.formattedCitation);
@@ -495,6 +555,7 @@ class DeepResearch {
       learnings,
       sources,
       images,
+      llmUsage: this.getLlmUsage(),
     };
     this.onMessage("progress", {
       step: "final-report",
@@ -860,6 +921,9 @@ class DeepResearch {
             literatureLearningBatches: llmLearnings.length,
             synthesizedReport: Boolean(synthesizedReport),
           },
+          // Provider-reported token consumption for every LLM phase of this
+          // run (queries, per-batch learnings, report synthesis).
+          llmUsage: this.getLlmUsage(),
         },
       };
       
@@ -924,12 +988,13 @@ class DeepResearch {
         geneInfo.specificAspects?.length ? `Specific aspects: ${geneInfo.specificAspects.join(", ")}` : "",
         `User research question: ${researchQuestion}`,
       ].filter(Boolean).join("\n");
-      const { text } = await generateText({
+      const { text, usage } = await generateText({
         model: await this.getThinkingModel(),
         system: getGeneResearchSystemPrompt(),
         prompt: [generateGeneSerpQueriesPrompt(plan), this.getResponseLanguagePrompt()].join("\n\n"),
         abortSignal: signal,
       });
+      this.recordLlmUsage("gene-llm-queries", usage);
       const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
       let content = "";
       thinkTagStreamProcessor.processChunk(text, (data) => {
@@ -1004,12 +1069,13 @@ class DeepResearch {
           }))
           .filter(source => source.url && source.content);
         if (sources.length === 0) continue;
-        const { text } = await generateText({
+        const { text, usage } = await generateText({
           model: await this.getTaskModel(),
           system: getGeneResearchSystemPrompt(),
           prompt: [processGeneSearchResultPrompt(query, researchGoal, sources, true), this.getResponseLanguagePrompt()].join("\n\n"),
           abortSignal: signal,
         });
+        this.recordLlmUsage("gene-llm-learnings", usage);
         const learning = text.trim();
         if (learning) learnings.push(`[literature batch ${index + 1}/${batches.length}]\n${learning}`);
       }
@@ -1103,6 +1169,8 @@ class DeepResearch {
           );
         } else if (part.type === "reasoning") {
           this.onMessage("reasoning", { type: "text", text: part.textDelta });
+        } else if (part.type === "finish") {
+          this.recordLlmUsage("gene-llm-report", part.usage);
         }
       }
       this.onMessage("message", { type: "text", text: "\n</final-report>\n\n" });
