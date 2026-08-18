@@ -199,12 +199,13 @@ NCBI_API_KEY=your_ncbi_eutilities_api_key
 
 # Optional full-text evidence layer providers (all unset = Tier 1 free
 # providers only: Europe PMC JATS, PubTator BioC, Crossref metadata)
+# Full guide: docs/full-text-providers.md
 # CROSSREF_MAILTO=you@example.org          # Crossref polite pool
 # UNPAYWALL_EMAIL=you@example.org          # OA PDF locator + download fallback
 # ASTA_API_KEY=your_asta_key               # Ai2 Asta snippet evidence (free key)
 # OPENALEX_API_KEY=your_openalex_key       # GROBID TEI fallback ($0.01/download, ~100 free/day)
 # CORE_API_KEY=your_core_key               # green-OA repository fallback (free for academics)
-# FULL_TEXT_PROVIDERS=europe_pmc,pubtator  # explicit whitelist override
+# FULL_TEXT_PROVIDERS=europe_pmc,pubtator  # explicit whitelist override (replaces the default set)
 
 # Required for MCP and crawler routes (at least 16 characters)
 ACCESS_PASSWORD=replace_with_a_long_random_shared_secret

@@ -67,3 +67,6 @@ retractions exclude the work from evidence (`evidenceRole: 'excluded'`).
 
 See `env.tpl`: `NCBI_API_KEY`, `CROSSREF_MAILTO`, `UNPAYWALL_EMAIL`,
 `ASTA_API_KEY`, `OPENALEX_API_KEY`, `CORE_API_KEY`, `FULL_TEXT_PROVIDERS`.
+The operator-facing walkthrough (credential signup, costs, whitelist
+semantics, troubleshooting) lives in
+[docs/full-text-providers.md](../../docs/full-text-providers.md).

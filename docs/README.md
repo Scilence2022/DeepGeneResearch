@@ -9,6 +9,7 @@ Welcome to the Deep Gene Research documentation. This index provides an overview
 | [Main README](../README.md) | Project overview, features, and quick start guide |
 | [API Documentation](./deep-research-api-doc.md) | SSE API endpoints and event types |
 | [MCP Agent Guide](./MCP_AGENT_PROMPT_GUIDE.md) | System prompts for AI agents using MCP tools |
+| [Full-Text Providers](./full-text-providers.md) | Full-text evidence layer: provider catalog, credentials, costs, whitelist semantics |
 | [Cloudflare Deployment](./How-to-deploy-to-Cloudflare-Pages.md) | Detailed Cloudflare Pages deployment guide |
 
 ## Documentation Structure
@@ -23,6 +24,7 @@ Welcome to the Deep Gene Research documentation. This index provides an overview
 ├── docs/
 │   ├── README.md                # This documentation index
 │   ├── deep-research-api-doc.md # SSE API documentation
+│   ├── full-text-providers.md   # Full-text evidence provider configuration
 │   ├── MCP_AGENT_PROMPT_GUIDE.md # Agent prompt configuration
 │   └── How-to-deploy-to-Cloudflare-Pages.md # Deployment guide
 │
@@ -89,6 +91,7 @@ See [env.tpl](../env.tpl) for all available environment variables including:
 
 - AI provider API keys (Google, OpenAI, Anthropic, etc.)
 - Search provider configuration (Tavily, SearXNG, etc.)
+- Full-text evidence providers (Europe PMC, PubTator, OpenAlex, Asta, etc.) — see the [Full-Text Providers guide](./full-text-providers.md) for credential walkthroughs, costs, and whitelist semantics
 - MCP server settings
 - Timeout configurations
 
