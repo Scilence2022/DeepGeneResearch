@@ -13,7 +13,6 @@ import { fetchPublicText } from '@/utils/safe-public-fetch';
 import {
   buildFullTextEvidenceSpans,
   parseUserResearchPdf,
-  retrieveEuropePmcFullText,
 } from './full-text';
 import type { CurrentAnnotationSnapshot, GenomeTargetRef } from '@/contracts/annotation-change-set';
 import { buildExactAnnotationFieldEvidence } from './current-annotation';
@@ -870,28 +869,95 @@ export class GeneResearchEngine {
       })
       .slice(0, Math.max(1, this.config.fullTextBudget ?? 25));
 
+    // The acquisition layer (resolve -> acquire -> segment) runs as a
+    // provider waterfall: Europe PMC JATS, PubTator BioC, bioRxiv preprint
+    // PDF, OpenAlex GROBID TEI, CORE green-OA PDF, then an Unpaywall-located
+    // OA PDF. Crossref/Unpaywall enrich metadata (license, retraction, OA
+    // location); Ai2 Asta snippets are the no-download last resort.
+    const {
+      acquireFullTextEvidence,
+      locateProviderAnnotations,
+      readFullTextEnv,
+      resolveEnabledProviders,
+    } = await import('@/utils/full-text/pipeline');
+    const baseEnv = readFullTextEnv();
+    const fullTextEnv = { ...baseEnv, ncbiApiKey: this.config.ncbiApiKey ?? baseEnv.ncbiApiKey };
+    const enabledProviders = resolveEnabledProviders(fullTextEnv, undefined);
+
     await Promise.all(pubMedSources.map(async source => {
       this.assertNotCancelled();
       const reference = source.structuredData?.literatureReferences?.[0] || {};
       const pmid = String(reference.pmid || source.provenance?.recordId || '').trim();
       if (!/^\d{5,10}$/.test(pmid)) return;
       const startedAt = Date.now();
+      const category = source.researchCategory || 'literature';
       try {
-        const fullText = await retrieveEuropePmcFullText(pmid);
-        if (!fullText) {
+        const acquisition = await acquireFullTextEvidence(
+          {
+            pmid,
+            doi: reference.doi ? String(reference.doi) : undefined,
+            title: typeof source.title === 'string' ? source.title : undefined,
+          },
+          { enabledProviders },
+          fullTextEnv,
+        );
+        for (const attempt of acquisition.attempts) {
           this.searchAttempts.push({
             query: `PMID:${pmid}`,
-            provider: 'europe_pmc_full_text',
+            provider: attempt.provider === 'europe_pmc' ? 'europe_pmc_full_text' : attempt.provider,
             phase: 'retrieval',
-            category: source.researchCategory || 'literature',
-            sourceCount: 0,
-            durationMs: Date.now() - startedAt,
-            status: 'empty',
+            category,
+            sourceCount: attempt.status === 'success' ? 1 : 0,
+            durationMs: attempt.durationMs,
+            status: attempt.status === 'skipped' ? 'empty' : attempt.status,
+            ...(attempt.error ? { error: attempt.error } : {}),
+            ...(attempt.warnings?.length ? { warnings: attempt.warnings } : {}),
           });
-          return;
         }
+        if (acquisition.metadata.isRetracted) {
+          source.evidenceRole = 'excluded';
+          source.structuredData = { ...(source.structuredData || {}), retracted: true };
+        }
+        let content = acquisition.content;
+        if (!content && enabledProviders.includes('asta') && fullTextEnv.astaApiKey) {
+          // Asta snippet_search is the cheap last resort: citable ~500-word
+          // passages without any document download.
+          const snippetStartedAt = Date.now();
+          try {
+            const { searchAstaSnippets } = await import('@/utils/full-text/providers/asta');
+            const snippets = await searchAstaSnippets(
+              `${this.config.geneSymbol} ${this.config.organism}`,
+              { apiKey: fullTextEnv.astaApiKey, limit: 3 },
+            );
+            content = snippets.find(candidate =>
+              this.assessSourceRelevance({ title: candidate.document.name, content: candidate.document.text }).accepted
+            ) ?? null;
+            this.searchAttempts.push({
+              query: `PMID:${pmid}`,
+              provider: 'asta_snippet',
+              phase: 'retrieval',
+              category,
+              sourceCount: content ? 1 : 0,
+              durationMs: Date.now() - snippetStartedAt,
+              status: content ? 'success' : 'empty',
+            });
+          } catch (error) {
+            this.searchAttempts.push({
+              query: `PMID:${pmid}`,
+              provider: 'asta_snippet',
+              phase: 'retrieval',
+              category,
+              sourceCount: 0,
+              durationMs: Date.now() - snippetStartedAt,
+              status: 'error',
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        const fullText = content?.document;
+        if (!content || !fullText) return;
         const relevance = this.assessSourceRelevance({ title: source.title, content: fullText.text });
-        const evidence = relevance.accepted
+        const evidence = relevance.accepted && !acquisition.metadata.isRetracted
           ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
           : [];
         source.fullText = fullText;
@@ -900,28 +966,41 @@ export class GeneResearchEngine {
         // in source.content can push otherwise valid multi-document reports
         // beyond CodeXomics' authenticated artifact limit.
         delete source.content;
-        source.contentKind = 'pmc-xml-full-text';
+        source.contentKind = content.format === 'jats'
+          ? 'pmc-xml-full-text'
+          : `${content.format}-full-text`;
+        const providerAnnotations = content.providerAnnotations?.length
+          ? locateProviderAnnotations(fullText, content.providerAnnotations).slice(0, 50)
+          : [];
         source.structuredData = {
           ...(source.structuredData || {}),
           targetRelevance: relevance,
+          ...(acquisition.metadata.license ? { license: acquisition.metadata.license } : {}),
+          ...(content.supplementaryFilesUrl ? { supplementaryFilesUrl: content.supplementaryFilesUrl } : {}),
+          ...(providerAnnotations.length > 0 ? { providerAnnotations } : {}),
         };
-        if (relevance.accepted && evidence.length > 0) source.evidenceRole = 'reference';
+        if (relevance.accepted && evidence.length > 0 && !acquisition.metadata.isRetracted) {
+          source.evidenceRole = 'reference';
+        }
         this.searchAttempts.push({
           query: `PMID:${pmid}`,
-          provider: 'europe_pmc_full_text',
+          provider: `${content.provider}_evidence`,
           phase: 'retrieval',
-          category: source.researchCategory || 'literature',
-          sourceCount: 1,
+          category,
+          sourceCount: evidence.length > 0 ? 1 : 0,
           durationMs: Date.now() - startedAt,
           status: 'success',
-          warnings: evidence.length > 0 ? [] : ['Full text retrieved without an exact-target result span'],
+          warnings: [
+            ...(evidence.length > 0 ? [] : ['Full text retrieved without an exact-target result span']),
+            ...(acquisition.metadata.isRetracted ? ['Retracted work: evidence excluded'] : []),
+          ],
         });
       } catch (error) {
         this.searchAttempts.push({
           query: `PMID:${pmid}`,
-          provider: 'europe_pmc_full_text',
+          provider: 'full_text_pipeline',
           phase: 'retrieval',
-          category: source.researchCategory || 'literature',
+          category,
           sourceCount: 0,
           durationMs: Date.now() - startedAt,
           status: 'error',
@@ -1921,7 +2000,15 @@ export class GeneResearchEngine {
     const fullTextSourceLines = fullTextSources.length
       ? fullTextSources.map(source => {
           const document = source.fullText;
-          const origin = document.origin === 'user_upload' ? 'user-provided PDF' : 'Europe PMC open full text';
+          const originLabels: Record<string, string> = {
+            user_upload: 'user-provided PDF',
+            pmc_xml: 'Europe PMC open full text',
+            bioc: 'PubTator BioC full text',
+            tei: 'OpenAlex GROBID TEI full text',
+            pdf: 'open-access PDF full text',
+            snippet: 'Ai2 Asta snippet',
+          };
+          const origin = originLabels[document.origin] || document.origin;
           const pageCoverage = document.pageCount
             ? `${document.parsedPageCount}/${document.pageCount} pages parsed`
             : 'structured XML fully parsed';

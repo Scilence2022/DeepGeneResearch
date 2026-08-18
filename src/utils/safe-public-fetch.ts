@@ -178,14 +178,82 @@ export function createPinnedLookup(address: string, family: 4 | 6): LookupFuncti
   }) as LookupFunction;
 }
 
-export async function fetchPublicText(
+export function readBoundedBufferResponse(response: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let received = 0;
+    let settled = false;
+
+    const cleanup = () => {
+      response.off('data', onData);
+      response.off('end', onEnd);
+      response.off('aborted', onAborted);
+      response.off('error', onError);
+    };
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onData = (chunk: Buffer | string) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      received += buffer.length;
+      if (received > maxBytes) {
+        fail(new Error(`Crawler response exceeded ${maxBytes} bytes`));
+        response.destroy();
+        return;
+      }
+      chunks.push(buffer);
+    };
+    const onEnd = () => {
+      if (!response.complete) {
+        fail(new Error('Crawler upstream response ended before the message was complete'));
+        return;
+      }
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(Buffer.concat(chunks));
+    };
+    const onAborted = () => fail(new Error('Crawler upstream response was aborted'));
+    const onError = (error: Error) => fail(error);
+
+    response.on('data', onData);
+    response.on('end', onEnd);
+    response.on('aborted', onAborted);
+    response.on('error', onError);
+  });
+}
+
+interface FetchPublicOptions {
+  maxBytes?: number;
+  timeoutMs?: number;
+  maxRedirects?: number;
+}
+
+interface FetchPublicResult<T> {
+  url: URL;
+  status: number;
+  contentType: string;
+  body: T;
+}
+
+async function fetchPublicResource<T>(
   rawUrl: string,
   {
     maxBytes = 5 * 1024 * 1024,
     timeoutMs = 15_000,
     maxRedirects = 3,
-  }: { maxBytes?: number; timeoutMs?: number; maxRedirects?: number } = {}
-): Promise<{ url: URL; status: number; contentType: string; body: string }> {
+    accept,
+    contentTypePattern,
+    readBody,
+  }: FetchPublicOptions & {
+    accept: string;
+    contentTypePattern: RegExp;
+    readBody: (response: IncomingMessage, maxBytes: number) => Promise<T>;
+  }
+): Promise<FetchPublicResult<T>> {
   const resolved = await resolvePublicUrl(rawUrl);
   const request = resolved.url.protocol === 'https:' ? httpsRequest : httpRequest;
 
@@ -194,7 +262,7 @@ export async function fetchPublicText(
       resolved.url,
       {
         headers: {
-          accept: 'text/html,text/plain,application/xhtml+xml,application/xml,text/xml,application/json',
+          accept,
           'accept-encoding': 'identity',
           'user-agent': 'DeepGeneResearch-Crawler/1.0',
         },
@@ -219,8 +287,9 @@ export async function fetchPublicText(
           }
           // Re-enter through resolvePublicUrl so every redirect target is
           // independently checked and DNS-pinned against SSRF/rebinding.
-          void fetchPublicText(redirectUrl, { maxBytes, timeoutMs, maxRedirects: maxRedirects - 1 })
-            .then(resolve, reject);
+          void fetchPublicResource(redirectUrl, {
+            maxBytes, timeoutMs, maxRedirects: maxRedirects - 1, accept, contentTypePattern, readBody,
+          }).then(resolve, reject);
           return;
         }
         if (status < 200 || status >= 300) {
@@ -230,7 +299,7 @@ export async function fetchPublicText(
         }
 
         const contentType = String(response.headers['content-type'] || '').toLowerCase();
-        if (contentType && !/^(text\/|application\/(?:xhtml\+xml|xml|json))(?:;|$)/.test(contentType)) {
+        if (contentType && !contentTypePattern.test(contentType)) {
           response.resume();
           reject(new Error(`Crawler upstream returned unsupported content type: ${contentType}`));
           return;
@@ -242,7 +311,7 @@ export async function fetchPublicText(
           return;
         }
 
-        void readBoundedTextResponse(response, maxBytes).then(
+        void readBody(response, maxBytes).then(
           body => resolve({ url: resolved.url, status, contentType, body }),
           error => {
             req.destroy();
@@ -255,5 +324,37 @@ export async function fetchPublicText(
     req.setTimeout(timeoutMs, () => req.destroy(new Error(`Crawler request timed out after ${timeoutMs}ms`)));
     req.on('error', reject);
     req.end();
+  });
+}
+
+export async function fetchPublicText(
+  rawUrl: string,
+  options: FetchPublicOptions = {}
+): Promise<FetchPublicResult<string>> {
+  return fetchPublicResource(rawUrl, {
+    ...options,
+    accept: 'text/html,text/plain,application/xhtml+xml,application/xml,text/xml,application/json',
+    contentTypePattern: /^(text\/|application\/(?:xhtml\+xml|xml|json))(?:;|$)/,
+    readBody: async (response, maxBytes) =>
+      (await readBoundedBufferResponse(response, maxBytes)).toString('utf8'),
+  });
+}
+
+/**
+ * Binary counterpart of fetchPublicText for full-text acquisition (PDF, zip,
+ * tgz). Same SSRF hardening: DNS pinning, private-IP blocklist, bounded read.
+ * Some repositories serve downloads with no or a generic content type, so the
+ * whitelist accepts octet-stream; callers must validate the payload (e.g. the
+ * PDF magic bytes) before parsing.
+ */
+export async function fetchPublicBytes(
+  rawUrl: string,
+  options: FetchPublicOptions = {}
+): Promise<FetchPublicResult<Buffer>> {
+  return fetchPublicResource(rawUrl, {
+    ...options,
+    accept: 'application/pdf,application/zip,application/gzip,application/x-tar,application/octet-stream',
+    contentTypePattern: /^application\/(?:pdf|zip|x-zip-compressed|gzip|x-gzip|x-tar|octet-stream)(?:;|$)/,
+    readBody: readBoundedBufferResponse,
   });
 }
