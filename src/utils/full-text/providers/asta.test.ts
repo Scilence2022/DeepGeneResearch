@@ -135,6 +135,50 @@ describe('searchAstaSnippets', () => {
     expect(contents).toHaveLength(2);
   });
 
+  it('parses the real Asta payload shape (nested snippet object, { data } envelope)', async () => {
+    const realShape = {
+      data: [
+        {
+          score: 0.758,
+          paper: {
+            corpusId: '288059355',
+            title: 'CRISPR-Cas9 gene editing: mechanisms and applications',
+            authors: ['A. Researcher'],
+            openAccessInfo: { license: 'CCBY', status: 'GOLD' },
+          },
+          snippet: {
+            text: 'CRISPR-Cas9 is a programmable nuclease used for targeted gene editing.',
+            snippetKind: 'bodyText',
+            section: 'Introduction',
+            snippetOffset: { start: 120, end: 194 },
+          },
+        },
+      ],
+      retrievalVersion: 'pa1-v1',
+    };
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { content: [{ type: 'text', text: JSON.stringify(realShape) }] },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const contents = await searchAstaSnippets('CRISPR Cas9', { apiKey: 'asta-key', limit: 1 });
+
+    expect(contents).toHaveLength(1);
+    expect(contents[0].document.text).toBe(
+      'CRISPR-Cas9 is a programmable nuclease used for targeted gene editing.'
+    );
+    expect(contents[0].document.text).not.toContain('[object Object]');
+    expect(contents[0].document.name).toBe('CRISPR-Cas9 gene editing: mechanisms and applications');
+    expect(contents[0].document.sourceUrl).toBe('https://www.semanticscholar.org/paper/288059355');
+  });
+
   it('returns [] when the tool call errors after the retry', async () => {
     const errorFrame = sseResponse([
       { jsonrpc: '2.0', id: 1, error: { code: -32603, message: 'internal error' } },

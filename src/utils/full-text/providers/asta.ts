@@ -163,6 +163,17 @@ function snippetDocument(entry: any, passage: string): FullTextDocument {
 }
 
 /**
+ * The Asta payload nests the passage: `entry.snippet` is an object shaped
+ * `{ text, snippetKind, section, snippetOffset }`, not a plain string.
+ * Accept the legacy string form and a top-level `text` field too.
+ */
+function snippetPassage(entry: any): string {
+  const snippet = entry?.snippet;
+  if (snippet && typeof snippet === 'object') return String(snippet.text || '');
+  return String(snippet || entry?.text || '');
+}
+
+/**
  * resolve/extract hybrid: free-text query -> Ai2 Asta snippet_search
  * passages (~500 words each) from the Semantic Scholar corpus, each wrapped
  * as an AcquiredContent snippet document with paper provenance. Asta
@@ -184,7 +195,7 @@ export async function searchAstaSnippets(
   }
   const contents: AcquiredContent[] = [];
   for (const entry of extractSnippetEntries(result)) {
-    const passage = canonicalizeFullText(entry?.snippet || entry?.text);
+    const passage = canonicalizeFullText(snippetPassage(entry));
     if (!passage) continue;
     contents.push({
       provider: 'asta',
