@@ -45,4 +45,79 @@ describe('task result output policies', () => {
     expect(serialized).not.toContain('large source');
     expect(serialized).not.toContain('workflowworkflow');
   });
+
+  it('keeps the accounting and coverage counters an orchestrator has to report', () => {
+    const llmUsage = {
+      calls: 3,
+      promptTokens: 120_000,
+      cachedPromptTokens: 40_000,
+      completionTokens: 9_000,
+      totalTokens: 129_000,
+      phases: {
+        'gene-llm-report': {
+          calls: 1,
+          promptTokens: 8_000,
+          cachedPromptTokens: 0,
+          completionTokens: 2_600,
+          totalTokens: 10_600,
+        },
+      },
+      models: {
+        'deepseek-v4-pro': {
+          calls: 3,
+          promptTokens: 120_000,
+          cachedPromptTokens: 40_000,
+          completionTokens: 9_000,
+          totalTokens: 129_000,
+          phases: {},
+        },
+      },
+    };
+    const literatureCoverage = {
+      literatureBudget: 300,
+      pubmedTotalMatchCount: 812,
+      retainedAbstractCount: 300,
+    };
+
+    const projection = projectTaskResult(
+      {
+        annotationProposal: { operations: [] },
+        annotationNote: {
+          text: 'Aspartate kinase III [PMID:12345678]',
+          segments: [{ citations: ['12345678'] }],
+        },
+        metadata: {
+          researchTime: 640_200,
+          cacheReplay: true,
+          llmUsage,
+          llmSynthesis: { literatureLearningBatches: 4 },
+          literatureMetrics: { totalPapers: 300 },
+          searchDiagnostics: {
+            queryCount: 16,
+            literatureCoverage,
+            attempts: [{ query: 'huge'.repeat(10_000) }],
+          },
+        },
+      },
+      'annotation'
+    );
+
+    expect(projection.metadata.llmUsage).toEqual(llmUsage);
+    expect(projection.metadata.llmSynthesis).toEqual({ literatureLearningBatches: 4 });
+    expect(projection.metadata.literatureMetrics).toEqual({ totalPapers: 300 });
+    expect(projection.metadata.cacheReplay).toBe(true);
+    expect(projection.metadata.searchDiagnostics).toEqual({ literatureCoverage });
+    expect(projection.annotationNote.text).toContain('PMID:12345678');
+    // `attempts` is unbounded and must not survive a projection whose purpose
+    // is to stay small.
+    expect(JSON.stringify(projection)).not.toContain('hugehuge');
+  });
+
+  it('omits searchDiagnostics entirely when there is no coverage audit to carry', () => {
+    const projection = projectTaskResult(
+      { metadata: { researchTime: 1, searchDiagnostics: { attempts: [{ query: 'x' }] } } },
+      'annotation'
+    );
+    expect(projection.metadata.searchDiagnostics).toBeUndefined();
+  });
 });

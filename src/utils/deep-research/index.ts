@@ -82,12 +82,21 @@ function addQuoteBeforeAllLine(text: string = "") {
 export interface LlmPhaseUsage {
   calls: number;
   promptTokens: number;
+  /** Input tokens the provider served from its prompt cache, when it says so. */
+  cachedPromptTokens: number;
   completionTokens: number;
   totalTokens: number;
 }
 
+export interface LlmModelUsage extends LlmPhaseUsage {
+  phases: Record<string, LlmPhaseUsage>;
+}
+
 export interface LlmUsageSummary extends LlmPhaseUsage {
   phases: Record<string, LlmPhaseUsage>;
+  /** Per-model breakdown, keyed by the provider's model id. */
+  models: Record<string, LlmModelUsage>;
+  provider?: string;
 }
 
 type TokenUsageLike = {
@@ -96,10 +105,21 @@ type TokenUsageLike = {
   totalTokens?: number;
 } | null | undefined;
 
+function blankUsage(): LlmPhaseUsage {
+  return {
+    calls: 0,
+    promptTokens: 0,
+    cachedPromptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+  };
+}
+
 class DeepResearch {
   protected options: DeepResearchOptions;
   onMessage: (event: string, data: any) => void = () => {};
   private llmUsageByPhase = new Map<string, LlmPhaseUsage>();
+  private llmUsageByModel = new Map<string, LlmModelUsage>();
   constructor(options: DeepResearchOptions) {
     this.options = options;
     if (isFunction(options.onMessage)) {
@@ -107,38 +127,78 @@ class DeepResearch {
     }
   }
 
-  /** Accumulate one LLM call's provider-reported token usage under its phase. */
-  protected recordLlmUsage(phase: string, usage: TokenUsageLike) {
+  /**
+   * Cached input tokens exactly as the provider reported them. Providers that
+   * say nothing contribute zero rather than a guess.
+   */
+  private reportedCachedPromptTokens(providerMetadata?: any): number {
+    const candidates = [
+      providerMetadata?.deepseek?.promptCacheHitTokens,
+      providerMetadata?.openai?.cachedPromptTokens,
+      providerMetadata?.anthropic?.cacheReadInputTokens,
+    ];
+    for (const value of candidates) {
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+    }
+    return 0;
+  }
+
+  /**
+   * Accumulate one LLM call's provider-reported token usage under its phase and
+   * under the model that produced it. Cost is priced against the model id, and
+   * a run can use two different models (thinking and task), so recording the
+   * phase alone forces consumers into a phase-to-model guess that breaks
+   * silently whenever a phase is added or re-pointed.
+   */
+  protected recordLlmUsage(
+    phase: string,
+    usage: TokenUsageLike,
+    model?: string,
+    providerMetadata?: any
+  ) {
     if (!usage) return;
-    const current = this.llmUsageByPhase.get(phase) || {
-      calls: 0,
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
+    const cached = this.reportedCachedPromptTokens(providerMetadata);
+    const accumulate = (target: LlmPhaseUsage) => {
+      target.calls += 1;
+      target.promptTokens += usage.promptTokens ?? 0;
+      target.cachedPromptTokens += cached;
+      target.completionTokens += usage.completionTokens ?? 0;
+      target.totalTokens += usage.totalTokens ?? 0;
     };
-    current.calls += 1;
-    current.promptTokens += usage.promptTokens ?? 0;
-    current.completionTokens += usage.completionTokens ?? 0;
-    current.totalTokens += usage.totalTokens ?? 0;
-    this.llmUsageByPhase.set(phase, current);
+
+    const phaseUsage = this.llmUsageByPhase.get(phase) || blankUsage();
+    accumulate(phaseUsage);
+    this.llmUsageByPhase.set(phase, phaseUsage);
+
+    const modelId = String(model || "").trim() || "unknown";
+    const modelUsage = this.llmUsageByModel.get(modelId) || { ...blankUsage(), phases: {} };
+    accumulate(modelUsage);
+    const modelPhaseUsage = modelUsage.phases[phase] || blankUsage();
+    accumulate(modelPhaseUsage);
+    modelUsage.phases[phase] = modelPhaseUsage;
+    this.llmUsageByModel.set(modelId, modelUsage);
   }
 
   /** Aggregated token usage across every LLM call made by this run. */
   getLlmUsage(): LlmUsageSummary {
     const phases: Record<string, LlmPhaseUsage> = {};
+    const models: Record<string, LlmModelUsage> = {};
     const total: LlmUsageSummary = {
-      calls: 0,
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
+      ...blankUsage(),
       phases,
+      models,
+      provider: this.options.AIProvider?.provider,
     };
     for (const [phase, usage] of this.llmUsageByPhase) {
       phases[phase] = { ...usage };
       total.calls += usage.calls;
       total.promptTokens += usage.promptTokens;
+      total.cachedPromptTokens += usage.cachedPromptTokens;
       total.completionTokens += usage.completionTokens;
       total.totalTokens += usage.totalTokens;
+    }
+    for (const [model, usage] of this.llmUsageByModel) {
+      models[model] = { ...usage, phases: { ...usage.phases } };
     }
     return total;
   }
@@ -202,7 +262,7 @@ class DeepResearch {
       } else if (part.type === "reasoning") {
         this.onMessage("reasoning", { type: "text", text: part.textDelta });
       } else if (part.type === "finish") {
-        this.recordLlmUsage("report-plan", part.usage);
+        this.recordLlmUsage("report-plan", part.usage, this.options.AIProvider.thinkingModel, part.providerMetadata);
       }
     }
     this.onMessage("message", { type: "text", text: "\n</report-plan>\n\n" });
@@ -219,7 +279,7 @@ class DeepResearch {
   ): Promise<DeepResearchSearchTask[]> {
     this.onMessage("progress", { step: "serp-query", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
-    const { text, usage } = await generateText({
+    const { text, usage, providerMetadata } = await generateText({
       model: await this.getThinkingModel(),
       system: getSystemPrompt(),
       prompt: [
@@ -227,7 +287,7 @@ class DeepResearch {
         this.getResponseLanguagePrompt(),
       ].join("\n\n"),
     });
-    this.recordLlmUsage("serp-query", usage);
+    this.recordLlmUsage("serp-query", usage, this.options.AIProvider.thinkingModel, providerMetadata);
     const querySchema = getSERPQuerySchema();
     let content = "";
     thinkTagStreamProcessor.processChunk(text, (data) => {
@@ -373,7 +433,7 @@ class DeepResearch {
         } else if (part.type === "source") {
           sources.push(part.source);
         } else if (part.type === "finish") {
-          this.recordLlmUsage("search-task", part.usage);
+          this.recordLlmUsage("search-task", part.usage, this.options.AIProvider.taskModel, part.providerMetadata);
           if (part.providerMetadata?.google) {
             const { groundingMetadata } = part.providerMetadata.google;
             const googleGroundingMetadata =
@@ -502,7 +562,7 @@ class DeepResearch {
       } else if (part.type === "source") {
         sources.push(part.source);
       } else if (part.type === "finish") {
-        this.recordLlmUsage("final-report", part.usage);
+        this.recordLlmUsage("final-report", part.usage, this.options.AIProvider.thinkingModel, part.providerMetadata);
         if (sources.length > 0) {
           // Check if we have formatted citations (from gene research)
           const hasFormattedCitations = sources.some(source => source.formattedCitation);
@@ -988,13 +1048,13 @@ class DeepResearch {
         geneInfo.specificAspects?.length ? `Specific aspects: ${geneInfo.specificAspects.join(", ")}` : "",
         `User research question: ${researchQuestion}`,
       ].filter(Boolean).join("\n");
-      const { text, usage } = await generateText({
+      const { text, usage, providerMetadata } = await generateText({
         model: await this.getThinkingModel(),
         system: getGeneResearchSystemPrompt(),
         prompt: [generateGeneSerpQueriesPrompt(plan), this.getResponseLanguagePrompt()].join("\n\n"),
         abortSignal: signal,
       });
-      this.recordLlmUsage("gene-llm-queries", usage);
+      this.recordLlmUsage("gene-llm-queries", usage, this.options.AIProvider.thinkingModel, providerMetadata);
       const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
       let content = "";
       thinkTagStreamProcessor.processChunk(text, (data) => {
@@ -1069,13 +1129,13 @@ class DeepResearch {
           }))
           .filter(source => source.url && source.content);
         if (sources.length === 0) continue;
-        const { text, usage } = await generateText({
+        const { text, usage, providerMetadata } = await generateText({
           model: await this.getTaskModel(),
           system: getGeneResearchSystemPrompt(),
           prompt: [processGeneSearchResultPrompt(query, researchGoal, sources, true), this.getResponseLanguagePrompt()].join("\n\n"),
           abortSignal: signal,
         });
-        this.recordLlmUsage("gene-llm-learnings", usage);
+        this.recordLlmUsage("gene-llm-learnings", usage, this.options.AIProvider.taskModel, providerMetadata);
         const learning = text.trim();
         if (learning) learnings.push(`[literature batch ${index + 1}/${batches.length}]\n${learning}`);
       }
@@ -1170,7 +1230,7 @@ class DeepResearch {
         } else if (part.type === "reasoning") {
           this.onMessage("reasoning", { type: "text", text: part.textDelta });
         } else if (part.type === "finish") {
-          this.recordLlmUsage("gene-llm-report", part.usage);
+          this.recordLlmUsage("gene-llm-report", part.usage, this.options.AIProvider.thinkingModel, part.providerMetadata);
         }
       }
       this.onMessage("message", { type: "text", text: "\n</final-report>\n\n" });

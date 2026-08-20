@@ -402,7 +402,18 @@ export class TaskQueue extends EventEmitter {
         
         const policyCompliantCachedResult = enforceTaskMediaPolicy(task.parameters, cachedResult);
         const cachedResultWithProposal = this.ensureCodeXomicsAnnotationProposal(task, policyCompliantCachedResult);
-        const taskResult = this.prepareResultForTask(task, cachedResultWithProposal);
+        // The replayed llmUsage and researchTime describe the original run, not
+        // this one. Mark the replay so a cost report can count those tokens
+        // without billing for inference that never happened.
+        const replayedResult = {
+          ...cachedResultWithProposal,
+          metadata: {
+            ...((cachedResultWithProposal as any)?.metadata || {}),
+            cacheReplay: true,
+            cacheReplayedAt: new Date().toISOString(),
+          },
+        };
+        const taskResult = this.prepareResultForTask(task, replayedResult);
         const completedTask = await taskStore.updateTaskResult(task.id, taskResult);
         if (completedTask.status === 'completed') {
           this.emit('task:completed', completedTask, taskResult);
