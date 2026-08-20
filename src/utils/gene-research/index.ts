@@ -144,7 +144,12 @@ export interface GeneResearchResult {
       /** Audit of how much of the gene's PubMed literature this run actually read. */
       literatureCoverage?: {
         literatureBudget: number;
+        /** Largest single query's match count. Null only when nothing reported one. */
         pubmedTotalMatchCount: number | null;
+        /** Sum across queries. Queries overlap, so this is an upper bound. */
+        pubmedMatchCountUpperBound: number | null;
+        pubmedQueriesWithCounts: number;
+        pubmedQueryCount: number;
         retainedAbstractCount: number;
         linkedBibliographyRequested: number;
         linkedBibliographyRetrieved: number;
@@ -371,7 +376,13 @@ export class GeneResearchEngine {
       
       const researchTime = Date.now() - startTime;
       const successfulSearches = this.searchAttempts.filter(attempt => attempt.status === 'success').length;
-      
+      // Only counts a provider actually returned. A query that reported nothing
+      // must not contribute a zero, and a genuine zero must stay distinguishable
+      // from "not measured".
+      const pubmedMatchCounts = this.searchAttempts
+        .map(attempt => attempt.totalMatchCount)
+        .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+
       return {
         workflow,
         qualityMetrics,
@@ -409,10 +420,15 @@ export class GeneResearchEngine {
             coverageByCategory: coverage.coverageByCategory,
             literatureCoverage: {
               literatureBudget: this.literatureBudget,
-              pubmedTotalMatchCount: Math.max(
-                0,
-                ...this.searchAttempts.map(attempt => attempt.totalMatchCount ?? 0),
-              ) || null,
+              pubmedTotalMatchCount: pubmedMatchCounts.length ? Math.max(...pubmedMatchCounts) : null,
+              // Queries overlap, so the sum bounds the distinct records seen
+              // rather than counting them. Named so it cannot be mistaken for
+              // a deduplicated total.
+              pubmedMatchCountUpperBound: pubmedMatchCounts.length
+                ? pubmedMatchCounts.reduce((total, value) => total + value, 0)
+                : null,
+              pubmedQueriesWithCounts: pubmedMatchCounts.length,
+              pubmedQueryCount: this.searchAttempts.length,
               retainedAbstractCount: coverage.literatureSourceCount,
               linkedBibliographyRequested: coverage.linkedBibliographyRequested,
               linkedBibliographyRetrieved: coverage.linkedBibliographyRetrieved,
