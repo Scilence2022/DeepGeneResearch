@@ -812,6 +812,47 @@ describe('curation note length integrity', () => {
   });
 });
 
+describe('literature summary evidence binding', () => {
+  it('excludes accepted bibliography entries that have no evidence record in the bounded manifest', () => {
+    const sources = Array.from({ length: 120 }, (_, index) => {
+      const pmid = String(15000000 + index);
+      return {
+        title: `tolC PubMed record ${index}`,
+        url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+        database: 'pubmed',
+        provenance: { provider: 'pubmed', recordId: pmid },
+        structuredData: {
+          targetRelevance: {
+            accepted: true,
+            score: 12,
+            directness: 'direct',
+            reason: 'target supported by gene_symbol, organism_text',
+          },
+          literatureReferences: [{
+            pmid,
+            year: 2020,
+            abstract: `In Escherichia coli study ${index} describes the channel, its efflux function, and its regulation.`,
+          }],
+        },
+      };
+    });
+
+    const bundle = buildAnnotationCurationSummary({
+      geneSymbol: 'tolC',
+      organism: 'Escherichia coli',
+      target,
+      sources: sources as never,
+      finalReport: 'The narrative may summarize the research but cannot authorize mutations.',
+      confidence: 0.9,
+    });
+
+    expect(bundle.researchSummary.literature.length).toBeLessThanOrEqual(100);
+    expect(
+      bundle.researchSummary.literature.every(entry => (entry.evidenceIds ?? []).length > 0)
+    ).toBe(true);
+  });
+});
+
 describe('Genome Annotation Note reporting', () => {
   const lysCLiteratureSource = {
     title: 'Direct control of the Escherichia coli lysC riboswitch',
