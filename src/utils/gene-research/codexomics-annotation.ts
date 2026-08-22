@@ -926,7 +926,7 @@ function noteSentence(statement: string): string {
   return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
-function buildCurationNote(
+export function buildCurationNote(
   summary: CodeXomicsAnnotationProposal['researchSummary'],
 ): CodeXomicsCurationNote | undefined {
   // A mutation-ready note must contain at least one segment and must stay
@@ -1042,7 +1042,12 @@ function buildCurationNote(
 
   const citationTextParts: string[] = [];
   const omittedCitationLabels: string[] = [];
-  let citationTextLength = narrativeText.length;
+  const CITATION_PREFIX = 'Supporting sources: ';
+  // Account for the true serialized length of the citation clause: the
+  // narrative/citation separator and the "Supporting sources: " prefix were
+  // previously omitted, so a note near NOTE_MAX_LENGTH could silently exceed
+  // the cap and then fail the exact-binding integrity check.
+  let citationTextLength = narrativeText.length + 1 + CITATION_PREFIX.length;
   for (const citation of allSourceCitations) {
     const clause = `${citation.label}.`;
     const separatorLength = citationTextParts.length > 0 ? 1 : 0;
@@ -1054,13 +1059,13 @@ function buildCurationNote(
     citationTextLength += separatorLength + clause.length;
   }
   const citationText = citationTextParts.length > 0
-    ? `Supporting sources: ${citationTextParts.join(' ')}`
+    ? `${CITATION_PREFIX}${citationTextParts.join(' ')}`
     : undefined;
   // Every note ends with an agent/timestamp clause so curators and GenBank
   // consumers can see who produced it and when.
   const provenance = buildNoteProvenance(nowIso);
   const baseText = citationText ? `${narrativeText} ${citationText}` : narrativeText;
-  const text = provenance && citationTextLength + 1 + provenance.clause.length <= NOTE_MAX_LENGTH
+  const text = provenance && baseText.length + 1 + provenance.clause.length <= NOTE_MAX_LENGTH
     ? `${baseText} ${provenance.clause}`
     : baseText;
   return {

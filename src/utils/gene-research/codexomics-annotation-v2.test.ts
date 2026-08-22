@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { assertAnnotationChangeSetProposalIntegrity } from '@/contracts/annotation-change-set';
 import {
   buildAnnotationCurationSummary,
+  buildCurationNote,
   buildCodeXomicsAnnotationProposal,
   formatGenomeAnnotationNoteSection,
 } from './codexomics-annotation';
@@ -709,6 +710,105 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     proposal.claims[0].evidenceIds = [];
 
     expect(() => assertAnnotationChangeSetProposalIntegrity(proposal)).toThrow('has no supporting evidence');
+  });
+});
+
+describe('curation note length integrity', () => {
+  const AUTHORITATIVE_FIELDS = [
+    'product',
+    'molecular_function',
+    'catalytic_activity',
+    'enzyme_classification',
+    'biological_process',
+    'pathway_identifiers',
+    'family_or_domains',
+    'cellular_component',
+    'subcellular_location',
+    'structure_cross_references',
+    'regulatory_mechanisms',
+    'expression',
+    'protein_interactions',
+    'phenotypes',
+    'gene_family',
+    'conservation',
+  ];
+  const LITERATURE_CATEGORIES = [
+    'identity',
+    'function',
+    'protein',
+    'structure',
+    'pathway',
+    'localization',
+    'regulation',
+    'expression',
+    'interaction',
+    'phenotype',
+    'evolution',
+    'cross_reference',
+  ];
+  const STATEMENT =
+    'In Escherichia coli the channel contributes to multidrug efflux, outer membrane permeability, ' +
+    'and stress-responsive regulation, and the finding is supported by direct experimental evidence ' +
+    'from multiple independent studies of the efflux machinery and its regulatory networks.';
+
+  it('keeps a near-capacity note within the length bound and exactly bound to its segments', () => {
+    const facts = [
+      ...AUTHORITATIVE_FIELDS.map((field, index) => ({
+        id: `auth_${index}`,
+        field,
+        category: 'identity',
+        statement: `${STATEMENT} Authoritative record ${index}.`,
+        directness: 'exact_target',
+        evidenceLevel: 'reviewed_database',
+        evidenceIds: [`evidence_${index + 1}`],
+        confidence: 0.9,
+      })),
+      ...LITERATURE_CATEGORIES.map((category, index) => {
+        const pmid = String(14000000 + index);
+        return {
+          id: `lit_${index}`,
+          field: 'function',
+          category,
+          statement: `${STATEMENT} Study ${index} confirms the mechanism.`,
+          directness: 'exact_target',
+          evidenceLevel: 'target_literature',
+          evidenceIds: [`evidence_${AUTHORITATIVE_FIELDS.length + index + 1}`],
+          confidence: null,
+          citation: {
+            type: 'pmid',
+            id: pmid,
+            label: pmid,
+            url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+          },
+        };
+      }),
+    ];
+    const literature = Array.from({ length: 250 }, (_, index) => ({
+      title: `tolC literature record ${index}`,
+      pmid: String(14000000 + (index % LITERATURE_CATEGORIES.length)),
+      doi: undefined,
+      url: `https://pubmed.ncbi.nlm.nih.gov/${14000000 + (index % LITERATURE_CATEGORIES.length)}/`,
+      relevance: 'high' as const,
+      relevanceReason: 'matched the exact target and requested organism',
+      evidenceIds: [`evidence_${(index % 28) + 1}`],
+    }));
+
+    const note = buildCurationNote({
+      schema: 'dgr.curation-summary.v1',
+      headline: 'tolC summary',
+      facts: facts as never,
+      literature: literature as never,
+      limitations: [],
+    } as never);
+
+    expect(note).toBeDefined();
+    expect(note?.kind).toBe('standard');
+    expect(note!.text.length).toBeLessThanOrEqual(7600);
+    expect(note!.textSha256).toBe(createHash('sha256').update(note!.text).digest('hex'));
+    const narrative = note!.segments.map(segment => segment.text).join(' ');
+    const withCitations = note!.citationText ? `${narrative} ${note!.citationText}` : narrative;
+    const expectedText = note!.provenance ? `${withCitations} ${note!.provenance.clause}` : withCitations;
+    expect(note!.text).toBe(expectedText);
   });
 });
 
