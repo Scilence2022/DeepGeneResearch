@@ -843,6 +843,12 @@ function buildResearchSummary(
       : undefined;
     if (!pmid && !doi) continue;
     const evidenceIds = evidenceIdsForSource(source, records);
+    // CodeXomics rejects any literature entry that does not carry evidence in
+    // the proposal manifest. The bounded manifest may not cover every accepted
+    // source (the evidence list is capped), so unbound bibliography records
+    // stay in the full report/sources for curator review but are not listed in
+    // the structured summary.
+    if (!evidenceIds || evidenceIds.length === 0) continue;
     literature.push({
       title: String(source.title || reference.title || 'Untitled literature record'),
       pmid: pmid ? (/^\d{5,10}$/.test(pmid) ? pmid : undefined) : undefined,
