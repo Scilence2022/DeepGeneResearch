@@ -853,6 +853,46 @@ describe('literature summary evidence binding', () => {
   });
 });
 
+describe('ChangeSet evidence echo list', () => {
+  it('carries more than 30 distinct evidence labels when the manifest supports them', () => {
+    const sources = Array.from({ length: 60 }, (_, index) => {
+      const pmid = String(16000000 + index);
+      return {
+        title: `tolC evidence record ${index}`,
+        url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+        database: 'pubmed',
+        provenance: { provider: 'pubmed', recordId: pmid },
+        structuredData: {
+          targetRelevance: {
+            accepted: true,
+            score: 12,
+            directness: 'direct',
+            reason: 'target supported by gene_symbol, organism_text',
+          },
+          literatureReferences: [{
+            pmid,
+            year: 2020,
+            abstract: `In Escherichia coli study ${index} confirms the channel function and its regulatory role in efflux.`,
+          }],
+        },
+      };
+    });
+
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'tolC',
+      organism: 'Escherichia coli',
+      target: { ...target, geneSymbol: 'tolC', locusTag: 'b3035', featureId: 'feat_tolC' },
+      sources: sources as never,
+      finalReport: 'The narrative may summarize the research but cannot authorize mutations.',
+      confidence: 0.9,
+    });
+
+    expect(proposal.evidence.length).toBeGreaterThan(30);
+    expect(proposal.evidence.length).toBeLessThanOrEqual(100);
+    expect(new Set(proposal.evidence).size).toBe(proposal.evidence.length);
+  });
+});
+
 describe('Genome Annotation Note reporting', () => {
   const lysCLiteratureSource = {
     title: 'Direct control of the Escherichia coli lysC riboswitch',
