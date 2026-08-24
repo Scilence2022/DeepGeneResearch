@@ -47,6 +47,8 @@ export interface GeneResearchConfig {
   diseaseContext?: string;
   experimentalApproach?: string;
   userPrompt?: string;
+  /** Durable research report reference (e.g. "DGR-<taskId>") appended to the note. */
+  reportReference?: string;
   targetAudience?: 'researchers' | 'clinicians' | 'students' | 'general';
   reportType?: 'comprehensive' | 'focused' | 'comparative';
   enableAPIIntegration?: boolean;
@@ -2137,6 +2139,7 @@ export class GeneResearchEngine {
       finalReport: templateReportText,
       sources: sources as any[],
       confidence: qualityMetrics.overallQuality,
+      reportReference: this.config.reportReference,
     });
     sections.push({
       id: 'genome-annotation-note',

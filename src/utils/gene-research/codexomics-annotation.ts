@@ -119,6 +119,8 @@ export interface CodeXomicsCurationNote {
   kind?: 'standard' | 'no_information_found';
   text: string;
   textSha256: string;
+  /** Durable research report reference echoed at the end of the note text. */
+  reportReference?: string;
   segments: CodeXomicsCurationNoteSegment[];
   factIds: string[];
   evidenceIds: string[];
@@ -243,6 +245,8 @@ interface BuildProposalInput {
   confidence?: number | null;
   reportUrl?: string;
   detailsUrl?: string;
+  /** Durable research report reference (e.g. "DGR-<taskId>") appended to the note. */
+  reportReference?: string;
   /**
    * Prebuilt curation artifacts from the research engine. Passing all three
    * keeps the archived report's note text, summary citations, and evidence
@@ -934,6 +938,7 @@ function noteSentence(statement: string): string {
 
 export function buildCurationNote(
   summary: CodeXomicsAnnotationProposal['researchSummary'],
+  options: { reportReference?: string } = {},
 ): CodeXomicsCurationNote | undefined {
   // A mutation-ready note must contain at least one segment and must stay
   // citation-bound. Direct literature statements supply per-segment PMIDs;
@@ -1071,20 +1076,32 @@ export function buildCurationNote(
   // consumers can see who produced it and when.
   const provenance = buildNoteProvenance(nowIso);
   const baseText = citationText ? `${narrativeText} ${citationText}` : narrativeText;
-  const text = provenance && baseText.length + 1 + provenance.clause.length <= NOTE_MAX_LENGTH
-    ? `${baseText} ${provenance.clause}`
-    : baseText;
+  const reportReference =
+    typeof options.reportReference === 'string' && options.reportReference.trim()
+      ? options.reportReference.trim()
+      : undefined;
+  const reportClause = reportReference ? ` Evidence report: ${reportReference}.` : '';
+  const baseWithProvenance =
+    provenance &&
+    baseText.length + 1 + provenance.clause.length + reportClause.length <= NOTE_MAX_LENGTH
+      ? `${baseText} ${provenance.clause}`
+      : baseText;
+  const text =
+    reportClause && baseWithProvenance.length + reportClause.length <= NOTE_MAX_LENGTH
+      ? `${baseWithProvenance}${reportClause}`
+      : baseWithProvenance;
   return {
     schema: 'dgr.curation-note.v1',
     kind: 'standard',
     text,
     textSha256: createHash('sha256').update(text).digest('hex'),
+    ...(reportReference && text.endsWith(reportClause) ? { reportReference } : {}),
     segments,
     factIds,
     evidenceIds: dedupe(segments.flatMap(segment => segment.evidenceIds)),
     citationText,
     allSourceCitations,
-    ...(provenance && text === `${baseText} ${provenance.clause}` ? { provenance } : {}),
+    ...(provenance && baseWithProvenance === `${baseText} ${provenance.clause}` ? { provenance } : {}),
     coverage: {
       availableFactCount: availableFacts.length,
       includedFactCount: factIds.length,
@@ -1124,9 +1141,11 @@ function assertCurationNoteIntegrity(
   const joined = note.segments.map(segment => segment.text).join(' ');
   const withCitations = note.citationText ? `${joined} ${note.citationText}` : joined;
   const expectedText = note.provenance ? `${withCitations} ${note.provenance.clause}` : withCitations;
+  const reportClause = note.reportReference ? ` Evidence report: ${note.reportReference}.` : '';
+  const expectedTextWithReport = reportClause ? `${expectedText}${reportClause}` : expectedText;
   if (
     note.schema !== 'dgr.curation-note.v1'
-    || note.text !== expectedText
+    || note.text !== expectedTextWithReport
     || note.text.length > NOTE_MAX_LENGTH
     || note.textSha256 !== createHash('sha256').update(note.text).digest('hex')
   ) {
@@ -1509,7 +1528,9 @@ export function buildAnnotationCurationSummary(input: BuildProposalInput): Curat
     });
   }
   const researchSummary = buildResearchSummary(input, orderedSources, sourceRecords, confidence, extractSummary(finalReport));
-  const curationNote = input.target ? buildCurationNote(researchSummary) : undefined;
+  const curationNote = input.target
+    ? buildCurationNote(researchSummary, { reportReference: input.reportReference })
+    : undefined;
   return { orderedSources, evidenceDetails, sourceRecords, researchSummary, curationNote };
 }
 
@@ -1622,7 +1643,7 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
     ? undefined
     : prebuiltIdsResolve && input.prebuiltCurationNote !== undefined
       ? input.prebuiltCurationNote
-      : buildCurationNote(researchSummary);
+      : buildCurationNote(researchSummary, { reportReference: input.reportReference });
   // When the prebuilt record set is in play, a mutation candidate whose
   // evidence already exists in that set reuses the existing record ID instead
   // of appending a duplicate.
