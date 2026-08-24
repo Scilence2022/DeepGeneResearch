@@ -1745,7 +1745,7 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
   const evidence = dedupe([
     ...evidenceDetails.map(detail => detail.label),
     ...sourceRecords.filter(record => record.supporting).map(record => record.label),
-  ]).slice(0, 30);
+  ]).slice(0, 100);
 
   const proposal: CodeXomicsAnnotationProposal = {
     schema: 'codexomics.annotation-change-set.v2',
