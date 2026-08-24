@@ -893,6 +893,70 @@ describe('ChangeSet evidence echo list', () => {
   });
 });
 
+describe('curation note report reference', () => {
+  it('appends the stable report reference to the note text and keeps the binding intact', () => {
+    const facts = [
+      {
+        id: 'auth_1',
+        field: 'product',
+        category: 'identity',
+        statement: 'Outer membrane protein TolC is the channel component of tripartite efflux systems.',
+        directness: 'exact_target',
+        evidenceLevel: 'reviewed_database',
+        evidenceIds: ['evidence_1'],
+        confidence: 0.9,
+      },
+      {
+        id: 'lit_1',
+        field: 'literature_finding',
+        category: 'regulation',
+        statement: 'TolC levels are positively regulated by MarA, Rob, or SoxS.',
+        directness: 'exact_target',
+        evidenceLevel: 'target_literature',
+        evidenceIds: ['evidence_2'],
+        confidence: null,
+        citation: {
+          type: 'pmid',
+          id: '9473050',
+          label: '9473050',
+          url: 'https://pubmed.ncbi.nlm.nih.gov/9473050/',
+        },
+      },
+    ];
+    const literature = [
+      {
+        title: 'Exact tolC regulation study',
+        pmid: '9473050',
+        doi: undefined,
+        url: 'https://pubmed.ncbi.nlm.nih.gov/9473050/',
+        relevance: 'high',
+        relevanceReason: 'matched the exact target and requested organism',
+        evidenceIds: ['evidence_2'],
+      },
+    ];
+
+    const note = buildCurationNote(
+      {
+        schema: 'dgr.curation-summary.v1',
+        headline: 'tolC summary',
+        facts: facts as never,
+        literature: literature as never,
+        limitations: [],
+      } as never,
+      { reportReference: 'DGR-abc123' }
+    );
+
+    expect(note).toBeDefined();
+    expect(note?.reportReference).toBe('DGR-abc123');
+    expect(note!.text).toContain(' Evidence report: DGR-abc123.');
+    expect(note!.textSha256).toBe(createHash('sha256').update(note!.text).digest('hex'));
+    const narrative = note!.segments.map(segment => segment.text).join(' ');
+    const withCitations = note!.citationText ? `${narrative} ${note!.citationText}` : narrative;
+    const expectedBase = note!.provenance ? `${withCitations} ${note!.provenance.clause}` : withCitations;
+    expect(note!.text).toBe(`${expectedBase} Evidence report: DGR-abc123.`);
+  });
+});
+
 describe('Genome Annotation Note reporting', () => {
   const lysCLiteratureSource = {
     title: 'Direct control of the Escherichia coli lysC riboswitch',

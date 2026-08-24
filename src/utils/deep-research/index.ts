@@ -776,6 +776,7 @@ class DeepResearch {
         diseaseContext: geneInfo.diseaseContext,
         experimentalApproach: geneInfo.experimentalApproach,
         userPrompt: explicitGeneInfo?.userPrompt,
+        reportReference: taskId ? `DGR-${taskId}` : undefined,
         userDocumentIds: explicitGeneInfo?.userDocumentIds,
         literatureBudget: explicitGeneInfo?.literatureBudget,
         fullTextBudget: explicitGeneInfo?.fullTextBudget,
