@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import { assertAnnotationChangeSetProposalIntegrity } from '@/contracts/annotation-change-set';
+import { isPathwayIdentifier } from '@/contracts/annotation-identifiers';
 import type {
   AnnotationChangeSetProposal,
   AnnotationOperation,
@@ -43,7 +44,8 @@ export interface CodeXomicsResearchFact {
   statement: string;
   evidenceIds: string[];
   confidence: number | null;
-  directness: 'exact_target';
+  /** Database identity and heuristic literature source matching are distinct. */
+  directness: 'exact_target' | 'source_target_match';
   evidenceLevel: 'reviewed_database' | 'authoritative_database' | 'target_literature';
   sourceDatabases: string[];
   citation?: {
@@ -640,7 +642,8 @@ function buildResearchSummary(
     addFact(source, 'function', 'enzyme_classification', source.annotation?.ecNumbers || functional.enzymeClassification);
     addFact(source, 'pathway', 'biological_process', functional.biologicalProcess);
     addFact(source, 'pathway', 'go_terms', source.annotation?.goTerms);
-    addFact(source, 'pathway', 'pathway_identifiers', source.annotation?.pathwayTerms);
+    addFact(source, 'pathway', 'pathway_identifiers', (source.annotation?.pathwayTerms || [])
+      .filter((value: string) => isPathwayIdentifier(value, input.target?.organism || input.organism)));
     addFact(source, 'localization', 'cellular_component', functional.cellularComponent);
     addFact(source, 'localization', 'subcellular_location', protein.subcellularLocation);
     addFact(source, 'protein', 'uniprot_id', protein.uniprotId);
@@ -707,7 +710,7 @@ function buildResearchSummary(
       // Retrieval relevance is not scientific confidence. Preserve the
       // abstract statement without manufacturing a quantitative certainty.
       confidence: null,
-      directness: 'exact_target',
+      directness: 'source_target_match',
       evidenceLevel: 'target_literature',
       sourceDatabases: ['pubmed'],
       citation: {
@@ -790,7 +793,7 @@ function buildResearchSummary(
         statement: span.excerpt,
         evidenceIds: [evidenceRecord.id],
         confidence: null,
-        directness: 'exact_target',
+        directness: 'source_target_match',
         evidenceLevel: 'target_literature',
         sourceDatabases: [String(source.database || 'user_document')],
         citation: {
@@ -1406,6 +1409,7 @@ function collectQualifiedMutationCandidates(
       const values = asValues(source.annotation[definition.annotationKey]);
       const provenanceEntries = getFieldProvenance(source.annotation, definition.provenanceKey);
       for (const value of values) {
+        if (definition.field === 'pathway' && !isPathwayIdentifier(value, target.organism)) continue;
         if (currentAnnotationHasValue(currentAnnotation, definition.field, value)) continue;
         const qualifiedEvidence = provenanceEntries
           .filter(provenance => isQualifiedFieldProvenance({

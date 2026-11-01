@@ -80,6 +80,25 @@ function exactStructuredSource({
 }
 
 describe('CodeXomics annotation ChangeSet proposal v2', () => {
+  it('rejects gene/protein IDs supplied as pathway fields even with exact-target provenance', () => {
+    const source = exactStructuredSource();
+    const values = ['KEGG:eco:b0003', 'BioCyc:EcoCyc:THRB-MONOMER', 'Reactome:R-HSA-9927020'];
+    source.annotation.pathwayTerms = values;
+    Object.assign(source.annotation.fieldEvidence!, { pathwayTerms: values.map(value => provenance(value)) });
+    const proposal = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'thrB', organism: 'Escherichia coli', target, sources: [source],
+    });
+    expect(proposal.operations.filter(operation => operation.field === 'pathway')).toEqual([]);
+    expect(proposal.researchSummary.facts.filter(fact => fact.field === 'pathway_identifiers')).toEqual([]);
+
+    const valid = buildCodeXomicsAnnotationProposal({
+      geneSymbol: 'thrB', organism: 'Escherichia coli', target, sources: [exactStructuredSource()],
+    });
+    const operation = valid.operations.find(item => item.field === 'pathway')!;
+    operation.value = 'KEGG:eco:b0003';
+    valid.claims.find(claim => claim.id === operation.claimIds[0])!.value = operation.value;
+    expect(() => assertAnnotationChangeSetProposalIntegrity(valid)).toThrow('non-pathway identifier');
+  });
   it('accepts exact-target authoritative structured fields with field-level provenance', () => {
     const currentProduct = 'hypothetical protein';
     const proposal = buildCodeXomicsAnnotationProposal({
