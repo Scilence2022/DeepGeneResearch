@@ -1,3 +1,5 @@
+import { isPathwayIdentifier } from './annotation-identifiers';
+
 /**
  * Shared wire contract for Deep Gene Research -> CodeXomics autonomous
  * annotation workflows. CodeXomics is the sole commit authority; DGR emits a
@@ -169,6 +171,12 @@ export function assertAnnotationChangeSetProposalIntegrity(proposal: AnnotationC
     : null;
 
   for (const claim of proposal.claims) {
+    if (claim.field === 'pathway') {
+      const values = Array.isArray(claim.value) ? claim.value : [claim.value];
+      if (!values.every(value => isPathwayIdentifier(value, proposal.target?.organism))) {
+        throw new Error(`Annotation claim ${claim.id} contains a non-pathway identifier or incompatible organism`);
+      }
+    }
     if (claim.evidenceIds.length === 0) {
       if (noInformationNoteText !== null && claim.field === 'note' && claim.value === noInformationNoteText) {
         continue;

@@ -43,6 +43,33 @@ describe('gene search provider cancellation', () => {
 describe('gene search provider evidence retrieval', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('keeps gene and protein cross-references out of pathway qualifiers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [{
+      primaryAccession: 'P75823',
+      uniProtkbId: 'LTAE_ECOLI',
+      entryType: 'UniProtKB reviewed (Swiss-Prot)',
+      proteinDescription: { recommendedName: { fullName: { value: 'Low-specificity L-threonine aldolase' } } },
+      genes: [{ geneName: { value: 'ltaE' }, orderedLocusNames: [{ value: 'b0870' }] }],
+      organism: { scientificName: 'Escherichia coli (strain K12)', taxonId: 83333 },
+      uniProtKBCrossReferences: [
+        { database: 'KEGG', id: 'eco:b0870' },
+        { database: 'BioCyc', id: 'EcoCyc:LTAA-MONOMER' },
+        { database: 'BioCyc', id: 'MetaCyc:LTAA-MONOMER' },
+        { database: 'Reactome', id: 'R-HSA-9927020' },
+        { database: 'KEGG', id: 'eco00260' },
+      ],
+    }] }), { status: 200 })));
+    const result = await searchUniProt({
+      provider: 'uniprot', query: 'ltaE', geneSymbol: 'ltaE',
+      organism: 'Escherichia coli', locusTag: 'b0870',
+    });
+    expect(result.sources[0].annotation?.pathwayTerms).toEqual(['KEGG:eco00260']);
+    expect(result.sources[0].annotation?.dbXrefs).toEqual(expect.arrayContaining([
+      'KEGG:eco:b0870', 'BioCyc:EcoCyc:LTAA-MONOMER',
+      'BioCyc:MetaCyc:LTAA-MONOMER', 'Reactome:R-HSA-9927020',
+    ]));
+  });
+
   it('retains the exact Gene-PubMed XML link set despite malformed control-character text', async () => {
     const linkedPmids = Array.from({ length: 38 }, (_, index) => String(9000000 + index));
     const fetchMock = vi.fn(async (rawUrl: string | URL) => {

@@ -71,10 +71,21 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function containsIdentity(text: string, term: string): boolean {
-  const normalized = String(term || '').trim();
+export interface IdentityTerm {
+  value: string;
+  /** Gene symbols and stable identifiers are case-significant (nudE is not "nude"). */
+  caseSensitive: boolean;
+  allowInitialCapital: boolean;
+}
+
+export function containsIdentity(text: string, term: IdentityTerm): boolean {
+  const normalized = String(term.value || '').trim();
   if (normalized.length < 3) return false;
-  return new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(normalized)}(?=$|[^A-Za-z0-9])`, 'i').test(text);
+  const forms = new Set([normalized]);
+  if (term.allowInitialCapital) forms.add(normalized[0].toUpperCase() + normalized.slice(1));
+  return Array.from(forms).some(form =>
+    new RegExp(`(^|[^A-Za-z0-9_])${escapeRegExp(form)}(?=$|[^A-Za-z0-9_])`, term.caseSensitive ? '' : 'i').test(text)
+  );
 }
 
 interface SentenceSpan {
@@ -101,19 +112,32 @@ function sourceReference(source: Record<string, any>) {
   return source?.structuredData?.literatureReferences?.[0] || {};
 }
 
-function targetIdentityTerms(target: LiteratureFindingTarget): string[] {
-  return Array.from(new Set([
-    target.geneSymbol,
-    target.locusTag,
-    target.proteinId,
-    ...(target.identityTerms || []),
-  ]
-    .map(value => String(value || '').trim())
-    .filter(value => value.length >= 3)
-    .filter(value => !/^(?:enzyme|gene|protein|unknown)$/i.test(value))));
+export function targetIdentityTerms(target: LiteratureFindingTarget): IdentityTerm[] {
+  const canonical = [target.geneSymbol, target.locusTag, target.proteinId]
+    .filter(Boolean).map(value => String(value).trim().toLowerCase());
+  const terms: IdentityTerm[] = [
+    { value: String(target.geneSymbol || ''), caseSensitive: true, allowInitialCapital: true },
+    { value: String(target.locusTag || ''), caseSensitive: true, allowInitialCapital: false },
+    { value: String(target.proteinId || ''), caseSensitive: true, allowInitialCapital: false },
+    ...(target.identityTerms || [])
+      .filter(value => !canonical.includes(String(value || '').trim().toLowerCase()))
+      .filter(value => !/^\d+$/.test(String(value || '').trim()))
+      .map(value => ({ value: String(value || ''), caseSensitive: String(value || '').length < 7, allowInitialCapital: String(value || '').length < 7 })),
+  ];
+  const seen = new Set<string>();
+  return terms
+    .map(term => ({ ...term, value: term.value.trim() }))
+    .filter(term => term.value.length >= 3)
+    .filter(term => !/^(?:enzyme|gene|protein|unknown)$/i.test(term.value))
+    .filter(term => {
+      const key = `${term.caseSensitive}:${term.value}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
-function sentenceHasTarget(sentence: string, terms: string[]): boolean {
+function sentenceHasTarget(sentence: string, terms: IdentityTerm[]): boolean {
   return terms.some(term => containsIdentity(sentence, term));
 }
 

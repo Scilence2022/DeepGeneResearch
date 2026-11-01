@@ -34,6 +34,14 @@ function documentFromText(text: string): FullTextDocument {
 }
 
 describe('full-text evidence extraction', () => {
+  it('does not match nude mice or uppercase compound codes through full-text extraction', () => {
+    expect(buildFullTextEvidenceSpans(documentFromText(
+      'The nude mice showed increased antibody activity after Escherichia coli immunization.'
+    ), { geneSymbol: 'nudE', organism: 'Escherichia coli', locusTag: 'b3397', identityTerms: ['nudE'] })).toEqual([]);
+    expect(buildFullTextEvidenceSpans(documentFromText(
+      'The compound B4308 inhibited enzyme activity in Escherichia coli samples.'
+    ), { geneSymbol: 'yjhR', organism: 'Escherichia coli', locusTag: 'b4308' })).toEqual([]);
+  });
   it('canonicalizes line endings and Unicode before hashing or offsets', () => {
     expect(canonicalizeFullText('  cafe\u0301\r\n\tlysC   result  \n\n\n next ')).toBe(
       'café\nlysC result\n\nnext'

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { fetchPublicText } from '@/utils/safe-public-fetch';
 import { loadResearchDocument } from '@/services/research-document-store';
+import { containsIdentity, targetIdentityTerms, type IdentityTerm } from './literature-findings';
 
 export const FULL_TEXT_CANONICALIZATION = 'dgr.full-text.v1' as const;
 export const FULL_TEXT_OFFSET_ENCODING = 'utf16_code_units' as const;
@@ -130,12 +131,8 @@ export async function retrieveEuropePmcFullText(pmid: string): Promise<FullTextD
   return acquireEuropePmcJats({ ...work, pmid: work.pmid ?? pmid });
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function hasIdentity(text: string, terms: string[]): boolean {
-  return terms.some(term => new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(term)}(?=$|[^A-Za-z0-9])`, 'i').test(text));
+function hasIdentity(text: string, terms: IdentityTerm[]): boolean {
+  return terms.some(term => containsIdentity(text, term));
 }
 
 export function buildFullTextEvidenceSpans(
@@ -143,12 +140,7 @@ export function buildFullTextEvidenceSpans(
   target: FullTextTarget,
   maxFindings = 12,
 ): FullTextEvidenceSpan[] {
-  const terms = Array.from(new Set([
-    target.geneSymbol,
-    target.locusTag,
-    target.proteinId,
-    ...(target.identityTerms || []),
-  ].map(value => String(value || '').trim()).filter(value => value.length >= 3)));
+  const terms = targetIdentityTerms(target);
   if (terms.length === 0) return [];
 
   const sentences: Array<{ text: string; start: number; end: number }> = [];

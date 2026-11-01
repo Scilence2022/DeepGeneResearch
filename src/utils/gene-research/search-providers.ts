@@ -2,6 +2,7 @@
 // Specialized search capabilities for molecular biology databases
 
 import { createFetchSignal } from '@/utils/fetch-signal';
+import { isPathwayIdentifier } from '@/contracts/annotation-identifiers';
 import {
   searchQuickGo,
   searchInterPro,
@@ -272,6 +273,26 @@ function containsIdentifier(text: string, identifier?: string): boolean {
   return new RegExp(`(^|[^A-Za-z0-9_])${escapeRegExp(clean)}(?=$|[^A-Za-z0-9_])`, 'i').test(text);
 }
 
+/**
+ * Gene symbols and stable identifiers are case-significant: `nudE` is not the
+ * word "nude", and locus tag `b4308` is not the compound code "B4308". Match
+ * the canonical spelling and, for gene symbols, the protein-style initial
+ * capital (`NudE`). Free-text names and aliases keep case-insensitive matching.
+ */
+function containsCanonicalIdentifier(text: string, identifier?: string, allowInitialCapital = false): boolean {
+  const clean = String(identifier || '').trim();
+  if (!clean) return false;
+  const forms = new Set([clean]);
+  if (allowInitialCapital) forms.add(clean[0].toUpperCase() + clean.slice(1));
+  return Array.from(forms).some(form =>
+    new RegExp(`(^|[^A-Za-z0-9_])${escapeRegExp(form)}(?=$|[^A-Za-z0-9_])`).test(text)
+  );
+}
+
+function containsGeneSymbol(text: string, geneSymbol?: string): boolean {
+  return containsCanonicalIdentifier(text, geneSymbol, true);
+}
+
 function organismAliases(organism?: string): string[] {
   const clean = String(organism || '').trim();
   if (!clean) return [];
@@ -304,9 +325,9 @@ function targetTextMatch(
   options: Pick<GeneSearchProviderOptions, 'geneSymbol' | 'organism' | 'locusTag' | 'proteinId'>
 ): { targetMatch: boolean; matchedBy: string[]; exactIdentifierMatch: boolean } {
   const matchedBy: string[] = [];
-  const proteinMatch = containsIdentifier(text, options.proteinId);
-  const locusMatch = containsIdentifier(text, options.locusTag);
-  const geneMatch = containsIdentifier(text, options.geneSymbol);
+  const proteinMatch = containsCanonicalIdentifier(text, options.proteinId);
+  const locusMatch = containsCanonicalIdentifier(text, options.locusTag);
+  const geneMatch = containsGeneSymbol(text, options.geneSymbol);
   const organismMatch = textMentionsOrganism(text, options.organism);
   if (proteinMatch) matchedBy.push('protein_id');
   if (locusMatch) matchedBy.push('locus_tag');
@@ -350,7 +371,8 @@ const OFF_TARGET_TITLE_TAXA = [
   'anopheles', 'arabidopsis', 'bacillus', 'brevibacterium', 'burkholderia',
   'corynebacterium', 'drosophila', 'homo sapiens', 'mouse', 'mus musculus',
   'oryza', 'rat', 'rattus', 'saccharomyces', 'staphylococcus', 'streptococcus',
-  'synechococcus', 'tobacco', 'zea mays',
+  'synechococcus', 'tobacco', 'zea mays', 'pseudomonas', 'aquifex',
+  'thermus', 'clostridium', 'lacticaseibacillus',
 ];
 
 function sentenceSegments(value: string): string[] {
@@ -362,7 +384,7 @@ function sentenceSegments(value: string): string[] {
 }
 
 function hasGeneSpecificContext(sentence: string, geneSymbol?: string): boolean {
-  if (!containsIdentifier(sentence, geneSymbol)) return false;
+  if (!containsGeneSymbol(sentence, geneSymbol)) return false;
   return /\b(?:genes?|locus|operons?|riboswitch(?:es)?|transcripts?|transcription|promoters?|attenuation|express(?:ed|es|ion)?|mutants?|mutagen(?:esis|ized)|knockouts?|overexpress(?:ed|es|ion)?|regulat(?:e|ed|es|ing|ion|ory)|encod(?:e|ed|es|ing)|biosynth(?:esis|etic)|cataly(?:sis|tic|zes?)|enzymes?|proteins?|kinases?|function(?:al)?|characteri[sz](?:e|ed|es|ing|ation))\b/i.test(sentence);
 }
 
@@ -407,9 +429,9 @@ export function assessGeneTargetRelevance(
   const matchedBy: string[] = [];
   let score = 0;
 
-  const proteinMatch = containsIdentifier(text, options.proteinId);
-  const locusMatch = containsIdentifier(text, options.locusTag);
-  const geneMatch = containsIdentifier(text, options.geneSymbol);
+  const proteinMatch = containsCanonicalIdentifier(text, options.proteinId);
+  const locusMatch = containsCanonicalIdentifier(text, options.locusTag);
+  const geneMatch = containsGeneSymbol(text, options.geneSymbol);
   const organismMatch = textMentionsOrganism(text, options.organism);
   const aliases = compactIdentityTerms(options)
     .map(value => String(value || '').trim())
@@ -421,14 +443,14 @@ export function assessGeneTargetRelevance(
   const strongAliasMatches = aliasMatches.filter(alias => alias.length >= 7 || /\d/.test(alias));
   const targetOrganismSentences = sentences.filter(sentence => textMentionsOrganism(sentence, options.organism));
   const geneAndOrganismSameSentence = targetOrganismSentences.some(sentence =>
-    containsIdentifier(sentence, options.geneSymbol) && hasGeneSpecificContext(sentence, options.geneSymbol)
+    containsGeneSymbol(sentence, options.geneSymbol) && hasGeneSpecificContext(sentence, options.geneSymbol)
   );
   const aliasAndOrganismSameSentence = targetOrganismSentences.some(sentence =>
     strongAliasMatches.some(alias => containsIdentifier(sentence, alias))
   );
   const titleHasTargetOrganism = textMentionsOrganism(title, options.organism);
-  const titleHasGene = containsIdentifier(title, options.geneSymbol);
-  const titleHasStableIdentifier = containsIdentifier(title, options.proteinId) || containsIdentifier(title, options.locusTag);
+  const titleHasGene = containsGeneSymbol(title, options.geneSymbol);
+  const titleHasStableIdentifier = containsCanonicalIdentifier(title, options.proteinId) || containsCanonicalIdentifier(title, options.locusTag);
   const titleHasAuthoritativeName = strongAliasMatches.some(alias => containsIdentifier(title, alias));
   const targetGenus = String(options.organism || '').trim().split(/\s+/)[0].toLowerCase();
   const titleLower = title.toLowerCase();
@@ -440,11 +462,13 @@ export function assessGeneTargetRelevance(
   // A Gene-PubMed link is strong provenance, but it must not override an
   // explicit title/abstract collision. This prevents an accidental or broad
   // link from laundering LysC protease, lysozyme C, phage lysC, or a clearly
-  // off-taxon paper into the target bibliography. An exact stable identifier
-  // can still disambiguate the record.
-  const reagentCollision = !exactStableIdentifier && hasReagentCollision(text, options.geneSymbol);
-  const homonymCollision = !exactStableIdentifier && hasHomonymCollision(text, options.geneSymbol);
-  const phageCollision = !exactStableIdentifier && hasPhageLysisCollision(text, options.geneSymbol);
+  // off-taxon paper into the target bibliography. A matching string is not
+  // sufficient to override a conflicting subject or source organism.
+  const focusedStableIdentity = titleHasStableIdentifier && titleHasTargetOrganism;
+  const reagentCollision = !focusedStableIdentity && hasReagentCollision(text, options.geneSymbol);
+  const homonymCollision = !focusedStableIdentity && hasHomonymCollision(text, options.geneSymbol);
+  const phageCollision = (!focusedStableIdentity && hasPhageLysisCollision(text, options.geneSymbol))
+    || (/\b(?:bacteriophages?|phages?|T4)\b/i.test(title) && !titleHasGene && !titleHasStableIdentifier);
   const foreignTitleWithoutTarget = foreignTaxonInTitle && !titleHasTargetOrganism;
   const offOrganismCollision = !geneLinked && foreignTitleWithoutTarget;
 
@@ -456,7 +480,7 @@ export function assessGeneTargetRelevance(
   if (geneLinked) { score += 8; matchedBy.push('ncbi_gene_pubmed_link'); }
   if (geneAndOrganismSameSentence) { score += 4; matchedBy.push('target_organism_same_sentence'); }
   if (aliasAndOrganismSameSentence) { score += 4; matchedBy.push('authoritative_name_same_sentence'); }
-  if (containsIdentifier(title, options.geneSymbol) || aliasMatches.some(alias => containsIdentifier(title, alias))) {
+  if (containsGeneSymbol(title, options.geneSymbol) || aliasMatches.some(alias => containsIdentifier(title, alias))) {
     score += 2;
     matchedBy.push('title_identity');
   }
@@ -473,7 +497,11 @@ export function assessGeneTargetRelevance(
   const titleFocusedTarget = titleHasGene || titleHasAuthoritativeName || titleHasStableIdentifier;
   const namedTargetWithOrganism = !foreignTitleWithoutTarget && titleFocusedTarget && organismMatch;
   const collision = reagentCollision || homonymCollision || phageCollision || offOrganismCollision;
-  const directSupport = exactStableIdentifier || namedTargetWithOrganism;
+  // A stable identifier is direct evidence only when the source also names the
+  // target organism or NCBI links it to the gene; strain, allele and compound
+  // codes can share the canonical spelling of a locus tag.
+  const directSupport = !foreignTitleWithoutTarget
+    && ((exactStableIdentifier && (organismMatch || geneLinked)) || namedTargetWithOrganism);
   const accepted = !collision && (directSupport || geneLinked);
   let reason: string;
   if (accepted) reason = `target supported by ${matchedBy.join(', ')}`;
@@ -1655,20 +1683,17 @@ function parseUniProtResults(
     ])) as string[];
     const geneId = crossReferences.find((reference: any) => reference.database === 'GeneID')?.id;
     const goTerms = crossReferences.filter((ref: any) => ref.database === 'GO').map((ref: any) => ref.id);
-    const allPathwayTerms = crossReferences
+    const pathwayCrossReferences = crossReferences
       .filter((ref: any) => ['KEGG', 'BioCyc', 'Reactome'].includes(ref.database))
       .map((ref: any) => `${ref.database}:${ref.id}`);
-    const exactKeggTerms = locusTag
-      ? allPathwayTerms.filter((term: string) => term.toLowerCase().endsWith(`:${locusTag.toLowerCase()}`))
-      : [];
-    const pathwayTerms = [
-      ...(exactKeggTerms.length ? exactKeggTerms : allPathwayTerms.filter((term: string) => term.startsWith('KEGG:'))),
-      ...allPathwayTerms.filter((term: string) => !term.startsWith('KEGG:')),
-    ];
+    const pathwayTerms = pathwayCrossReferences.filter((term: string) =>
+      isPathwayIdentifier(term, actualOrganism)
+    );
     const dbXrefs = [
       `UniProtKB:${accession}`,
       ...crossReferences.filter((ref: any) => ['GeneID', 'RefSeq', 'PDB'].includes(ref.database))
         .map((ref: any) => `${ref.database}:${ref.id}`),
+      ...pathwayCrossReferences.filter((term: string) => !isPathwayIdentifier(term, actualOrganism)),
     ];
     const pmids = Array.from(new Set(
       comments.flatMap((comment: any) => [
