@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { assertAnnotationChangeSetProposalIntegrity } from '@/contracts/annotation-change-set';
 import { isPathwayIdentifier } from '@/contracts/annotation-identifiers';
+import { compareWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
 import type {
   AnnotationChangeSetProposal,
   AnnotationOperation,
@@ -753,7 +754,7 @@ function buildResearchSummary(
       || fullText?.identifiers?.pmid
       || '',
     ).trim();
-    if (fullText?.schema !== 'dgr.full-text-document.v1' || !/^\d{5,10}$/.test(pmid)) continue;
+    if (!buildFullTextSourceBinding(source) || !/^\d{5,10}$/.test(pmid)) continue;
     const evidenceIds = evidenceIdsForSource(source, records);
     const evidenceRecord = records.find(record =>
       evidenceIds.includes(record.id)
@@ -1281,6 +1282,8 @@ function buildFullTextSourceBinding(
   const fullText = source?.fullText;
   if (
     fullText?.schema !== 'dgr.full-text-document.v1'
+    || fullText.origin === 'snippet'
+    || compareWorkIdentity(workIdentifiers(source), fullText.identifiers || {}) === 'conflict'
     || fullText.canonicalization !== FULL_TEXT_CANONICALIZATION
     || typeof fullText.text !== 'string'
     || fullText.text.length < 200
@@ -1627,6 +1630,10 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
       ...input.prebuiltResearchSummary.facts,
       ...input.prebuiltResearchSummary.literature,
     ].every(item => (item?.evidenceIds || []).every(id => prebuiltRecordIds.has(String(id))))
+    && input.prebuiltResearchSummary.facts.every(fact => fact.literatureBasis?.kind !== 'full_text_span'
+      || fact.literatureBasis.sourceOrigin !== 'snippet')
+    && !sources.some(source => typeof source === 'object' && source?.fullText
+      && compareWorkIdentity(workIdentifiers(source), source.fullText.identifiers || {}) === 'conflict')
     && (input.prebuiltCurationNote === undefined
       || input.prebuiltCurationNote === null
       || (input.prebuiltCurationNote.evidenceIds || []).every(id => prebuiltRecordIds.has(String(id))));

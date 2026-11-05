@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { NextRequest } from "next/server";
 import { getCustomModelList, multiApiKeyPolling } from "@/utils/model";
 import { verifySignature } from "@/utils/signature";
+import { readBoundedJson } from "@/utils/request-json";
 import { generateAuthToken } from "@/utils/vertexAuth";
 
-const NODE_ENV = process.env.NODE_ENV;
 const accessPassword = process.env.ACCESS_PASSWORD || "";
 // AI provider API key
 const GOOGLE_GENERATIVE_AI_API_KEY =
@@ -20,6 +20,7 @@ const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL || "";
 const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY || "";
 const GOOGLE_PRIVATE_KEY_ID = process.env.GOOGLE_PRIVATE_KEY_ID || "";
 const OPENAI_COMPATIBLE_API_KEY = process.env.OPENAI_COMPATIBLE_API_KEY || "";
+const SILICONFLOW_API_KEY = process.env.SILICONFLOW_API_KEY || "";
 // Search provider API key
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY || "";
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || "";
@@ -35,7 +36,7 @@ const MODEL_LIST = process.env.NEXT_PUBLIC_MODEL_LIST || "";
 export const config = {
   // Skip /api/mcp routes: MCP route handlers perform Node-runtime auth locally.
   // This avoids Edge Runtime eval() issue with certain API routes
-  matcher: ["/api/ai/:path*", "/api/search/:path*", "/api/sse/:path*", "/api/research/:path*"],
+  matcher: ["/api/ai/:path*", "/api/search/:path*"],
 };
 
 const ERRORS = {
@@ -52,7 +53,25 @@ const ERRORS = {
 };
 
 export async function middleware(request: NextRequest) {
-  if (NODE_ENV === "production") console.debug(request);
+  const devBypass = !accessPassword && process.env.NODE_ENV !== "production"
+    && process.env.DGR_ALLOW_UNAUTHENTICATED_DEV === "true";
+  if (!devBypass && accessPassword.length < 16) {
+    return NextResponse.json({ error: "Provider proxy authentication is not configured" }, { status: 503 });
+  }
+  const provider = request.nextUrl.pathname.split("/")[3];
+  const isAI = request.nextUrl.pathname.startsWith("/api/ai/");
+  const isSearch = request.nextUrl.pathname.startsWith("/api/search/");
+  const providerHeaders: Record<string, string> = { google: "x-goog-api-key", anthropic: "x-api-key", azure: "api-key" };
+  const providerHeader = isAI ? providerHeaders[provider] : undefined;
+  const token = providerHeader
+    ? request.headers.get(providerHeader) || ""
+    : /^Bearer\s+([^\s]+)$/i.exec(request.headers.get("authorization") || "")?.[1] || "";
+  if (!devBypass && !(await verifySignature(token, accessPassword, Date.now()))) {
+    return NextResponse.json({ error: ERRORS.NO_PERMISSIONS }, { status: 403 });
+  }
+  if (Number(request.headers.get("content-length")) > 2 * 1024 * 1024) {
+    return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+  }
 
   const disabledAIProviders =
     DISABLED_AI_PROVIDER.length > 0 ? DISABLED_AI_PROVIDER.split(",") : [];
@@ -77,7 +96,13 @@ export async function middleware(request: NextRequest) {
   };
   const hasDisabledAIModel = async () => {
     if (request.method.toUpperCase() === "GET") return false;
-    const { model = "" } = await request.json();
+    let model = "";
+    try {
+      const body = await readBoundedJson(request.clone(), 2 * 1024 * 1024) as { model?: unknown } | null;
+      if (typeof body?.model === "string") model = body.model;
+    } catch {
+      return true;
+    }
     const { availableModelList, disabledModelList } = getCustomModelList(
       MODEL_LIST.length > 0 ? MODEL_LIST.split(",") : []
     );
@@ -89,11 +114,21 @@ export async function middleware(request: NextRequest) {
     return disabledModelList.some((disabledModel) => disabledModel === model);
   };
 
-  if (request.nextUrl.pathname.startsWith("/api/ai/google")) {
-    const authorization = request.headers.get("x-goog-api-key") || "";
+  if (isAI && provider === "siliconflow") {
+    if (disabledAIProviders.includes(provider) || await hasDisabledAIModel()) {
+      return NextResponse.json({ error: ERRORS.NO_PERMISSIONS }, { status: 403 });
+    }
+    const apiKey = multiApiKeyPolling(SILICONFLOW_API_KEY);
+    if (!apiKey) return NextResponse.json({ error: ERRORS.NO_API_KEY }, { status: 500 });
+    return NextResponse.next({ request: { headers: new Headers({
+      "Content-Type": request.headers.get("Content-Type") || "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }) } });
+  }
+
+  if (isAI && provider === "google") {
     const isDisabledGeminiModel = hasDisabledGeminiModel();
     if (
-      !verifySignature(authorization, accessPassword, Date.now()) ||
       disabledAIProviders.includes("google") ||
       isDisabledGeminiModel
     ) {
@@ -129,15 +164,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/openrouter")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "openrouter") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("openrouter") ||
       isDisabledModel
     ) {
@@ -169,15 +198,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/openaicompatible")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "openaicompatible") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("openaicompatible") ||
       isDisabledModel
     ) {
@@ -209,15 +232,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/openai")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "openai") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("openai") ||
       isDisabledModel
     ) {
@@ -249,11 +266,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/anthropic")) {
-    const authorization = request.headers.get("x-api-key") || "";
+  if (isAI && provider === "anthropic") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(authorization, accessPassword, Date.now()) ||
       disabledAIProviders.includes("anthropic") ||
       isDisabledModel
     ) {
@@ -289,15 +304,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/deepseek")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "deepseek") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("deepseek") ||
       isDisabledModel
     ) {
@@ -329,15 +338,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/xai")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "xai") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("xai") ||
       isDisabledModel
     ) {
@@ -369,15 +372,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/mistral")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "mistral") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("mistral") ||
       isDisabledModel
     ) {
@@ -409,11 +406,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/azure")) {
-    const authorization = request.headers.get("api-key") || "";
+  if (isAI && provider === "azure") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(authorization, accessPassword, Date.now()) ||
       disabledAIProviders.includes("azure") ||
       isDisabledModel
     ) {
@@ -445,15 +440,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/ai/google-vertex")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "google-vertex") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("google-vertex") ||
       isDisabledModel
     ) {
@@ -491,15 +480,9 @@ export async function middleware(request: NextRequest) {
     }
   }
   // The pollinations model only verifies access to the backend API
-  if (request.nextUrl.pathname.startsWith("/api/ai/pollinations")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "pollinations") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("pollinations") ||
       isDisabledModel
     ) {
@@ -521,15 +504,9 @@ export async function middleware(request: NextRequest) {
     }
   }
   // The ollama model only verifies access to the backend API
-  if (request.nextUrl.pathname.startsWith("/api/ai/ollama")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isAI && provider === "ollama") {
     const isDisabledModel = await hasDisabledAIModel();
     if (
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledAIProviders.includes("ollama") ||
       isDisabledModel
     ) {
@@ -550,15 +527,9 @@ export async function middleware(request: NextRequest) {
       });
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/search/tavily")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isSearch && provider === "tavily") {
     if (
       request.method.toUpperCase() !== "POST" ||
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledSearchProviders.includes("tavily")
     ) {
       return NextResponse.json(
@@ -589,15 +560,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/search/firecrawl")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isSearch && provider === "firecrawl") {
     if (
       request.method.toUpperCase() !== "POST" ||
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledSearchProviders.includes("firecrawl")
     ) {
       return NextResponse.json(
@@ -628,15 +593,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/search/exa")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isSearch && provider === "exa") {
     if (
       request.method.toUpperCase() !== "POST" ||
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledSearchProviders.includes("exa")
     ) {
       return NextResponse.json(
@@ -667,15 +626,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/search/bocha")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isSearch && provider === "bocha") {
     if (
       request.method.toUpperCase() !== "POST" ||
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledSearchProviders.includes("bocha")
     ) {
       return NextResponse.json(
@@ -706,15 +659,9 @@ export async function middleware(request: NextRequest) {
       }
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/search/searxng")) {
-    const authorization = request.headers.get("authorization") || "";
+  if (isSearch && provider === "searxng") {
     if (
       request.method.toUpperCase() !== "POST" ||
-      !verifySignature(
-        authorization.substring(7),
-        accessPassword,
-        Date.now()
-      ) ||
       disabledSearchProviders.includes("searxng")
     ) {
       return NextResponse.json(
@@ -735,31 +682,5 @@ export async function middleware(request: NextRequest) {
       });
     }
   }
-  if (request.nextUrl.pathname.startsWith("/api/sse")) {
-    let authorization = request.headers.get("authorization") || "";
-    if (authorization !== "") {
-      authorization = authorization.substring(7);
-    } else if (request.method.toUpperCase() === "GET") {
-      authorization = request.nextUrl.searchParams.get("password") || "";
-    }
-    if (authorization !== accessPassword) {
-      return NextResponse.json(
-        { error: ERRORS.NO_PERMISSIONS },
-        { status: 403 }
-      );
-    } else {
-      const requestHeaders = new Headers();
-      requestHeaders.set(
-        "Content-Type",
-        request.headers.get("Content-Type") || "application/json"
-      );
-      requestHeaders.delete("Authorization");
-      return NextResponse.next({
-        request: {
-          headers: requestHeaders,
-        },
-      });
-    }
-  }
-  return NextResponse.next();
+  return NextResponse.json({ error: ERRORS.NO_PERMISSIONS }, { status: 403 });
 }

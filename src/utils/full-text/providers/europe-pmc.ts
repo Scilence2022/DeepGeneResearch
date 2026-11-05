@@ -18,6 +18,7 @@ const ANNOTATIONS_BASE = 'https://www.ebi.ac.uk/europepmc/annotations_api';
  */
 export async function resolveEuropePmcWork(
   anchor: { pmid?: string; doi?: string },
+  signal?: AbortSignal,
 ): Promise<CandidateWork | null> {
   let query: string;
   if (anchor.pmid && /^\d{5,10}$/.test(anchor.pmid)) {
@@ -28,7 +29,7 @@ export async function resolveEuropePmcWork(
     return null;
   }
   const searchUrl = `${EPMC_BASE}/search?query=${encodeURIComponent(query)}&format=json&resultType=core`;
-  const search = await fetchPublicText(searchUrl, { maxBytes: 1_000_000, timeoutMs: 15_000 });
+  const search = await fetchPublicText(searchUrl, { maxBytes: 1_000_000, timeoutMs: 15_000, ...(signal ? { signal } : {}) });
   const result = JSON.parse(search.body)?.resultList?.result?.[0];
   if (!result) return null;
   const pmcid = String(result.pmcid || '').trim().toUpperCase();
@@ -48,6 +49,7 @@ export async function resolveEuropePmcWork(
  */
 export async function acquireEuropePmcJats(
   work: CandidateWork,
+  signal?: AbortSignal,
 ): Promise<FullTextDocument | null> {
   const pmcid = String(work.pmcid || '').trim().toUpperCase();
   if (!/^PMC\d+$/.test(pmcid)) return null;
@@ -55,7 +57,7 @@ export async function acquireEuropePmcJats(
   const sourceUrl = `${EPMC_BASE}/${pmcid}/fullTextXML`;
   let response: Awaited<ReturnType<typeof fetchPublicText>>;
   try {
-    response = await fetchPublicText(sourceUrl, { maxBytes: 12_000_000, timeoutMs: 25_000 });
+    response = await fetchPublicText(sourceUrl, { maxBytes: 12_000_000, timeoutMs: 25_000, ...(signal ? { signal } : {}) });
   } catch (error) {
     if (/404\b/.test(error instanceof Error ? error.message : String(error))) return null;
     throw error;
@@ -101,13 +103,14 @@ export async function acquireEuropePmcJats(
  */
 export async function fetchEuropePmcAnnotations(
   articleIds: string[],
+  signal?: AbortSignal,
 ): Promise<ProviderAnnotation[]> {
   const ids = articleIds.map(id => id.trim()).filter(Boolean).slice(0, 8);
   if (ids.length === 0) return [];
   const url = `${ANNOTATIONS_BASE}/annotationsByArticleIds?articleIds=${encodeURIComponent(ids.join(','))}&format=JSON`;
   let response: Awaited<ReturnType<typeof fetchPublicText>>;
   try {
-    response = await fetchPublicText(url, { maxBytes: 4_000_000, timeoutMs: 20_000 });
+    response = await fetchPublicText(url, { maxBytes: 4_000_000, timeoutMs: 20_000, ...(signal ? { signal } : {}) });
   } catch (error) {
     if (/404\b/.test(error instanceof Error ? error.message : String(error))) return [];
     throw error;

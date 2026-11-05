@@ -25,14 +25,14 @@ function is404(error: unknown): boolean {
  * an empty/too-short payload means the record is not in the PMC OA subset,
  * which is the normal "absent" outcome rather than a retrieval failure.
  */
-export async function acquireBiocPmcFullText(pmcid: string): Promise<AcquiredContent | null> {
+export async function acquireBiocPmcFullText(pmcid: string, signal?: AbortSignal): Promise<AcquiredContent | null> {
   const bareId = String(pmcid || '').trim().replace(/^PMC/i, '');
   if (!/^\d+$/.test(bareId)) return null;
   const normalizedPmcid = `PMC${bareId}`;
   const sourceUrl = `${BIOC_PMC_BASE}/BioC_json/${encodeURIComponent(bareId)}/unicode`;
   let payload: unknown;
   try {
-    payload = await biocPmcFetcher().fetchJson(sourceUrl);
+    payload = await biocPmcFetcher().fetchJson(sourceUrl, { signal });
   } catch (error) {
     if (is404(error)) return null;
     throw error;

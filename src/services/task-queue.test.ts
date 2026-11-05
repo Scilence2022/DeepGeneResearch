@@ -26,14 +26,14 @@ describe.sequential('durable task queue lifecycle', () => {
     else process.env.DGR_WORKER_COUNT = originalWorkerCount;
     if (originalWebConcurrency === undefined) delete process.env.WEB_CONCURRENCY;
     else process.env.WEB_CONCURRENCY = originalWebConcurrency;
-    vi.doUnmock('@/app/api/mcp/server');
+    vi.doUnmock('@/services/research-engine');
     vi.doUnmock('@/services/cache');
     vi.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
   });
 
   function mockResearch(conductGeneResearch: (...args: any[]) => Promise<any>) {
-    vi.doMock('@/app/api/mcp/server', () => ({
+    vi.doMock('@/services/research-engine', () => ({
       initDeepResearchServer: () => ({
         onMessage: () => undefined,
         conductGeneResearch,
@@ -48,6 +48,21 @@ describe.sequential('durable task queue lifecycle', () => {
       isReusableResearchResult: vi.fn().mockReturnValue(false),
     }));
   }
+
+  it('rejects a case-conflicting symbol for an exact feature before enqueueing', async () => {
+    const { TaskQueue } = await import('./task-queue');
+    const queue = new TaskQueue();
+    await expect(queue.addTask({
+      geneSymbol: 'LYSC',
+      organism: 'Escherichia coli',
+      target: {
+        workspaceId: 'ws', genomeId: 'g', annotationRevision: 0, featureId: 'f',
+        featureHash: 'h', chromosome: 'chr', featureType: 'CDS',
+        geneSymbol: 'lysC', locusTag: 'b4024', organism: 'Escherichia coli',
+      },
+    })).rejects.toThrow('geneSymbol does not match');
+    expect(queue.getQueueStatus().queueLength).toBe(0);
+  });
 
   it('automatically processes work recovered from an interrupted process', async () => {
     const { taskStore: initialStore } = await import('./task-store');

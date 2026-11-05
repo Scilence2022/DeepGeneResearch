@@ -48,12 +48,27 @@ describe.sequential('MCP and crawler authentication', () => {
     expect(requireMcpAuth(queryRequest)?.status).toBe(401);
   });
 
+  it('rejects foreign browser origins even when a valid bearer is present', async () => {
+    vi.stubEnv('ACCESS_PASSWORD', 'a-long-random-secret-value');
+    vi.stubEnv('DGR_ALLOWED_ORIGINS', 'https://dgr.example.test');
+    try {
+      const { requireMcpAuth } = await import('./auth');
+      const authorized = (origin: string) => new NextRequest('https://dgr.example.test/api/mcp', {
+        headers: { Origin: origin, Authorization: 'Bearer a-long-random-secret-value' },
+      });
+      expect(requireMcpAuth(authorized('https://untrusted.example.test'))?.status).toBe(403);
+      expect(requireMcpAuth(authorized('https://dgr.example.test'))).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('accepts the browser crawler short-lived signature derived from the same secret', async () => {
     const password = 'another-long-random-secret';
     process.env.ACCESS_PASSWORD = password;
     vi.resetModules();
     const { requireCrawlerAuth } = await import('./auth');
 
-    expect(requireCrawlerAuth(request(generateSignature(password, Date.now())))).toBeNull();
+    await expect(requireCrawlerAuth(request(await generateSignature(password, Date.now())))).resolves.toBeNull();
   });
 });

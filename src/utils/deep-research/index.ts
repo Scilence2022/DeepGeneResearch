@@ -81,6 +81,8 @@ function addQuoteBeforeAllLine(text: string = "") {
 
 export interface LlmPhaseUsage {
   calls: number;
+  callsWithoutUsage: number;
+  callsWithReportedCache: number;
   promptTokens: number;
   /** Input tokens the provider served from its prompt cache, when it says so. */
   cachedPromptTokens: number;
@@ -108,6 +110,8 @@ type TokenUsageLike = {
 function blankUsage(): LlmPhaseUsage {
   return {
     calls: 0,
+    callsWithoutUsage: 0,
+    callsWithReportedCache: 0,
     promptTokens: 0,
     cachedPromptTokens: 0,
     completionTokens: 0,
@@ -127,11 +131,7 @@ class DeepResearch {
     }
   }
 
-  /**
-   * Cached input tokens exactly as the provider reported them. Providers that
-   * say nothing contribute zero rather than a guess.
-   */
-  private reportedCachedPromptTokens(providerMetadata?: any): number {
+  private reportedCachedPromptTokens(providerMetadata?: any): number | undefined {
     const candidates = [
       providerMetadata?.deepseek?.promptCacheHitTokens,
       providerMetadata?.openai?.cachedPromptTokens,
@@ -140,7 +140,7 @@ class DeepResearch {
     for (const value of candidates) {
       if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
     }
-    return 0;
+    return undefined;
   }
 
   /**
@@ -156,14 +156,18 @@ class DeepResearch {
     model?: string,
     providerMetadata?: any
   ) {
-    if (!usage) return;
     const cached = this.reportedCachedPromptTokens(providerMetadata);
     const accumulate = (target: LlmPhaseUsage) => {
+      if (cached !== undefined) target.callsWithReportedCache += 1;
+      target.cachedPromptTokens += cached ?? 0;
+      if (!usage || ![usage.promptTokens, usage.completionTokens, usage.totalTokens].some(Number.isFinite)) {
+        target.callsWithoutUsage += 1;
+        return;
+      }
       target.calls += 1;
-      target.promptTokens += usage.promptTokens ?? 0;
-      target.cachedPromptTokens += cached;
-      target.completionTokens += usage.completionTokens ?? 0;
-      target.totalTokens += usage.totalTokens ?? 0;
+      if (Number.isFinite(usage.promptTokens)) target.promptTokens += usage.promptTokens!;
+      if (Number.isFinite(usage.completionTokens)) target.completionTokens += usage.completionTokens!;
+      if (Number.isFinite(usage.totalTokens)) target.totalTokens += usage.totalTokens!;
     };
 
     const phaseUsage = this.llmUsageByPhase.get(phase) || blankUsage();
@@ -192,6 +196,8 @@ class DeepResearch {
     for (const [phase, usage] of this.llmUsageByPhase) {
       phases[phase] = { ...usage };
       total.calls += usage.calls;
+      total.callsWithoutUsage += usage.callsWithoutUsage;
+      total.callsWithReportedCache += usage.callsWithReportedCache;
       total.promptTokens += usage.promptTokens;
       total.cachedPromptTokens += usage.cachedPromptTokens;
       total.completionTokens += usage.completionTokens;
@@ -234,10 +240,12 @@ class DeepResearch {
       : `**Respond in the same language as the user's language**`;
   }
 
-  async writeReportPlan(query: string): Promise<string> {
+  async writeReportPlan(query: string, signal?: AbortSignal): Promise<string> {
     this.onMessage("progress", { step: "report-plan", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const result = streamText({
+      maxTokens: 8192,
+      abortSignal: signal,
       model: await this.getThinkingModel(),
       system: getSystemPrompt(),
       prompt: [
@@ -261,6 +269,8 @@ class DeepResearch {
         );
       } else if (part.type === "reasoning") {
         this.onMessage("reasoning", { type: "text", text: part.textDelta });
+      } else if (part.type === "error") {
+        throw part.error;
       } else if (part.type === "finish") {
         this.recordLlmUsage("report-plan", part.usage, this.options.AIProvider.thinkingModel, part.providerMetadata);
       }
@@ -275,11 +285,14 @@ class DeepResearch {
   }
 
   async generateSERPQuery(
-    reportPlan: string
+    reportPlan: string,
+    signal?: AbortSignal,
   ): Promise<DeepResearchSearchTask[]> {
     this.onMessage("progress", { step: "serp-query", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const { text, usage, providerMetadata } = await generateText({
+      maxTokens: 4096,
+      abortSignal: signal,
       model: await this.getThinkingModel(),
       system: getSystemPrompt(),
       prompt: [
@@ -316,12 +329,14 @@ class DeepResearch {
 
   async runSearchTask(
     tasks: DeepResearchSearchTask[],
-    enableReferences = true
+    enableReferences = true,
+    signal?: AbortSignal,
   ): Promise<SearchTask[]> {
     this.onMessage("progress", { step: "task-list", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const results: SearchTask[] = [];
     for await (const item of tasks) {
+      signal?.throwIfAborted();
       this.onMessage("progress", {
         step: "search-task",
         status: "start",
@@ -371,6 +386,8 @@ class DeepResearch {
         };
 
         searchResult = streamText({
+          maxTokens: 4096,
+          abortSignal: signal,
           model: await this.getTaskModel(),
           system: getSystemPrompt(),
           prompt: [
@@ -385,6 +402,7 @@ class DeepResearch {
           const result = await createSearchProvider({
             query: item.query,
             ...this.options.searchProvider,
+            signal,
           });
 
           sources = result.sources;
@@ -396,6 +414,8 @@ class DeepResearch {
           throw new Error(errorMessage);
         }
         searchResult = streamText({
+          maxTokens: 4096,
+          abortSignal: signal,
           model: await this.getTaskModel(),
           system: getSystemPrompt(),
           prompt: [
@@ -432,6 +452,8 @@ class DeepResearch {
           this.onMessage("reasoning", { type: "text", text: part.textDelta });
         } else if (part.type === "source") {
           sources.push(part.source);
+        } else if (part.type === "error") {
+          throw part.error;
         } else if (part.type === "finish") {
           this.recordLlmUsage("search-task", part.usage, this.options.AIProvider.taskModel, part.providerMetadata);
           if (part.providerMetadata?.google) {
@@ -514,7 +536,8 @@ class DeepResearch {
     reportPlan: string,
     tasks: DeepResearchSearchResult[],
     enableCitationImage = true,
-    enableReferences = true
+    enableReferences = true,
+    signal?: AbortSignal,
   ): Promise<FinalReportResult> {
     this.onMessage("progress", { step: "final-report", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
@@ -528,6 +551,8 @@ class DeepResearch {
       (item) => item.url
     );
     const result = streamText({
+      maxTokens: 8192,
+      abortSignal: signal,
       model: await this.getThinkingModel(),
       system: [getSystemPrompt(), outputGuidelinesPrompt].join("\n\n"),
       prompt: [
@@ -561,6 +586,8 @@ class DeepResearch {
         this.onMessage("reasoning", { type: "text", text: part.textDelta });
       } else if (part.type === "source") {
         sources.push(part.source);
+      } else if (part.type === "error") {
+        throw part.error;
       } else if (part.type === "finish") {
         this.recordLlmUsage("final-report", part.usage, this.options.AIProvider.thinkingModel, part.providerMetadata);
         if (sources.length > 0) {
@@ -629,12 +656,14 @@ class DeepResearch {
     query: string,
     enableCitationImage = true,
     enableReferences = true,
-    taskId?: string
+    taskId?: string,
+    signal?: AbortSignal,
   ) {
     try {
+      signal?.throwIfAborted();
       // Check if this is a gene research query
       if (isGeneResearchQuery(query)) {
-        return await this.conductGeneResearch(query, taskId, undefined, undefined, enableCitationImage);
+        return await this.conductGeneResearch(query, taskId, undefined, signal, enableCitationImage, enableReferences);
       }
 
       // Update task status if taskId is provided
@@ -647,7 +676,7 @@ class DeepResearch {
         });
       }
 
-      const reportPlan = await this.writeReportPlan(query);
+      const reportPlan = await this.writeReportPlan(query, signal);
       
       if (taskId) {
         this.onMessage("task-status", {
@@ -658,7 +687,7 @@ class DeepResearch {
         });
       }
 
-      const tasks = await this.generateSERPQuery(reportPlan);
+      const tasks = await this.generateSERPQuery(reportPlan, signal);
       
       if (taskId) {
         this.onMessage("task-status", {
@@ -669,7 +698,7 @@ class DeepResearch {
         });
       }
 
-      const results = await this.runSearchTask(tasks, enableReferences);
+      const results = await this.runSearchTask(tasks, enableReferences, signal);
       
       if (taskId) {
         this.onMessage("task-status", {
@@ -684,8 +713,10 @@ class DeepResearch {
         reportPlan,
         results,
         enableCitationImage,
-        enableReferences
+        enableReferences,
+        signal,
       );
+      signal?.throwIfAborted();
       
       if (taskId) {
         this.onMessage("task-status", {
@@ -736,7 +767,8 @@ class DeepResearch {
       userDocumentIds?: string[];
     },
     signal?: AbortSignal,
-    enableVisualization = true
+    enableVisualization = true,
+    enableReferences = true,
   ) {
     try {
       signal?.throwIfAborted();
@@ -928,9 +960,11 @@ class DeepResearch {
         sources,
         coverageSummary,
         signal,
-        enableReferences: true,
+        enableReferences,
       });
-      let finalReport = synthesizedReport || templateReport;
+      // Exact-feature artifacts are archived for curation. Keep the verified
+      // report canonical and expose model interpretation as a separate view.
+      let finalReport = explicitGeneInfo?.target ? templateReport : synthesizedReport || templateReport;
 
       // The Genome Annotation Note is a hash-bound, citation-bound artifact.
       // It must reach the archived report verbatim, so a synthesized narrative
@@ -955,6 +989,7 @@ class DeepResearch {
       const researchResult = {
         title: result.report.title,
         finalReport,
+        ...(explicitGeneInfo?.target && synthesizedReport ? { exploratoryNarrative: synthesizedReport } : {}),
         annotationNote,
         researchSummary,
         evidenceRecords: (result as any)?.evidenceRecords ?? null,
@@ -1050,6 +1085,7 @@ class DeepResearch {
         `User research question: ${researchQuestion}`,
       ].filter(Boolean).join("\n");
       const { text, usage, providerMetadata } = await generateText({
+        maxTokens: 4096,
         model: await this.getThinkingModel(),
         system: getGeneResearchSystemPrompt(),
         prompt: [generateGeneSerpQueriesPrompt(plan), this.getResponseLanguagePrompt()].join("\n\n"),
@@ -1100,6 +1136,7 @@ class DeepResearch {
     userPrompt?: string,
     signal?: AbortSignal
   ): Promise<string[]> {
+    const learnings: string[] = [];
     try {
       signal?.throwIfAborted();
       const abstracts = literature.filter(ref => ref?.abstract && String(ref.abstract).trim().length > 40);
@@ -1119,7 +1156,6 @@ class DeepResearch {
         ? userPrompt.replace("{geneSymbol}", geneInfo.geneSymbol).replace("{organism}", geneInfo.organism)
         : `Extract the key experimental findings about ${geneInfo.geneSymbol} in ${geneInfo.organism}, including function, regulation, pathway role, complexes, and phenotypes.`)
         + " Report only statements supported by the provided abstracts, each with its citation index.";
-      const learnings: string[] = [];
       for (const [index, batch] of batches.entries()) {
         signal?.throwIfAborted();
         const sources: Source[] = batch
@@ -1131,6 +1167,7 @@ class DeepResearch {
           .filter(source => source.url && source.content);
         if (sources.length === 0) continue;
         const { text, usage, providerMetadata } = await generateText({
+          maxTokens: 4096,
           model: await this.getTaskModel(),
           system: getGeneResearchSystemPrompt(),
           prompt: [processGeneSearchResultPrompt(query, researchGoal, sources, true), this.getResponseLanguagePrompt()].join("\n\n"),
@@ -1152,9 +1189,9 @@ class DeepResearch {
       this.onMessage("progress", {
         step: "gene-llm-learnings",
         status: "end",
-        data: { learnings: 0, fallback: true },
+        data: { learnings: learnings.length, fallback: true },
       });
-      return [];
+      return learnings;
     }
   }
 
@@ -1197,6 +1234,7 @@ class DeepResearch {
         `Verified structured evidence compiled by the deterministic pipeline (treat as authoritative; reconcile conflicts and weigh uncertainty explicitly):\n\n${templateReport.slice(0, 20_000)}`,
       ].filter(Boolean).join("\n\n");
       const result = streamText({
+        maxTokens: 8192,
         model: await this.getThinkingModel(),
         system: [getGeneResearchSystemPrompt(), outputGuidelinesPrompt].join("\n\n"),
         prompt: [
@@ -1230,6 +1268,8 @@ class DeepResearch {
           );
         } else if (part.type === "reasoning") {
           this.onMessage("reasoning", { type: "text", text: part.textDelta });
+        } else if (part.type === "error") {
+          throw part.error;
         } else if (part.type === "finish") {
           this.recordLlmUsage("gene-llm-report", part.usage, this.options.AIProvider.thinkingModel, part.providerMetadata);
         }

@@ -1,22 +1,12 @@
 import { z } from "zod";
-import { SUPPORTED_GENE_ANNOTATION_FEATURE_TYPES } from "@/contracts/gene-annotation-target";
+import { geneResearchInput } from "./task-parameters";
 import { McpServer } from "@/libs/mcp-server/mcp";
-import DeepResearch from "@/utils/deep-research";
-import { multiApiKeyPolling } from "@/utils/model";
-import {
-  getAIProviderBaseURL,
-  getAIProviderApiKey,
-  getSearchProviderBaseURL,
-  getSearchProviderApiKey,
-} from "../utils";
+import { initDeepResearchServer } from "@/services/research-engine";
 import { taskQueue } from "@/services/task-queue";
 import { taskStore } from "@/services/task-store";
+import { createFetchSignal } from "@/utils/fetch-signal";
 import { projectTaskResult } from "@/services/task-result-projection";
 
-const AI_PROVIDER = process.env.MCP_AI_PROVIDER || "";
-const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || "model";
-const THINKING_MODEL = process.env.MCP_THINKING_MODEL || "";
-const TASK_MODEL = process.env.MCP_TASK_MODEL || "";
 const MCP_SERVER_BASE_URL = (process.env.MCP_SERVER_BASE_URL || "").trim().replace(/\/+$/, "");
 
 function formatMcpUrl(path: string): string {
@@ -30,47 +20,6 @@ function asJsonText(data: unknown) {
       text: JSON.stringify(data)
     }],
   };
-}
-
-export function initDeepResearchServer({
-  language,
-  maxResult,
-}: {
-  language?: string;
-  maxResult?: number;
-}) {
-  const deepResearch = new DeepResearch({
-    language,
-    AIProvider: {
-      baseURL: getAIProviderBaseURL(AI_PROVIDER),
-      apiKey: multiApiKeyPolling(getAIProviderApiKey(AI_PROVIDER)),
-      provider: AI_PROVIDER,
-      thinkingModel: THINKING_MODEL,
-      taskModel: TASK_MODEL,
-    },
-    searchProvider: {
-      baseURL: getSearchProviderBaseURL(SEARCH_PROVIDER),
-      apiKey: multiApiKeyPolling(getSearchProviderApiKey(SEARCH_PROVIDER)),
-      provider: SEARCH_PROVIDER,
-      maxResult,
-      scope: process.env.MCP_SEARXNG_SCOPE || undefined,
-    },
-    onMessage: (event, data) => {
-      if (event === "progress") {
-        console.log(
-          `[${data.step}]: ${data.name ? `"${data.name}" ` : ""}${data.status}`
-        );
-        if (data.status === "end" && data.data) {
-          console.log(data.data);
-        }
-      } else if (event === "error") {
-        console.error(data.message);
-        throw new Error(data.message);
-      }
-    },
-  });
-
-  return deepResearch;
 }
 
 export function initMcpServer() {
@@ -103,64 +52,7 @@ export function initMcpServer() {
   server.tool(
     "deep-gene-research",
     geneResearchToolDescription,
-    {
-      geneSymbol: z.string().min(1).max(128).describe("The gene symbol to research (e.g., 'lysC', 'BRCA1')."),
-      organism: z.string().min(1).max(256).describe("The organism name (e.g., 'Escherichia coli', 'Homo sapiens')."),
-      researchFocus: z.array(z.string().min(1).max(128)).max(20).optional().describe("Specific research focus areas."),
-      specificAspects: z.array(z.string().min(1).max(256)).max(30).optional().describe("Specific aspects to investigate."),
-      diseaseContext: z.string().max(1000).optional().describe("Disease context for the research."),
-      experimentalApproach: z.string().max(1000).optional().describe("Experimental approach or methodology."),
-      userPrompt: z.string().max(8000).optional().describe("Custom user research question with {geneSymbol} and {organism} placeholders."),
-      language: z.string().max(64).optional().describe("The final report text language."),
-      maxResult: z.number().int().min(1).max(100).optional().default(5).describe("Maximum number of results per search query."),
-      literatureBudget: z.number().int().min(10).max(2000).optional().describe(
-        "Total PubMed abstracts retained for synthesis. Defaults to a comprehensive budget; raise toward 2000 for exhaustively studied genes.",
-      ),
-      fullTextBudget: z.number().int().min(1).max(100).optional().describe(
-        "Open-access full texts attempted for verifiable evidence spans. Defaults well above the legacy 8-document cap.",
-      ),
-      enableCitationImage: z.boolean().default(true).optional().describe("Whether to include content-related images in the final report."),
-      enableReferences: z.boolean().default(true).optional().describe("Whether to include citation links in search results and final reports."),
-      returnReportAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Report as a downloadable URL instead of inline content."),
-      returnDetailsAsUrl: z.boolean().default(false).optional().describe("When true, return the Research Details (workflow, sources, metadata) as a downloadable URL instead of inline content."),
-      includeCodeXomicsAnnotationProposal: z.boolean().default(true).optional().describe("When true, include a CodeXomics-ready annotationProposal with conservative updates and evidence references."),
-      forceRefresh: z.boolean().default(false).optional().describe("Bypass and invalidate a matching cached research result before running this task."),
-      userDocumentIds: z.array(z.string().regex(/^sha256:[a-f0-9]{64}$/i)).max(8).optional().describe(
-        "Content-addressed user PDFs uploaded through /api/mcp/documents. These are parsed and read before abstract-only evidence is used.",
-      ),
-      target: z.object({
-        workspaceId: z.string().min(1).max(512),
-        genomeId: z.string().min(1).max(512),
-        annotationRevision: z.number().int().nonnegative(),
-        featureId: z.string().min(1).max(512),
-        featureHash: z.string().min(1).max(512),
-        annotationId: z.string().max(512).nullable().optional(),
-        featureType: z.enum(SUPPORTED_GENE_ANNOTATION_FEATURE_TYPES).describe(
-          "Supported gene annotation feature type. CodeXomics prefers CDS when co-located gene and CDS records exist.",
-        ),
-        chromosome: z.string().min(1).max(512),
-        organism: z.string().max(256).nullable().optional(),
-        locusTag: z.string().max(256).nullable().optional(),
-        geneSymbol: z.string().max(128).nullable().optional(),
-        proteinId: z.string().max(256).nullable().optional(),
-        coordinates: z.object({ start: z.number(), end: z.number(), strand: z.union([z.string(), z.number()]).nullable().optional() }).optional(),
-        assemblyAccession: z.string().max(256).nullable().optional(),
-        assemblySha256: z.string().max(128).nullable().optional(),
-        taxonId: z.union([z.string(), z.number()]).nullable().optional(),
-        proteinSha256: z.string().max(128).nullable().optional(),
-      }).optional().describe("Exact immutable target returned by CodeXomics resolve_annotation_target. Required for a proposal that can be committed."),
-      currentAnnotation: z.object({
-        product: z.string().max(1024).nullable().optional(),
-        note: z.array(z.string().min(1).max(8192)).max(32).optional(),
-        EC_number: z.array(z.string().min(1).max(64)).max(64).optional(),
-        go_terms: z.array(z.string().min(1).max(64)).max(256).optional(),
-        ko: z.array(z.string().min(1).max(128)).max(128).optional(),
-        pathway: z.array(z.string().min(1).max(256)).max(256).optional(),
-        db_xref: z.array(z.string().min(1).max(512)).max(512).optional(),
-      }).strict().optional().describe("Bounded current scientific qualifier snapshot derived by CodeXomics from the same resolved annotation revision. Used to suppress no-op updates, including repeated DGR notes, and permit conservative placeholder product refinement."),
-      idempotencyKey: z.string().min(1).max(256).optional().describe("Stable key preventing duplicate logical research runs."),
-      correlationId: z.string().min(1).max(256).optional().describe("Cross-service trace ID."),
-    },
+    geneResearchInput,
     async (
       {
         geneSymbol,
@@ -257,7 +149,7 @@ export function initMcpServer() {
         signal.throwIfAborted();
         await taskQueue.start();
         const task = await taskStore.getTask(taskId);
-        if (!task) {
+        if (!task || task.parameters.mode === "general") {
           return {
             isError: true,
             content: [
@@ -318,14 +210,14 @@ export function initMcpServer() {
     "write-research-plan",
     "Generate a focused research plan from a gene or biology query.",
     {
-      query: z.string().describe("The research query to plan."),
+      query: z.string().trim().min(1).max(8_000).describe("The research query to plan."),
       language: z.string().optional().describe("The response language."),
       maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum search results to configure for downstream steps."),
     },
     async ({ query, language, maxResult }, { signal }) => {
       signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
-      const reportPlan = await deepResearch.writeReportPlan(query);
+      const reportPlan = await deepResearch.writeReportPlan(query, createFetchSignal(signal, 120_000));
       signal.throwIfAborted();
       return asJsonText({ reportPlan });
     }
@@ -335,14 +227,14 @@ export function initMcpServer() {
     "generate-SERP-query",
     "Generate search tasks from a research plan.",
     {
-      plan: z.string().describe("The research plan returned by write-research-plan."),
+      plan: z.string().min(1).max(40_000).describe("The research plan returned by write-research-plan."),
       language: z.string().optional().describe("The response language."),
       maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum search results to configure for downstream steps."),
     },
     async ({ plan, language, maxResult }, { signal }) => {
       signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
-      const tasks = await deepResearch.generateSERPQuery(plan);
+      const tasks = await deepResearch.generateSERPQuery(plan, createFetchSignal(signal, 120_000));
       signal.throwIfAborted();
       return asJsonText({ tasks });
     }
@@ -353,9 +245,9 @@ export function initMcpServer() {
     "Execute search tasks and summarize source-backed findings.",
     {
       tasks: z.array(z.object({
-        query: z.string(),
-        researchGoal: z.string().optional().default(""),
-      })).describe("Search tasks returned by generate-SERP-query."),
+        query: z.string().min(1).max(2_000),
+        researchGoal: z.string().max(4_000).optional().default(""),
+      })).max(20).describe("Search tasks returned by generate-SERP-query."),
       language: z.string().optional().describe("The response language."),
       maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum number of search results per task."),
       enableReferences: z.boolean().optional().default(true).describe("Whether to include source references."),
@@ -363,7 +255,7 @@ export function initMcpServer() {
     async ({ tasks, language, maxResult, enableReferences }, { signal }) => {
       signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
-      const completedTasks = await deepResearch.runSearchTask(tasks, enableReferences);
+      const completedTasks = await deepResearch.runSearchTask(tasks, enableReferences, createFetchSignal(signal, 240_000));
       signal.throwIfAborted();
       return asJsonText({ tasks: completedTasks });
     }
@@ -373,14 +265,14 @@ export function initMcpServer() {
     "write-final-report",
     "Compile completed search tasks into a final research report.",
     {
-      plan: z.string().describe("The research plan returned by write-research-plan."),
+      plan: z.string().min(1).max(40_000).describe("The research plan returned by write-research-plan."),
       tasks: z.array(z.object({
-        query: z.string(),
-        researchGoal: z.string().optional().default(""),
-        learning: z.string(),
-        sources: z.array(z.any()).optional(),
-        images: z.array(z.any()).optional(),
-      })).describe("Completed tasks returned by search-task."),
+        query: z.string().min(1).max(2_000),
+        researchGoal: z.string().max(4_000).optional().default(""),
+        learning: z.string().max(60_000),
+        sources: z.array(z.any()).max(100).optional(),
+        images: z.array(z.any()).max(100).optional(),
+      })).max(20).describe("Completed tasks returned by search-task."),
       language: z.string().optional().describe("The response language."),
       maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum search results to configure for the research engine."),
       enableCitationImage: z.boolean().optional().default(true).describe("Whether to include citation images."),
@@ -396,7 +288,8 @@ export function initMcpServer() {
         plan,
         tasks,
         enableCitationImage,
-        enableReferences
+        enableReferences,
+        createFetchSignal(signal, 240_000),
       );
       signal.throwIfAborted();
       return asJsonText(report);

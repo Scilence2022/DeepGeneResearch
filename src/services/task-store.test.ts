@@ -85,7 +85,7 @@ describe.sequential('durable task store', () => {
     const { task } = await taskStore.createOrGetTask(parameters);
 
     parameters.researchFocus[0] = 'mutated-after-create';
-    expect((await taskStore.getTask(task.id))?.parameters.researchFocus).toEqual(['function']);
+    expect((await taskStore.getTask(task.id))?.parameters).toMatchObject({ researchFocus: ['function'] });
     const persisted = JSON.parse(await readFile(storageFile, 'utf8'));
     expect(persisted[0].parameters.researchFocus).toEqual(['function']);
   });
@@ -113,6 +113,15 @@ describe.sequential('durable task store', () => {
 
     result.sources[0].url = 'https://attacker.invalid/mutated';
     expect((await taskStore.getTask(task.id))?.result.sources[0].url).toBe('https://example.org/source');
+    const [stored] = JSON.parse(await readFile(storageFile, 'utf8'));
+    expect(stored.resultSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(stored.result).toBeUndefined();
+
+    vi.resetModules();
+    const { taskStore: reopened } = await import('./task-store');
+    expect((await reopened.getTaskMetadata(task.id))?.result).toBeUndefined();
+    expect((await reopened.getTask(task.id))?.result.finalReport).toBe('original report');
+
   });
 
   it('persists and enforces the execution-attempt budget', async () => {

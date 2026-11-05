@@ -36,7 +36,7 @@ export async function jinaReader(url: string) {
 }
 
 export async function localCrawler(url: string, password: string) {
-  const accessKey = generateSignature(password, Date.now());
+  const accessKey = await generateSignature(password, Date.now());
   const response = await fetch("/api/crawler", {
     method: "POST",
     headers: {

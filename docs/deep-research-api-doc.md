@@ -4,9 +4,17 @@
 
 The Deep Gene Research API provides a real-time interface for initiating and monitoring complex gene research tasks. Leveraging Server-Sent Events (SSE), it delivers updates, information, message, progress, and errors as they occur, allowing clients to receive continuous streams of data without polling.
 
-## Protocol
+## Authentication and durable research
 
-This API uses **Server-Sent Events (SSE)** over HTTP. Clients should establish an HTTP connection and keep it open to receive a stream of events from the server.
+Server requests use `Authorization: Bearer <ACCESS_PASSWORD>`. Browser clients that send `Origin` also need an origin allowed by `MCP_SERVER_BASE_URL` or `DGR_ALLOWED_ORIGINS`.
+
+Use `POST /api/research/start` for a durable general research task on a long-lived Node deployment. Send a JSON object with `query` and optional `language`, `maxResult`, `enableCitationImage`, and `enableReferences`. An optional `Idempotency-Key` header deduplicates submissions. Use `GET /api/research/status/{taskId}` to monitor progress, `DELETE` on the same path to request cancellation, and `GET /api/research/result/{taskId}` for the terminal record. Pending results return 202. The Markdown download is available after completion.
+
+Gene research tasks use the MCP tool or `/api/mcp/tasks`. The REST list returns task summaries in pages of up to 100. Use `offset`, `limit`, and `includeResult=true` when needed. The progress stream emits sequence-numbered snapshots with a result URL for completed tasks.
+
+## Streaming protocol
+
+Use `POST /api/sse` for live events over one HTTP connection. A completed stream ends with a `completed` event, or an `error` event on failure. Disconnecting cancels the underlying inline run. `GET /api/sse/live` is a plain-text stream with the same Bearer authentication.
 
 ## Data Format
 
@@ -60,8 +68,7 @@ Headers:
 ```typescript
 interface Headers {
   "Content-Type": "application/json";
-  // If you set an access password
-  // Authorization: "Bearer YOUR_ACCESS_PASSWORD";
+  Authorization: "Bearer YOUR_ACCESS_PASSWORD";
 }
 ```
 
@@ -87,6 +94,7 @@ The following event types are supported:
 - `message`
 - `reasoning`
 - `progress`
+- `completed`
 - `error`
 
 ---
@@ -293,8 +301,7 @@ fetchEventSource("/api/sse", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    // If you set an access password
-    // Authorization: "Bearer YOUR_ACCESS_PASSWORD",
+    Authorization: "Bearer YOUR_ACCESS_PASSWORD",
   },
   body: JSON.stringify({
     query: "AI trends for this year",

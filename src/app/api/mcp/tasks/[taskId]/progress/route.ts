@@ -1,162 +1,109 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { GeneResearchTask } from '@/models/task';
+import { TERMINAL_TASK_STATUSES } from '@/models/task';
 import { taskQueue } from '@/services/task-queue';
 import { taskStore } from '@/services/task-store';
 import { requireMcpAuth } from '../../../auth';
 
-// GET /api/mcp/tasks/[taskId]/progress - 实时进度通知
 export const dynamic = 'force-dynamic';
+
+const MAX_SUBSCRIBERS = 40;
+const encoder = new TextEncoder();
+let subscribers = 0;
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ taskId: string }> }
+  { params }: { params: Promise<{ taskId: string }> },
 ) {
   const unauthorized = requireMcpAuth(request);
   if (unauthorized) return unauthorized;
 
   const { taskId } = await params;
-  await taskQueue.start();
-  const existingTask = await taskStore.getTask(taskId);
-
-  if (!existingTask) {
-    return NextResponse.json(
-      { error: `Task ${taskId} not found` },
-      { status: 404 }
-    );
+  try {
+    await taskQueue.start();
+    const task = await taskStore.getTaskMetadata(taskId);
+    if (!task || task.parameters.mode === 'general') return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+  } catch {
+    return NextResponse.json({ error: 'Research task store unavailable' }, { status: 503 });
   }
 
-  // 使用 ReadableStream 实现 SSE
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
+  if (subscribers >= MAX_SUBSCRIBERS) {
+    return NextResponse.json({ error: 'Progress stream capacity reached' }, { status: 429 });
+  }
+
+  subscribers += 1;
+  const resultUrl = `/api/mcp/tasks/${taskId}`;
+  const events = ['task:progress', 'task:completed', 'task:failed', 'task:cancelled'];
+  let cleanup = () => {};
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
       let closed = false;
-      
-      const sendMessage = (data: any) => {
-        if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-        } catch (e) {
-          // Connection might be closed
-        }
-      };
-
-      const cleanup = () => {
-        taskQueue.off('task:progress', progressHandler);
-        taskQueue.off('task:completed', completedHandler);
-        taskQueue.off('task:failed', failedHandler);
-        taskQueue.off('task:cancelled', cancelledHandler);
-      };
-
-      const close = () => {
+      let eventSeq = -1;
+      const heartbeat = setInterval(() => {
+        if (!closed) controller.enqueue(encoder.encode(': heartbeat\n\n'));
+      }, 15_000);
+      cleanup = () => {
         if (closed) return;
         closed = true;
+        subscribers -= 1;
+        clearInterval(heartbeat);
+        for (const event of events) taskQueue.off(event, onTask);
+        request.signal.removeEventListener('abort', close);
+      };
+      const close = () => {
+        if (closed) return;
         cleanup();
-        try {
-          controller.close();
-        } catch {
-          // Stream may already have been closed by the client.
-        }
+        controller.close();
       };
-
-      // 监听任务进度事件
-      const progressHandler = (task: any, progress: number, step: string) => {
-        if (task.id === taskId) {
-          sendMessage({
-            type: 'progress',
-            taskId: task.id,
-            progress,
-            step,
-            status: task.status,
-            eventSeq: task.eventSeq,
-            updatedAt: new Date().toISOString(),
-          });
-        }
+      const send = (task: GeneResearchTask, type: string) => {
+        if (closed || task.eventSeq < eventSeq) return;
+        eventSeq = task.eventSeq;
+        const snapshot = {
+          type,
+          taskId,
+          status: task.status,
+          progress: task.progress,
+          step: task.step,
+          eventSeq,
+          updatedAt: task.updatedAt,
+          error: task.error,
+          ...(task.status === 'completed' ? { resultUrl } : {}),
+        };
+        controller.enqueue(encoder.encode(`id: ${eventSeq}\ndata: ${JSON.stringify(snapshot)}\n\n`));
       };
-
-      // 监听任务完成事件
-      const completedHandler = (task: any, result: any) => {
-        if (task.id === taskId) {
-          sendMessage({
-            type: 'completed',
-            taskId: task.id,
-            status: 'completed',
-            progress: 100,
-            result,
-            eventSeq: task.eventSeq,
-            updatedAt: new Date().toISOString(),
-          });
-          close();
-        }
+      const onTask = (task: GeneResearchTask) => {
+        if (task.id !== taskId || task.eventSeq <= eventSeq || closed) return;
+        const terminal = TERMINAL_TASK_STATUSES.has(task.status);
+        send(task, terminal ? task.status : 'progress');
+        if (terminal) close();
       };
-
-      // 监听任务失败事件
-      const failedHandler = (task: any, error: string) => {
-        if (task.id === taskId) {
-          sendMessage({
-            type: 'failed',
-            taskId: task.id,
-            status: 'failed',
-            error,
-            eventSeq: task.eventSeq,
-            updatedAt: new Date().toISOString(),
-          });
-          close();
-        }
-      };
-
-      const cancelledHandler = (task: any) => {
-        if (task.id === taskId) {
-          sendMessage({
-            type: 'cancelled',
-            taskId: task.id,
-            status: 'cancelled',
-            progress: task.progress,
-            step: task.step,
-            eventSeq: task.eventSeq,
-            updatedAt: new Date().toISOString(),
-          });
-          close();
-        }
-      };
-
-      // 注册事件监听器
-      taskQueue.on('task:progress', progressHandler);
-      taskQueue.on('task:completed', completedHandler);
-      taskQueue.on('task:failed', failedHandler);
-      taskQueue.on('task:cancelled', cancelledHandler);
-
-      // 处理连接关闭
-      request.signal.addEventListener('abort', () => {
+      for (const event of events) taskQueue.on(event, onTask);
+      request.signal.addEventListener('abort', close, { once: true });
+      if (request.signal.aborted) {
         close();
-      });
-
-      // Re-read only after listeners are installed so a terminal transition
-      // cannot be lost between the initial existence check and subscription.
-      const currentTask = await taskStore.getTask(taskId);
-      if (!currentTask || closed) return;
-
-      // 发送连接确认消息
-      sendMessage({
-        type: 'connected',
-        message: `Connected to task ${taskId} progress updates`,
-        task: currentTask,
-        timestamp: new Date().toISOString(),
-      });
-
-      if (currentTask.status === 'completed') {
-        completedHandler(currentTask, currentTask.result);
-      } else if (currentTask.status === 'failed') {
-        failedHandler(currentTask, currentTask.error || 'Research task failed');
-      } else if (currentTask.status === 'cancelled') {
-        cancelledHandler(currentTask);
+        return;
       }
-    }
+
+      // Subscribe first so the snapshot cannot lose a terminal transition.
+      void taskStore.getTaskMetadata(taskId).then(task => {
+        if (closed) return;
+        if (!task) {
+          close();
+          return;
+        }
+        if (TERMINAL_TASK_STATUSES.has(task.status)) onTask(task);
+        else send(task, 'connected');
+      }).catch(() => close());
+    },
+    cancel() {
+      cleanup();
+    },
   });
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'private, no-store, no-transform',
       'X-Accel-Buffering': 'no',
     },
   });

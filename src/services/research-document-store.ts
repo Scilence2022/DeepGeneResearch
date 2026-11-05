@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -56,7 +56,7 @@ function assertPdf(bytes: Buffer, mediaType: string): void {
 async function durableWrite(filePath: string, contents: Buffer | string): Promise<void> {
   await fs.mkdir(STORAGE_DIR, { recursive: true, mode: 0o700 });
   await fs.chmod(STORAGE_DIR, 0o700);
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   const handle = await fs.open(tempPath, 'wx', 0o600);
   let renamed = false;
   try {
@@ -143,7 +143,7 @@ export async function loadResearchDocument(documentId: string): Promise<{
   const actualHash = createHash('sha256').update(bytes).digest('hex');
   if (actualHash !== sha256) throw new Error(`Research document integrity check failed: ${documentId}`);
   const descriptor = JSON.parse(metadataText) as ResearchDocumentDescriptor;
-  if (descriptor.sha256 !== sha256 || descriptor.documentId !== documentId) {
+  if (descriptor.sha256 !== sha256 || descriptor.documentId !== `sha256:${sha256}` || descriptor.size !== bytes.length) {
     throw new Error(`Research document metadata does not match its content: ${documentId}`);
   }
   assertPdf(bytes, descriptor.mediaType);

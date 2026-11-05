@@ -1,15 +1,11 @@
-version: "3.9"
 services:
   deep-research:
     build:
       context: .
-      dockerfile: Dockerfile
     image: deep-research
-    container_name: deep-research
     env_file:
       - .env
-    environment:
-      MCP_TASK_STORAGE_FILE: /app/data/tasks.json
+    user: "${DGR_CONTAINER_UID:-1000}:${DGR_CONTAINER_GID:-1000}"
     ports:
       - "3333:3000"
     volumes:

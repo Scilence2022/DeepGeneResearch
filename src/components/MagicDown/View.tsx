@@ -1,7 +1,6 @@
 import dynamic from "next/dynamic";
 import { useMemo, memo } from "react";
 import ReactMarkdown, { type Options, type Components } from "react-markdown";
-import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkBreaks from "remark-breaks";
@@ -55,12 +54,11 @@ function MarkdownBlock({ children: content, ...rest }: Options) {
       {...rest}
       remarkPlugins={[remarkGfm, remarkMath, remarkBreaks, ...remarkPlugins]}
       rehypePlugins={[
-        rehypeRaw,
         [rehypeHighlight, { detect: true, ignoreMissing: true }],
         rehypeKatex,
         ...rehypePlugins,
       ]}
-      disallowedElements={["script", "form", "tool", "TOOL_CALL"]}
+      skipHtml
       components={{
         pre: (props) => {
           const { children, className, ...rest } = props;
@@ -145,6 +143,7 @@ function MarkdownBlock({ children: content, ...rest }: Options) {
               })}
               href={href}
               target={isInternal ? "_self" : target ?? "_blank"}
+              rel="noopener noreferrer"
             >
               {children}
             </a>
@@ -163,9 +162,9 @@ function MarkdownBlock({ children: content, ...rest }: Options) {
                 className="size-full object-cover rounded transition-all duration-200 ease-out"
                 {...omit(rest, ["node"])}
                 src={src}
+                referrerPolicy="no-referrer"
                 alt={alt}
                 title={alt}
-                referrerPolicy="no-referrer"
                 rel="noopener noreferrer"
               />
             </picture>

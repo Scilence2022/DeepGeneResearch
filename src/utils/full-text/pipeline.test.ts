@@ -171,7 +171,7 @@ describe('acquireFullTextEvidence waterfall', () => {
 
     const result = await acquireFullTextEvidence({ pmid: '12345678' }, { allowPdf: false }, ENV);
 
-    expect(fetchEuropePmcAnnotations).toHaveBeenCalledWith(['PMC:123', 'MED:12345678']);
+    expect(fetchEuropePmcAnnotations).toHaveBeenCalledWith(['PMC:123', 'MED:12345678'], undefined);
     expect(result.content?.providerAnnotations?.[0].type).toBe('Gene_Proteins');
   });
 
@@ -190,7 +190,7 @@ describe('acquireFullTextEvidence waterfall', () => {
       ENV,
     );
 
-    expect(acquireBioRxivPreprintPdf).toHaveBeenCalledWith('10.1101/2024.01.01.1');
+    expect(acquireBioRxivPreprintPdf).toHaveBeenCalledWith('10.1101/2024.01.01.1', undefined);
     expect(result.content?.provider).toBe('biorxiv');
   });
 

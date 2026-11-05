@@ -10,6 +10,7 @@ import {
 } from '@/utils/gene-research/full-text';
 
 export interface PdfSegmentInput {
+  signal?: AbortSignal;
   bytes: Uint8Array;
   name: string;
   mediaType?: string;
@@ -28,18 +29,28 @@ export interface PdfSegmentInput {
  * CORE, OpenAlex fallbacks).
  */
 export async function segmentPdfDocument(input: PdfSegmentInput): Promise<FullTextDocument> {
+  input.signal?.throwIfAborted();
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  input.signal?.throwIfAborted();
   const loadingTask = pdfjs.getDocument({
     data: input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes),
     disableFontFace: true,
     isEvalSupported: false,
     useSystemFonts: true,
   });
-  const document = await loadingTask.promise;
-  const pageCount = document.numPages;
+  let disposal: Promise<void> | undefined;
+  const dispose = () => (disposal ??= loadingTask.destroy());
+  const onAbort = () => { void dispose().catch(() => undefined); };
+  input.signal?.addEventListener('abort', onAbort, { once: true });
+  let pageCount = 0;
+  let characters = 0;
   const pageTexts: string[] = [];
   try {
+    const document = await loadingTask.promise;
+    pageCount = document.numPages;
+    if (pageCount > 500) throw new Error(`${input.name} exceeds the 500-page PDF limit`);
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+      input.signal?.throwIfAborted();
       const page = await document.getPage(pageNumber);
       const textContent = await page.getTextContent();
       const text = canonicalizeFullText(
@@ -50,10 +61,16 @@ export async function segmentPdfDocument(input: PdfSegmentInput): Promise<FullTe
       );
       pageTexts.push(text);
       page.cleanup();
+      characters += text.length;
+      if (characters > MAX_FULL_TEXT_CHARACTERS) {
+        throw new Error(`${input.name} exceeds the ${MAX_FULL_TEXT_CHARACTERS}-character full-text limit`);
+      }
     }
   } finally {
-    await document.destroy();
+    input.signal?.removeEventListener('abort', onAbort);
+    await dispose().catch(() => undefined);
   }
+  input.signal?.throwIfAborted();
 
   const pages: FullTextPage[] = [];
   let text = '';

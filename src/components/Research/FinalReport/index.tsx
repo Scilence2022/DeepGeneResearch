@@ -385,23 +385,13 @@ function FinalReport() {
                 </h2>
                 <ol>
                   {taskStore.sources.map((source, idx) => {
-                    // Check if we have a formatted citation (from gene research)
-                    if (source.formattedCitation) {
-                      return (
-                        <li key={idx}>
-                          <div dangerouslySetInnerHTML={{ __html: source.formattedCitation }} />
-                        </li>
-                      );
-                    } else {
-                      // Default display for regular sources
-                      return (
-                        <li key={idx}>
-                          <a href={source.url} target="_blank">
-                            {source.title || source.url}
-                          </a>
-                        </li>
-                      );
-                    }
+                    const label = source.formattedCitation || source.title || source.url;
+                    const safeLink = /^https?:\/\//i.test(source.url);
+                    return (
+                      <li key={idx}>
+                        {safeLink ? <a href={source.url} target="_blank" rel="noopener noreferrer">{label}</a> : label}
+                      </li>
+                    );
                   })}
                 </ol>
               </div>

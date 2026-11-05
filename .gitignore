@@ -49,3 +49,5 @@ tasks.json
 tasks.debug.json
 tasks.json.corrupt.*
 /data/
+/research-results/
+/.dgr-research-documents/

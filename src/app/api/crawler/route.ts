@@ -16,11 +16,11 @@ export const preferredRegion = [
 
 export async function POST(req: NextRequest) {
   try {
-    const unauthorized = requireCrawlerAuth(req);
+    const unauthorized = await requireCrawlerAuth(req);
     if (unauthorized) return unauthorized;
     const { url } = await req.json();
     if (!url) throw new Error("Missing parameters!");
-    const { body: result } = await fetchPublicText(url);
+    const { body: result } = await fetchPublicText(url, { signal: req.signal });
 
     const titleRegex = /<title>(.*?)<\/title>/i;
     const titleMatch = result.match(titleRegex);

@@ -43,6 +43,9 @@ export function projectTaskResult(result: any, mode: TaskResultMode): any {
   const metadata = result.metadata && typeof result.metadata === 'object'
     ? {
         researchTime: result.metadata.researchTime,
+        attemptTimeMs: result.metadata.attemptTimeMs,
+        queueAndRetryTimeMs: result.metadata.queueAndRetryTimeMs,
+        attempts: result.metadata.attempts,
         dataSources: result.metadata.dataSources,
         sourceCoverage: result.metadata.sourceCoverage,
         confidence: result.metadata.confidence,
@@ -54,6 +57,8 @@ export function projectTaskResult(result: any, mode: TaskResultMode): any {
         llmSynthesis: result.metadata.llmSynthesis,
         literatureMetrics: result.metadata.literatureMetrics,
         cacheReplay: result.metadata.cacheReplay,
+        cacheReplayTimeMs: result.metadata.cacheReplayTimeMs,
+        cacheSourceTaskId: result.metadata.cacheSourceTaskId,
         // Only the coverage sub-object: `attempts` is unbounded and would
         // defeat the purpose of a compact projection.
         searchDiagnostics: diagnostics?.literatureCoverage

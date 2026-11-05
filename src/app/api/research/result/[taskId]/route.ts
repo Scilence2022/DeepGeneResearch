@@ -1,70 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { useHistoryStore } from '@/store/history';
-import { isValidTaskId } from '@/utils/task-id-generator';
+import { requireMcpAuth } from '../../../mcp/auth';
+import { legacyStatus, privateResponse, readGeneralTask } from '../../shared';
+import { TERMINAL_TASK_STATUSES } from '@/models/task';
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ taskId: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
+
   try {
-    const { taskId } = await params;
-    
-    // Validate taskId format
-    if (!isValidTaskId(taskId)) {
-      return NextResponse.json(
-        { error: 'Invalid task ID format' },
-        { status: 400 }
-      );
-    }
-    
-    // Get the task from history store
-    const task = useHistoryStore.getState().getTask(taskId);
-    
-    if (!task) {
-      return NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      );
-    }
-    
-    if (task.status !== 'completed') {
-      return NextResponse.json({
-        taskId: task.id,
-        status: task.status,
-        message: `Task is not completed yet. Current status: ${task.status}`,
-        progress: task.progress
-      }, { status: 202 });
-    }
-    
-    if (!task.result) {
-      return NextResponse.json(
-        { error: 'Task result not found' },
-        { status: 404 }
-      );
-    }
-    
-    // Generate download links for different formats
-    const downloadLinks = {
-      markdown: `/api/research/export/${taskId}/markdown`,
-      pdf: `/api/research/export/${taskId}/pdf`,
-      docx: `/api/research/export/${taskId}/docx`
-    };
-    
-    // Return task result with download links
-    return NextResponse.json({
+    const task = await readGeneralTask((await params).taskId, true);
+    if (task instanceof NextResponse) return task;
+    const summary = {
       taskId: task.id,
-      status: task.status,
+      status: legacyStatus(task.status),
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+    };
+    if (task.status !== 'completed') {
+      return NextResponse.json({ ...summary, progress: task.progress, step: task.step, error: task.error },
+        { status: TERMINAL_TASK_STATUSES.has(task.status) ? 200 : 202, headers: privateResponse });
+    }
+    return NextResponse.json({
+      ...summary,
       result: task.result,
-      downloadLinks
-    });
-    
-  } catch (error) {
-    console.error('Error getting task result:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get task result' },
-      { status: 500 }
-    );
+      downloadLinks: { markdown: `/api/research/export/${task.id}/markdown` },
+    }, { headers: privateResponse });
+  } catch {
+    return NextResponse.json({ error: 'Research task store unavailable' }, { status: 503 });
   }
 }

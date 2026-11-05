@@ -1,3 +1,4 @@
+import { readBoundedJson, RequestBodyError } from "@/utils/request-json";
 import { customAlphabet } from "nanoid";
 import { Transport } from "./shared/transport";
 import {
@@ -576,10 +577,7 @@ export class StreamableHTTPServerTransport implements Transport {
       // Read and parse the request body as JSON
       let rawMessage: any;
       try {
-        // Request.json() handles parsing and checks Content-Type internally
-        // It might also respect serverless function body size limits automatically
-        rawMessage = await req.json();
-        // Potential improvement: Manually check body size if req.json() doesn't enforce MAXIMUM_MESSAGE_SIZE
+        rawMessage = await readBoundedJson(req, 2 * 1024 * 1024);
       } catch (parseError) {
         // Handle JSON parsing errors
         this.onerror?.(parseError as Error);
@@ -594,7 +592,7 @@ export class StreamableHTTPServerTransport implements Transport {
             id: null,
           }),
           {
-            status: 400,
+            status: parseError instanceof RequestBodyError ? parseError.status : 400,
             headers,
           }
         );
@@ -604,6 +602,7 @@ export class StreamableHTTPServerTransport implements Transport {
       // handle batch and single messages
       try {
         if (Array.isArray(rawMessage)) {
+          if (rawMessage.length === 0 || rawMessage.length > 25) throw new Error("Invalid JSON-RPC batch size");
           // Validate each message in the batch using Zod
           messages = rawMessage.map((msg) => JSONRPCMessageSchema.parse(msg));
         } else {

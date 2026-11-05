@@ -205,7 +205,7 @@ function useModelProvider() {
         } else {
           options.baseURL = location.origin + "/api/ai/ollama/api";
           options.headers = {
-            Authorization: generateSignature(accessPassword, Date.now()),
+            Authorization: await generateSignature(accessPassword, Date.now()),
           };
         }
         break;
@@ -214,7 +214,7 @@ function useModelProvider() {
     }
 
     if (mode === "proxy") {
-      options.apiKey = generateSignature(accessPassword, Date.now());
+      options.apiKey = await generateSignature(accessPassword, Date.now());
     }
 
     return await createAIProvider(options);

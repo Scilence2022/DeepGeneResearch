@@ -10,6 +10,8 @@ import { GeneResearchQualityControl, createGeneQualityControl } from './quality-
 import { GeneAPIIntegrations, createGeneAPIIntegrations } from './api-integrations';
 import { createSearchProvider } from '@/utils/deep-research/search';
 import { fetchPublicText } from '@/utils/safe-public-fetch';
+import pLimit from 'p-limit';
+import { compareWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
 import {
   buildFullTextEvidenceSpans,
   parseUserResearchPdf,
@@ -810,7 +812,7 @@ export class GeneResearchEngine {
       this.assertNotCancelled();
       const startedAt = Date.now();
       try {
-        const fullText = await parseUserResearchPdf(documentId);
+        const fullText = await parseUserResearchPdf(documentId, this.config.signal);
         const relevance = this.assessSourceRelevance({ title: fullText.name, content: fullText.text });
         const evidence = relevance.accepted
           ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
@@ -902,10 +904,12 @@ export class GeneResearchEngine {
     const fullTextEnv = { ...baseEnv, ncbiApiKey: this.config.ncbiApiKey ?? baseEnv.ncbiApiKey };
     const enabledProviders = resolveEnabledProviders(fullTextEnv, undefined);
 
-    await Promise.all(pubMedSources.map(async source => {
+    const limit = pLimit(4);
+    let astaDiscovery: ReturnType<typeof import('@/utils/full-text/providers/asta').searchAstaSnippets> | undefined;
+    await Promise.all(pubMedSources.map(source => limit(async () => {
       this.assertNotCancelled();
-      const reference = source.structuredData?.literatureReferences?.[0] || {};
-      const pmid = String(reference.pmid || source.provenance?.recordId || '').trim();
+      const identifiers = workIdentifiers(source);
+      const pmid = String(identifiers.pmid || '').trim();
       if (!/^\d{5,10}$/.test(pmid)) return;
       const startedAt = Date.now();
       const category = source.researchCategory || 'literature';
@@ -913,10 +917,11 @@ export class GeneResearchEngine {
         const acquisition = await acquireFullTextEvidence(
           {
             pmid,
-            doi: reference.doi ? String(reference.doi) : undefined,
+            doi: identifiers.doi ? String(identifiers.doi) : undefined,
+            pmcid: identifiers.pmcid ? String(identifiers.pmcid) : undefined,
             title: typeof source.title === 'string' ? source.title : undefined,
           },
-          { enabledProviders },
+          { enabledProviders, signal: this.config.signal },
           fullTextEnv,
         );
         for (const attempt of acquisition.attempts) {
@@ -936,28 +941,35 @@ export class GeneResearchEngine {
           source.evidenceRole = 'excluded';
           source.structuredData = { ...(source.structuredData || {}), retracted: true };
         }
-        let content = acquisition.content;
+        const content = acquisition.content;
         if (!content && enabledProviders.includes('asta') && fullTextEnv.astaApiKey) {
-          // Asta snippet_search is the cheap last resort: citable ~500-word
-          // passages without any document download.
+          // Asta searches the corpus by topic, so its passages are discovery
+          // context. Keep a same-work snippet separate from the abstract and
+          // never use it as a full-text evidence span.
           const snippetStartedAt = Date.now();
           try {
-            const { searchAstaSnippets } = await import('@/utils/full-text/providers/asta');
-            const snippets = await searchAstaSnippets(
-              `${this.config.geneSymbol} ${this.config.organism}`,
-              { apiKey: fullTextEnv.astaApiKey, limit: 3 },
-            );
-            content = snippets.find(candidate =>
-              this.assessSourceRelevance({ title: candidate.document.name, content: candidate.document.text }).accepted
-            ) ?? null;
+            astaDiscovery ??= import('@/utils/full-text/providers/asta').then(({ searchAstaSnippets }) =>
+              searchAstaSnippets(`${this.config.geneSymbol} ${this.config.organism}`, {
+                apiKey: fullTextEnv.astaApiKey, limit: 3, signal: this.config.signal,
+              }));
+            const snippets = await astaDiscovery;
+            const snippet = snippets.find(({ document }) =>
+              compareWorkIdentity(identifiers, document.identifiers) === 'match'
+              && this.assessSourceRelevance({ title: document.name, content: document.text }).accepted);
+            if (snippet && !acquisition.metadata.isRetracted) {
+              source.structuredData = {
+                ...source.structuredData,
+                discoverySnippet: snippet.document,
+              };
+            }
             this.searchAttempts.push({
               query: `PMID:${pmid}`,
               provider: 'asta_snippet',
               phase: 'retrieval',
               category,
-              sourceCount: content ? 1 : 0,
+              sourceCount: snippet ? 1 : 0,
               durationMs: Date.now() - snippetStartedAt,
-              status: content ? 'success' : 'empty',
+              status: snippet ? 'success' : 'empty',
             });
           } catch (error) {
             this.searchAttempts.push({
@@ -974,6 +986,9 @@ export class GeneResearchEngine {
         }
         const fullText = content?.document;
         if (!content || !fullText) return;
+        if (fullText.origin === 'snippet' || compareWorkIdentity(identifiers, fullText.identifiers) === 'conflict') {
+          throw new Error('Acquired document is not verified as full text for the requested work');
+        }
         const relevance = this.assessSourceRelevance({ title: source.title, content: fullText.text });
         const evidence = relevance.accepted && !acquisition.metadata.isRetracted
           ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
@@ -1014,6 +1029,7 @@ export class GeneResearchEngine {
           ],
         });
       } catch (error) {
+        this.assertNotCancelled();
         this.searchAttempts.push({
           query: `PMID:${pmid}`,
           provider: 'full_text_pipeline',
@@ -1025,7 +1041,7 @@ export class GeneResearchEngine {
           error: error instanceof Error ? error.message : String(error),
         });
       }
-    }));
+    })));
   }
 
   private mergeSearchResultMaps(target: Map<string, any>, incoming: Map<string, any>): void {
@@ -1240,7 +1256,7 @@ export class GeneResearchEngine {
       this.assertNotCancelled();
       const startedAt = Date.now();
       try {
-        const response = await fetchPublicText(source.url, { maxBytes: 1_500_000, timeoutMs: 12_000 });
+        const response = await fetchPublicText(source.url, { maxBytes: 1_500_000, timeoutMs: 12_000, signal: this.config.signal });
         const content = this.htmlToText(response.body).slice(0, 40_000);
         if (content.length < 200) throw new Error('Retrieved page did not contain substantive text');
         source.content = content;
@@ -1882,7 +1898,8 @@ export class GeneResearchEngine {
     const functional = extractedData.functionalData;
     const protein = extractedData.proteinInfo;
     const references = extractedData.literatureReferences || [];
-    const fullTextSources = sources.filter(source => source?.fullText?.schema === 'dgr.full-text-document.v1');
+    const fullTextSources = sources.filter(source => source?.fullText?.schema === 'dgr.full-text-document.v1'
+      && source.fullText.origin !== 'snippet');
     const fullTextFindingCount = fullTextSources.reduce(
       (total, source) => total + (Array.isArray(source.fullTextEvidence) ? source.fullTextEvidence.length : 0),
       0,
@@ -2024,7 +2041,6 @@ export class GeneResearchEngine {
             bioc: 'PubTator BioC full text',
             tei: 'OpenAlex GROBID TEI full text',
             pdf: 'open-access PDF full text',
-            snippet: 'Ai2 Asta snippet',
           };
           const origin = originLabels[document.origin] || document.origin;
           const pageCoverage = document.pageCount

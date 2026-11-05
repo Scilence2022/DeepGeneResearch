@@ -88,8 +88,8 @@ export function createPoliteFetcher({
 
   async function requireOk(response: Response): Promise<Response> {
     if (response.ok) return response;
-    const body = (await response.text()).replace(/\s+/g, ' ').slice(0, 300);
-    throw new Error(`${provider} returned HTTP ${response.status}${body ? `: ${body}` : ''}`);
+    void response.body?.cancel().catch(() => undefined);
+    throw new Error(`${provider} returned HTTP ${response.status}`);
   }
 
   async function politeFetch(url: string, options: PoliteFetchOptions = {}): Promise<Response> {
@@ -117,7 +117,9 @@ export function createPoliteFetcher({
         return requireOk(response);
       }
       const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+      if (retryAfterMs !== null && retryAfterMs > 30_000) return requireOk(response);
       const backoffMs = retryAfterMs ?? Math.min(2_000, 250 * (2 ** (attempt - 1)));
+      void response.body?.cancel().catch(() => undefined);
       await abortableDelay(backoffMs, signal);
     }
     return requireOk(lastResponse!);
@@ -128,14 +130,36 @@ export function createPoliteFetcher({
     async fetchJson<T = any>(url: string, options: PoliteFetchOptions = {}): Promise<T> {
       const response = await politeFetch(url, options);
       try {
-        return (await response.json()) as T;
+        return JSON.parse(await readProviderText(response)) as T;
       } catch (error) {
         throw new Error(`${provider} returned invalid JSON: ${errorMessage(error)}`);
       }
     },
     async fetchText(url: string, options: PoliteFetchOptions = {}): Promise<string> {
       const response = await politeFetch(url, options);
-      return response.text();
+      return readProviderText(response);
     },
   };
+}
+
+export async function readProviderText(response: Response, maxBytes = 16 * 1024 * 1024): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = '';
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return text + decoder.decode();
+      bytes += value.byteLength;
+      if (bytes > maxBytes) {
+        void reader.cancel().catch(() => undefined);
+        throw new Error('Provider response exceeds the size limit');
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }

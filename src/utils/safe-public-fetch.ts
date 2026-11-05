@@ -3,6 +3,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { BlockList, isIP, type LookupFunction } from 'node:net';
 import type { IncomingMessage } from 'node:http';
+import { createFetchSignal } from './fetch-signal';
 
 const blockedAddresses = new BlockList();
 
@@ -140,11 +141,12 @@ export function readBoundedTextResponse(response: IncomingMessage, maxBytes: num
   });
 }
 
-export async function resolvePublicUrl(rawUrl: string): Promise<{
+export async function resolvePublicUrl(rawUrl: string, signal?: AbortSignal): Promise<{
   url: URL;
   address: string;
   family: 4 | 6;
 }> {
+  signal?.throwIfAborted();
   const url = new URL(rawUrl);
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new Error('Only HTTP(S) URLs are allowed');
@@ -159,9 +161,14 @@ export async function resolvePublicUrl(rawUrl: string): Promise<{
   }
 
   const literalFamily = isIP(hostname);
-  const addresses = literalFamily
-    ? [{ address: hostname, family: literalFamily }]
-    : await lookup(hostname, { all: true, verbatim: true });
+  const addresses = literalFamily ? [{ address: hostname, family: literalFamily }]
+    : await new Promise<Array<{ address: string; family: number }>>((resolve, reject) => {
+        const abort = () => reject(signal?.reason);
+        signal?.addEventListener('abort', abort, { once: true });
+        void lookup(hostname, { all: true, verbatim: true }).then(resolve, reject).finally(() => {
+          signal?.removeEventListener('abort', abort);
+        });
+      });
 
   if (addresses.length === 0 || addresses.some(entry => !isPublicAddress(entry.address))) {
     throw new Error('Private-network URLs are not allowed');
@@ -234,6 +241,7 @@ interface FetchPublicOptions {
   maxBytes?: number;
   timeoutMs?: number;
   maxRedirects?: number;
+  signal?: AbortSignal;
 }
 
 interface FetchPublicResult<T> {
@@ -249,6 +257,7 @@ async function fetchPublicResource<T>(
     maxBytes = 5 * 1024 * 1024,
     timeoutMs = 15_000,
     maxRedirects = 3,
+    signal,
     accept,
     contentTypePattern,
     readBody,
@@ -258,13 +267,15 @@ async function fetchPublicResource<T>(
     readBody: (response: IncomingMessage, maxBytes: number) => Promise<T>;
   }
 ): Promise<FetchPublicResult<T>> {
-  const resolved = await resolvePublicUrl(rawUrl);
+  const deadline = createFetchSignal(signal, timeoutMs);
+  const resolved = await resolvePublicUrl(rawUrl, deadline);
   const request = resolved.url.protocol === 'https:' ? httpsRequest : httpRequest;
 
   return new Promise((resolve, reject) => {
     const req = request(
       resolved.url,
       {
+        signal: deadline,
         headers: {
           accept,
           'accept-encoding': 'identity',
@@ -292,7 +303,7 @@ async function fetchPublicResource<T>(
           // Re-enter through resolvePublicUrl so every redirect target is
           // independently checked and DNS-pinned against SSRF/rebinding.
           void fetchPublicResource(redirectUrl, {
-            maxBytes, timeoutMs, maxRedirects: maxRedirects - 1, accept, contentTypePattern, readBody,
+            maxBytes, timeoutMs, signal: deadline, maxRedirects: maxRedirects - 1, accept, contentTypePattern, readBody,
           }).then(resolve, reject);
           return;
         }
@@ -325,7 +336,6 @@ async function fetchPublicResource<T>(
       }
     );
 
-    req.setTimeout(timeoutMs, () => req.destroy(new Error(`Crawler request timed out after ${timeoutMs}ms`)));
     req.on('error', reject);
     req.end();
   });

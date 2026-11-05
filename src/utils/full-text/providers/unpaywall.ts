@@ -18,7 +18,7 @@ function unpaywallFetcher(): PoliteFetcher {
  */
 export async function locateUnpaywallOaCopy(
   doi: string,
-  options: { email?: string },
+  options: { email?: string; signal?: AbortSignal },
 ): Promise<WorkMetadata | null> {
   const normalized = String(doi || '').trim();
   const email = String(options?.email || '').trim();
@@ -26,7 +26,7 @@ export async function locateUnpaywallOaCopy(
   const url = `${UNPAYWALL_BASE}/${encodeURIComponent(normalized)}?email=${encodeURIComponent(email)}`;
   let payload: any;
   try {
-    payload = await unpaywallFetcher().fetchJson(url);
+    payload = await unpaywallFetcher().fetchJson(url, { signal: options?.signal });
   } catch (error) {
     if (/404\b/.test(error instanceof Error ? error.message : String(error))) return null;
     throw error;
