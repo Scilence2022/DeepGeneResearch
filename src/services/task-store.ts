@@ -1,6 +1,7 @@
-import { GeneResearchTask, GeneResearchParameters, createTask, updateTaskStatus, updateTaskResult, updateTaskError } from '@/models/task';
+import { GeneResearchTask, ResearchParameters, TERMINAL_TASK_STATUSES, createTask, updateTaskStatus, updateTaskResult, updateTaskError } from '@/models/task';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { createHash, randomUUID } from 'node:crypto';
 
 export class IdempotencyConflictError extends Error {
   constructor(idempotencyKey: string) {
@@ -13,6 +14,13 @@ export class TaskAttemptsExhaustedError extends Error {
   constructor(taskId: string, maxAttempts: number) {
     super(`Task ${taskId} exhausted its durable ${maxAttempts}-attempt execution budget`);
     this.name = 'TaskAttemptsExhaustedError';
+  }
+}
+
+export class TaskCapacityError extends Error {
+  constructor() {
+    super('Research queue is at capacity');
+    this.name = 'TaskCapacityError';
   }
 }
 
@@ -38,6 +46,7 @@ const STORAGE_FILE = process.env.MCP_TASK_STORAGE_FILE
   ? path.resolve(process.env.MCP_TASK_STORAGE_FILE)
   : path.join(process.cwd(), 'tasks.json');
 const STORAGE_DIR = path.dirname(STORAGE_FILE);
+const RESULT_DIR = path.join(STORAGE_DIR, 'research-results');
 const IS_EPHEMERAL_RUNTIME = Boolean(process.env.VERCEL || process.env.CF_PAGES);
 const ALLOW_EPHEMERAL_TASK_STORAGE = process.env.DGR_ALLOW_EPHEMERAL_TASK_STORAGE === 'true';
 const CONFIGURED_WORKER_COUNT = Number(process.env.DGR_WORKER_COUNT || process.env.WEB_CONCURRENCY || 1);
@@ -82,6 +91,7 @@ function assertSupportedRuntime() {
 
 // 内存缓存
 let taskCache: Map<string, GeneResearchTask> = new Map();
+const resultDigests = new WeakMap<GeneResearchTask, string>();
 let cacheLoaded = false;
 
 // 文件锁：Promise 链，确保所有文件操作串行执行
@@ -105,12 +115,12 @@ function stableSerialize(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function idempotentParameters(parameters: GeneResearchParameters): Record<string, unknown> {
+function idempotentParameters(parameters: ResearchParameters): Record<string, unknown> {
   const { idempotencyKey: _idempotencyKey, correlationId: _correlationId, ...semanticParameters } = parameters;
   return semanticParameters;
 }
 
-function sameIdempotentRequest(left: GeneResearchParameters, right: GeneResearchParameters): boolean {
+function sameIdempotentRequest(left: ResearchParameters, right: ResearchParameters): boolean {
   return stableSerialize(idempotentParameters(left)) === stableSerialize(idempotentParameters(right));
 }
 
@@ -177,7 +187,7 @@ async function loadFromDisk(): Promise<void> {
       if (!Array.isArray(parsed)) {
         throw new TaskStoreCorruptionError('Task store root must be a JSON array');
       }
-      const tasks = parsed as GeneResearchTask[];
+      const tasks = parsed as (GeneResearchTask & { resultSha256?: string })[];
       taskCache.clear();
       const idempotencyKeys = new Set<string>();
       for (const task of tasks) {
@@ -186,8 +196,9 @@ async function loadFromDisk(): Promise<void> {
           typeof task.id !== 'string' ||
           !task.id ||
           !task.parameters ||
-          typeof task.parameters.geneSymbol !== 'string' ||
-          typeof task.parameters.organism !== 'string' ||
+          (task.parameters.mode === 'general'
+            ? typeof task.parameters.query !== 'string'
+            : typeof task.parameters.geneSymbol !== 'string' || typeof task.parameters.organism !== 'string') ||
           !['pending', 'in_progress', 'completed', 'failed', 'cancel_requested', 'cancelled'].includes(task.status) ||
           !Number.isFinite(task.progress) ||
           task.progress < 0 ||
@@ -209,12 +220,23 @@ async function loadFromDisk(): Promise<void> {
           }
           idempotencyKeys.add(task.parameters.idempotencyKey);
         }
-        taskCache.set(task.id, {
-          ...task,
+        const { resultSha256, ...data } = task;
+        const restored = {
+          ...data,
           createdAt: new Date(task.createdAt),
           updatedAt: new Date(task.updatedAt),
           eventSeq: Number.isInteger(task.eventSeq) ? task.eventSeq : 0,
-        });
+        };
+        if (resultSha256 !== undefined) {
+          if (task.status !== 'completed' || task.result !== undefined || !/^[a-f0-9]{64}$/.test(resultSha256)) {
+            throw new TaskStoreCorruptionError(`Invalid result reference for task ${task.id}`);
+          }
+          const contents = await fs.readFile(path.join(RESULT_DIR, `${resultSha256}.json`), 'utf8');
+          if (digestResult(contents) !== resultSha256) throw new Error(`Research result integrity check failed for task ${task.id}`);
+          restored.result = JSON.parse(contents);
+          resultDigests.set(restored, resultSha256);
+        }
+        taskCache.set(task.id, restored);
       }
       cacheLoaded = true;
       console.log(`[TaskStore] Loaded ${tasks.length} tasks from disk`);
@@ -241,9 +263,10 @@ async function loadFromDisk(): Promise<void> {
   });
 }
 
-async function writeStorageFileDurably(contents: string): Promise<void> {
-  await fs.mkdir(STORAGE_DIR, { recursive: true });
-  const tempFile = `${STORAGE_FILE}.${process.pid}.${Date.now()}.tmp`;
+async function writeStorageFileDurably(contents: string, destination = STORAGE_FILE): Promise<void> {
+  const directory = path.dirname(destination);
+  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  const tempFile = `${destination}.${process.pid}.${randomUUID()}.tmp`;
   let tempHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
   try {
     // wx prevents clobbering an unexpected file, and 0600 keeps task prompts,
@@ -253,14 +276,14 @@ async function writeStorageFileDurably(contents: string): Promise<void> {
     await tempHandle.sync();
     await tempHandle.close();
     tempHandle = null;
-    await fs.rename(tempFile, STORAGE_FILE);
+    await fs.rename(tempFile, destination);
 
     // Persist the directory entry where the platform supports directory
     // fsync. Some filesystems reject it, so this last strengthening step is
     // deliberately best-effort after the atomic rename has succeeded.
     let directoryHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
     try {
-      directoryHandle = await fs.open(STORAGE_DIR, 'r');
+      directoryHandle = await fs.open(directory, 'r');
       await directoryHandle.sync();
     } catch (error) {
       console.warn('[TaskStore] Could not fsync task storage directory:', error);
@@ -275,20 +298,44 @@ async function writeStorageFileDurably(contents: string): Promise<void> {
   }
 }
 
-// 同步缓存到文件（只在必要时调用）
-async function writeCacheToDiskUnlocked(): Promise<void> {
-  const tasks = Array.from(taskCache.values());
+function digestResult(contents: string): string {
+  return createHash('sha256').update(contents).digest('hex');
+}
+
+async function writeCacheToDiskUnlocked(snapshot: Map<string, GeneResearchTask>): Promise<void> {
+  const tasks = [];
+  for (const task of snapshot.values()) {
+    if (task.status !== 'completed' || task.result === undefined) {
+      tasks.push(task);
+      continue;
+    }
+    let digest = resultDigests.get(task);
+    if (!digest) {
+      const contents = JSON.stringify(task.result);
+      digest = digestResult(contents);
+      // Persist the immutable result first. A failed index write can leave an
+      // unreferenced artifact, but an acknowledged task always has its result.
+      await writeStorageFileDurably(contents, path.join(RESULT_DIR, `${digest}.json`));
+      resultDigests.set(task, digest);
+    }
+    const { result: _result, ...metadata } = task;
+    tasks.push({ ...metadata, resultSha256: digest });
+  }
   await writeStorageFileDurably(JSON.stringify(tasks, null, 2));
 }
 
 async function mutateCacheAndSync<T>(operation: () => { result: T; changed: boolean }): Promise<T> {
   return withFileLock(async () => {
-    const previousCache = new Map(taskCache);
-    const { result, changed } = operation();
-    if (!changed) return result;
-
+    const previousCache = taskCache;
+    taskCache = new Map(previousCache);
     try {
-      await writeCacheToDiskUnlocked();
+      const { result, changed } = operation();
+      const snapshot = taskCache;
+      taskCache = previousCache;
+      if (changed) {
+        await writeCacheToDiskUnlocked(snapshot);
+        taskCache = snapshot;
+      }
       return result;
     } catch (error) {
       taskCache = previousCache;
@@ -310,23 +357,57 @@ class TaskStore {
   // 获取所有任务
   async getAllTasks(): Promise<GeneResearchTask[]> {
     await this.ensureCache();
+    await fileLock;
     const tasks = Array.from(taskCache.values(), cloneTask);
     console.log(`[TaskStore] Getting all tasks: ${tasks.length} found`);
     return tasks;
   }
 
+  async listTasks(offset: number, limit: number, includeResult: boolean) {
+    await this.ensureCache();
+    await fileLock;
+    const tasks = Array.from(taskCache.values()).filter(task => task.parameters.mode !== 'general');
+    return {
+      total: tasks.length,
+      tasks: tasks.slice(offset, offset + limit).map(task => {
+        if (includeResult) return cloneTask(task);
+        const { result: _result, ...metadata } = task;
+        return cloneTask(metadata);
+      }),
+    };
+  }
+
   // 获取单个任务
   async getTask(taskId: string): Promise<GeneResearchTask | null> {
     await this.ensureCache();
+    await fileLock;
     const cachedTask = taskCache.get(taskId);
     const task = cachedTask ? cloneTask(cachedTask) : null;
     console.log(`[TaskStore] Getting task ${taskId}: ${task ? 'found' : 'not found'}`);
     return task;
   }
 
+  async getTaskByArtifactId(artifactId: string): Promise<GeneResearchTask | null> {
+    await this.ensureCache();
+    await fileLock;
+    const task = taskCache.get(artifactId) ?? Array.from(taskCache.values())
+      .find(candidate => candidate.result?.download?.researchId === artifactId);
+    return task ? cloneTask(task) : null;
+  }
+
+  async getTaskMetadata(taskId: string): Promise<GeneResearchTask | null> {
+    await this.ensureCache();
+    await fileLock;
+    const task = taskCache.get(taskId);
+    if (!task) return null;
+    const { result: _result, ...metadata } = task;
+    return cloneTask(metadata);
+  }
+
   async findTaskByIdempotencyKey(idempotencyKey?: string): Promise<GeneResearchTask | null> {
     if (!idempotencyKey) return null;
     await this.ensureCache();
+    await fileLock;
     const task = Array.from(taskCache.values()).find(task => task.parameters.idempotencyKey === idempotencyKey);
     return task ? cloneTask(task) : null;
   }
@@ -368,7 +449,7 @@ class TaskStore {
     });
   }
 
-  async createOrGetTask(parameters: GeneResearchParameters): Promise<{ task: GeneResearchTask; created: boolean }> {
+  async createOrGetTask(parameters: ResearchParameters, maxActiveTasks = Infinity): Promise<{ task: GeneResearchTask; created: boolean }> {
     await this.ensureCache();
 
     return mutateCacheAndSync<{ task: GeneResearchTask; created: boolean }>(() => {
@@ -384,6 +465,13 @@ class TaskStore {
         }
       }
 
+      let activeTasks = 0;
+      for (const task of taskCache.values()) {
+        if (!TERMINAL_TASK_STATUSES.has(task.status) && ++activeTasks >= maxActiveTasks) {
+          throw new TaskCapacityError();
+        }
+      }
+
       // The durable record must not retain references owned by an HTTP/MCP
       // caller; later caller mutation would otherwise change cache state
       // without an event sequence increment or disk write.
@@ -394,7 +482,7 @@ class TaskStore {
   }
 
   // 创建任务
-  async createTask(parameters: GeneResearchParameters): Promise<GeneResearchTask> {
+  async createTask(parameters: ResearchParameters): Promise<GeneResearchTask> {
     const { task } = await this.createOrGetTask(parameters);
     console.log(`[TaskStore] Created or retrieved task: ${task.id}, total: ${taskCache.size}`);
     return task;
@@ -526,5 +614,8 @@ class TaskStore {
   }
 }
 
-// 导出单例实例
-export const taskStore = new TaskStore();
+// Next route bundles and instrumentation can load the module independently.
+const runtime = globalThis as typeof globalThis & { dgrTaskStore?: TaskStore };
+export const taskStore = process.env.NODE_ENV === 'production'
+  ? (runtime.dgrTaskStore ??= new TaskStore())
+  : new TaskStore();

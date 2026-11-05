@@ -35,7 +35,7 @@ interface IdconvRecord {
  */
 export async function convertPublicationIds(
   ids: string[],
-  options?: { apiKey?: string },
+  options?: { apiKey?: string; signal?: AbortSignal },
 ): Promise<CandidateWork[]> {
   const normalized = ids.map(id => id.trim()).filter(Boolean);
   if (normalized.length === 0) return [];
@@ -45,7 +45,7 @@ export async function convertPublicationIds(
     const chunk = normalized.slice(start, start + MAX_IDS_PER_REQUEST);
     let url = `${IDCONV_BASE}?ids=${encodeURIComponent(chunk.join(','))}&format=json`;
     if (options?.apiKey) url += `&api_key=${encodeURIComponent(options.apiKey)}`;
-    const payload = await fetcher.fetchJson<{ records?: IdconvRecord[] }>(url);
+    const payload = await fetcher.fetchJson<{ records?: IdconvRecord[] }>(url, { signal: options?.signal });
     const records = Array.isArray(payload?.records) ? payload.records : [];
     for (const record of records) {
       if (record?.errmsg) continue;

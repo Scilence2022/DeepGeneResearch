@@ -23,8 +23,22 @@ export function canTransitionTaskStatus(from: TaskStatus, to: TaskStatus): boole
   return ALLOWED_TASK_TRANSITIONS[from].has(to);
 }
 
-// 任务参数类型
-export interface GeneResearchParameters {
+interface ResearchOptions {
+  language?: string;
+  maxResult?: number;
+  enableCitationImage?: boolean;
+  enableReferences?: boolean;
+  idempotencyKey?: string;
+  correlationId?: string;
+}
+
+export interface GeneralResearchParameters extends ResearchOptions {
+  mode: 'general';
+  query: string;
+}
+
+export interface GeneResearchParameters extends ResearchOptions {
+  mode?: 'gene';
   geneSymbol: string;
   organism: string;
   researchFocus?: string[];
@@ -32,8 +46,6 @@ export interface GeneResearchParameters {
   diseaseContext?: string;
   experimentalApproach?: string;
   userPrompt?: string;
-  language?: string;
-  maxResult?: number;
   /**
    * Per-run budget of PubMed abstracts retained for synthesis. Literature
    * coverage is a curation requirement, so this defaults generously and is
@@ -42,8 +54,6 @@ export interface GeneResearchParameters {
   literatureBudget?: number;
   /** Per-run budget of open-access full texts attempted for evidence spans. */
   fullTextBudget?: number;
-  enableCitationImage?: boolean;
-  enableReferences?: boolean;
   returnReportAsUrl?: boolean;
   returnDetailsAsUrl?: boolean;
   includeCodeXomicsAnnotationProposal?: boolean;
@@ -55,9 +65,9 @@ export interface GeneResearchParameters {
   target?: GenomeTargetRef;
   /** Scientific qualifier snapshot derived from that exact target revision. */
   currentAnnotation?: CurrentAnnotationSnapshot;
-  idempotencyKey?: string;
-  correlationId?: string;
 }
+
+export type ResearchParameters = GeneResearchParameters | GeneralResearchParameters;
 
 // 任务模型
 export interface GeneResearchTask {
@@ -66,7 +76,7 @@ export interface GeneResearchTask {
   progress: number;
   createdAt: Date;
   updatedAt: Date;
-  parameters: GeneResearchParameters;
+  parameters: ResearchParameters;
   result?: any;
   error?: string;
   step?: string;
@@ -75,7 +85,7 @@ export interface GeneResearchTask {
 }
 
 // 创建新任务
-export function createTask(parameters: GeneResearchParameters): GeneResearchTask {
+export function createTask(parameters: ResearchParameters): GeneResearchTask {
   const now = new Date();
   return {
     id: uuidv4(),

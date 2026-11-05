@@ -3,13 +3,15 @@ import { Md5 } from 'ts-md5';
 import packageMetadata from '../../package.json';
 import { normalizeAnnotationQualifierValue } from '@/utils/gene-research/current-annotation';
 import type { CurrentAnnotationSnapshot } from '@/contracts/annotation-change-set';
+import { compareWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
 
 // v7 invalidates results built before no-information notes and the agent/timestamp
 // provenance clause. v6 invalidated pre-note results; v6-era results lack the
 // provenance suffix and must not be reused.
 // and all-source-citation semantics. Older cached results lack the note
 // artifact and would silently suppress the Genome Annotation Note update.
-const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v8';
+const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v9';
+const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 const NON_SEMANTIC_PARAMETER_KEYS = new Set([
   'idempotencyKey',
   'correlationId',
@@ -42,6 +44,7 @@ interface CacheItem {
   result: any;
   createdAt: Date;
   expiresAt: Date;
+  bytes: number;
 }
 
 export interface ResearchCacheContext {
@@ -239,6 +242,7 @@ function citationBoundFullTextFactsIntact(result: any): boolean {
   for (const fact of facts) {
     const basis = fact?.literatureBasis;
     if (fact?.evidenceLevel !== 'target_literature' || basis?.kind !== 'full_text_span') continue;
+    if (basis.sourceOrigin === 'snippet') return false;
     const pmid = String(basis?.pmid || '');
     const evidenceIds: unknown[] = Array.isArray(fact.evidenceIds) ? fact.evidenceIds : [];
     const factRecords = records.filter((record: any) => evidenceIds.includes(record?.id));
@@ -276,6 +280,8 @@ export function isReusableResearchResult(
 
   const uniqueSources = new Map<string, any>();
   for (const source of Array.isArray(result?.sources) ? result.sources : []) {
+    if (source?.fullText && (source.fullText.origin === 'snippet'
+      || compareWorkIdentity(workIdentifiers(source), source.fullText.identifiers || {}) === 'conflict')) return false;
     const identity = sourceIdentity(source);
     if (!identity || sourcePayload(source).length < 80) continue;
     const existing = uniqueSources.get(identity);
@@ -294,6 +300,14 @@ export function isReusableResearchResult(
 
 class CacheService {
   private defaultExpiration = 7 * 24 * 60 * 60 * 1000;
+  private bytes = 0;
+
+  private evict(key: string) {
+    const item = cacheStorage.get(key);
+    if (!item) return false;
+    this.bytes -= item.bytes;
+    return cacheStorage.delete(key);
+  }
 
   async getCachedResult(parameters: GeneResearchParameters): Promise<any | null> {
     try {
@@ -302,10 +316,12 @@ class CacheService {
       if (!cacheItem) return null;
 
       if (new Date() > cacheItem.expiresAt || !isReusableResearchResult(parameters, cacheItem.result)) {
-        cacheStorage.delete(key);
+        this.evict(key);
         return null;
       }
 
+      cacheStorage.delete(key);
+      cacheStorage.set(key, cacheItem);
       return structuredClone(cacheItem.result);
     } catch (error) {
       console.error('Error getting cached result:', error);
@@ -318,12 +334,20 @@ class CacheService {
       if (!isReusableResearchResult(parameters, result)) return;
       const key = generateCacheKey(parameters);
       const now = new Date();
+      const bytes = Buffer.byteLength(JSON.stringify(result));
+      if (bytes > MAX_CACHE_BYTES) return;
+      this.evict(key);
+      for (const [entryKey, entry] of cacheStorage) {
+        if (entry.expiresAt < now || this.bytes + bytes > MAX_CACHE_BYTES) this.evict(entryKey);
+      }
       cacheStorage.set(key, {
         key,
         result: structuredClone(result),
         createdAt: now,
         expiresAt: new Date(now.getTime() + this.defaultExpiration),
+        bytes,
       });
+      this.bytes += bytes;
     } catch (error) {
       console.error('Error setting cached result:', error);
     }
@@ -331,7 +355,7 @@ class CacheService {
 
   async deleteCachedResult(parameters: GeneResearchParameters): Promise<boolean> {
     try {
-      return cacheStorage.delete(generateCacheKey(parameters));
+      return this.evict(generateCacheKey(parameters));
     } catch (error) {
       console.error('Error deleting cached result:', error);
       return false;
@@ -341,6 +365,7 @@ class CacheService {
   async clearAllCache(): Promise<boolean> {
     try {
       cacheStorage.clear();
+      this.bytes = 0;
       return true;
     } catch (error) {
       console.error('Error clearing cache:', error);

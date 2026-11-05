@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import fs from 'fs';
-import path from 'path';
 import {
   buildAnnotationCurationSummary,
   buildCodeXomicsAnnotationProposal,
@@ -13,22 +11,38 @@ const target = {
 };
 
 describe('evidence ID consistency', () => {
-  it('replays the failed ycgH task without cross-bound citations', () => {
-    const tasks = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'tasks.json'), 'utf8'));
-    const items = Array.isArray(tasks) ? tasks : Object.values(tasks);
-    const task = items.find((t: any) => t?.id === '72255bd7-8cb1-45ad-ae9e-3e6fd8d84fb1');
-    expect(task).toBeTruthy();
+  const sources = [{
+    title: 'LuxArray, a high-density, genomewide transcription analysis of Escherichia coli.',
+      url: 'https://pubmed.ncbi.nlm.nih.gov/11544210/',
+      database: 'pubmed',
+      provenance: { provider: 'pubmed', recordId: '11544210' },
+      structuredData: {
+        targetRelevance: { accepted: true, score: 19, directness: 'gene_linked_context', reason: 'gene linked' },
+        literatureReferences: [{
+          pmid: '11544210',
+          abstract: 'The promoters of ycgH were not generally DNA damage responsive in Escherichia coli.',
+        }],
+      },
+    }];
+
+  it('rebuilds a legacy ycgH summary without cross-bound citations', () => {
+    const bundle = buildAnnotationCurationSummary({ geneSymbol: 'ycgH', organism: 'Escherichia coli', target, sources });
+    const legacySummary = {
+      ...bundle.researchSummary,
+      literature: bundle.researchSummary.literature.map(literature => ({ ...literature, evidenceIds: ['stale-id'] })),
+    };
     // Legacy result without an evidence-record set: the prebuilt summary must
     // be ignored and everything rebuilt so citation IDs always resolve.
     const proposal = buildCodeXomicsAnnotationProposal({
-      geneSymbol: task.parameters.geneSymbol,
-      organism: task.parameters.organism,
-      target: task.parameters.target,
-      finalReport: task.result.finalReport,
-      sources: task.result.sources,
-      prebuiltResearchSummary: task.result.researchSummary,
-      prebuiltCurationNote: task.result.annotationNote ?? undefined,
+      geneSymbol: target.geneSymbol,
+      organism: target.organism,
+      target,
+      finalReport: "Research report with an unrelated identifier PMID:2847703.",
+      sources,
+      prebuiltResearchSummary: legacySummary,
+      prebuiltCurationNote: bundle.curationNote,
     });
+    expect(proposal.researchSummary.literature.map(lit => lit.pmid)).toEqual(['11544210']);
     const records = new Map(proposal.evidenceManifest.sourceRecords.map(r => [r.id, r]));
     for (const lit of proposal.researchSummary.literature) {
       for (const id of lit.evidenceIds) {
@@ -49,19 +63,6 @@ describe('evidence ID consistency', () => {
   });
 
   it('keeps prebuilt record IDs stable when the full triple is provided', () => {
-    const sources = [{
-      title: 'LuxArray, a high-density, genomewide transcription analysis of Escherichia coli.',
-      url: 'https://pubmed.ncbi.nlm.nih.gov/11544210/',
-      database: 'pubmed',
-      provenance: { provider: 'pubmed', recordId: '11544210' },
-      structuredData: {
-        targetRelevance: { accepted: true, score: 19, directness: 'gene_linked_context', reason: 'gene linked' },
-        literatureReferences: [{
-          pmid: '11544210',
-          abstract: 'The promoters of ycgH were not generally DNA damage responsive in Escherichia coli.',
-        }],
-      },
-    }];
     const bundle = buildAnnotationCurationSummary({
       geneSymbol: 'ycgH', organism: 'Escherichia coli', target, sources,
     });

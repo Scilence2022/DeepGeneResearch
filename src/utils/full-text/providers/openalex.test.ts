@@ -104,7 +104,7 @@ describe('acquireOpenAlexTei', () => {
     expect(content!.document.origin).toBe('tei');
     expect(content!.document.parser).toBe('openalex-grobid-tei');
     expect(content!.document.name).toBe('W123.tei.xml');
-    expect(content!.document.sourceUrl).toBe(contentUrl);
+    expect(content!.document.sourceUrl).toBe('https://content.openalex.org/works/W123.grobid-xml');
     expect(content!.document.identifiers.doi).toBe('10.1000/xyz');
     expect(content!.document.text).toContain('dihydrodipicolinate synthase');
   });

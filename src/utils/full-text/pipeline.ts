@@ -1,4 +1,5 @@
 import { fetchPublicBytes } from '@/utils/safe-public-fetch';
+import { compareWorkIdentity } from './work-identity';
 import type { FullTextDocument } from '@/utils/gene-research/full-text';
 import { segmentPdfDocument } from './segment/pdf';
 import {
@@ -97,11 +98,13 @@ const MAX_PDF_BYTES = 30 * 1024 * 1024;
 export async function acquirePdfFromUrl(
   url: string,
   work: CandidateWork,
+  signal?: AbortSignal,
 ): Promise<FullTextDocument | null> {
-  const response = await fetchPublicBytes(url, { maxBytes: MAX_PDF_BYTES, timeoutMs: 45_000 });
+  const response = await fetchPublicBytes(url, { maxBytes: MAX_PDF_BYTES, timeoutMs: 45_000, ...(signal ? { signal } : {}) });
   if (response.body.length < 5 || response.body.toString('latin1', 0, 5) !== '%PDF-') return null;
   return segmentPdfDocument({
     bytes: new Uint8Array(response.body),
+    signal,
     name: `${work.doi || work.pmid || 'full-text'}.pdf`,
     mediaType: 'application/pdf',
     documentSha256: undefined,
@@ -131,6 +134,8 @@ export async function acquireFullTextEvidence(
   options: FullTextPipelineOptions = {},
   env: FullTextPipelineEnv = readFullTextEnv(),
 ): Promise<FullTextAcquisition> {
+  const { signal } = options;
+  signal?.throwIfAborted();
   const enabled = new Set(resolveEnabledProviders(env, options.enabledProviders));
   const attempts: FullTextProviderAttempt[] = [];
   const metadata: WorkMetadata = {};
@@ -141,8 +146,8 @@ export async function acquireFullTextEvidence(
   if (enabled.has('europe_pmc') && (work.pmid || work.doi) && (!work.pmcid || !work.doi || !work.title)) {
     const startedAt = Date.now();
     try {
-      const resolved = await resolveEuropePmcWork({ pmid: work.pmid, doi: work.doi });
-      if (resolved) {
+      const resolved = await resolveEuropePmcWork({ pmid: work.pmid, doi: work.doi }, signal);
+      if (resolved && compareWorkIdentity(work, resolved) === 'match') {
         work.pmid = work.pmid ?? resolved.pmid;
         work.pmcid = work.pmcid ?? resolved.pmcid;
         work.doi = work.doi ?? resolved.doi;
@@ -163,8 +168,8 @@ export async function acquireFullTextEvidence(
     const startedAt = Date.now();
     try {
       const anchorId = work.pmid ?? work.doi ?? work.pmcid!;
-      const converted = (await convertPublicationIds([anchorId], { apiKey: env.ncbiApiKey }))[0];
-      if (converted) {
+      const converted = (await convertPublicationIds([anchorId], { apiKey: env.ncbiApiKey, signal }))[0];
+      if (converted && compareWorkIdentity(work, converted) === 'match') {
         work.pmid = work.pmid ?? converted.pmid;
         work.pmcid = work.pmcid ?? converted.pmcid;
         work.doi = work.doi ?? converted.doi;
@@ -183,7 +188,7 @@ export async function acquireFullTextEvidence(
     metadataTasks.push((async () => {
       const startedAt = Date.now();
       try {
-        const result = await fetchCrossrefWorkMetadata(work.doi!, { mailto: env.crossrefMailto });
+        const result = await fetchCrossrefWorkMetadata(work.doi!, { mailto: env.crossrefMailto, signal });
         if (result) Object.assign(metadata, result);
         attempts.push({
           provider: 'crossref',
@@ -200,7 +205,7 @@ export async function acquireFullTextEvidence(
     metadataTasks.push((async () => {
       const startedAt = Date.now();
       try {
-        const result = await locateUnpaywallOaCopy(work.doi!, { email: env.unpaywallEmail });
+        const result = await locateUnpaywallOaCopy(work.doi!, { email: env.unpaywallEmail, signal });
         if (result) Object.assign(metadata, result);
         attempts.push({ provider: 'unpaywall', status: result ? 'success' : 'empty', durationMs: Date.now() - startedAt });
       } catch (error) {
@@ -214,7 +219,7 @@ export async function acquireFullTextEvidence(
     metadataTasks.push((async () => {
       const startedAt = Date.now();
       try {
-        const result = await locatePmcOaPackage(work.pmcid!);
+        const result = await locatePmcOaPackage(work.pmcid!, signal);
         if (result) {
           metadata.pmcOaPackageUrl = result.tgzUrl;
           if (!metadata.license && result.license) metadata.license = result.license;
@@ -229,7 +234,7 @@ export async function acquireFullTextEvidence(
     metadataTasks.push((async () => {
       const startedAt = Date.now();
       try {
-        const result = await fetchSemanticScholarEnrichment(work.doi!);
+        const result = await fetchSemanticScholarEnrichment(work.doi!, signal);
         if (result) {
           if (result.tldr) metadata.tldr = result.tldr;
           if (typeof result.citationCount === 'number') metadata.citationCount = result.citationCount;
@@ -247,7 +252,7 @@ export async function acquireFullTextEvidence(
     steps.push({
       provider: 'europe_pmc',
       run: async current => {
-        const document = await acquireEuropePmcJats(current);
+        const document = await acquireEuropePmcJats(current, signal);
         if (!document) return null;
         const content: AcquiredContent = {
           provider: 'europe_pmc',
@@ -262,14 +267,14 @@ export async function acquireFullTextEvidence(
   if (enabled.has('pubtator') && work.pmid) {
     steps.push({
       provider: 'pubtator',
-      run: async current => acquirePubtatorBioc(current.pmid!, { ncbiApiKey: env.ncbiApiKey }),
+      run: async current => acquirePubtatorBioc(current.pmid!, { ncbiApiKey: env.ncbiApiKey, signal }),
     });
   }
   // Opt-in Tier 3: PMC OA full text in BioC form without PubTator annotations.
   if (enabled.has('bioc_pmc') && work.pmcid) {
     steps.push({
       provider: 'bioc_pmc',
-      run: async current => acquireBiocPmcFullText(current.pmcid!),
+      run: async current => acquireBiocPmcFullText(current.pmcid!, signal),
     });
   }
   // Tier 2: preprints rarely have PMC JATS; bioRxiv/medRxiv serve the
@@ -278,7 +283,7 @@ export async function acquireFullTextEvidence(
       && (work.isPreprint || work.doi.startsWith('10.1101/'))) {
     steps.push({
       provider: 'biorxiv',
-      run: async current => acquireBioRxivPreprintPdf(current.doi!),
+      run: async current => acquireBioRxivPreprintPdf(current.doi!, signal),
     });
   }
   // Tier 2: OpenAlex GROBID TEI — the only cross-disciplinary structured
@@ -287,7 +292,7 @@ export async function acquireFullTextEvidence(
   if (enabled.has('openalex') && work.doi) {
     steps.push({
       provider: 'openalex',
-      run: async current => acquireOpenAlexTei(current.doi!, { apiKey: env.openAlexApiKey }),
+      run: async current => acquireOpenAlexTei(current.doi!, { apiKey: env.openAlexApiKey, signal }),
     });
   }
   // Tier 2: CORE discovers green-OA repository copies (author self-archived
@@ -296,13 +301,13 @@ export async function acquireFullTextEvidence(
     steps.push({
       provider: 'core',
       run: async current => {
-        const located = await discoverCoreFullText(current.doi!, { apiKey: env.coreApiKey });
+        const located = await discoverCoreFullText(current.doi!, { apiKey: env.coreApiKey, signal });
         const pdfUrl = located?.oaPdfUrl;
         if (!pdfUrl) return null;
         if (located.oaRepositoryUrl && !metadata.oaRepositoryUrl) {
           metadata.oaRepositoryUrl = located.oaRepositoryUrl;
         }
-        const document = await acquirePdfFromUrl(pdfUrl, current);
+        const document = await acquirePdfFromUrl(pdfUrl, current, signal);
         return document ? { provider: 'core', format: 'pdf', document } : null;
       },
     });
@@ -314,7 +319,7 @@ export async function acquireFullTextEvidence(
         // The Unpaywall metadata task may still be in flight; wait for it.
         await Promise.allSettled(metadataTasks);
         if (!metadata.oaPdfUrl) return null;
-        const document = await acquirePdfFromUrl(metadata.oaPdfUrl, current);
+        const document = await acquirePdfFromUrl(metadata.oaPdfUrl, current, signal);
         return document ? { provider: 'unpaywall', format: 'pdf', document } : null;
       },
     });
@@ -322,10 +327,13 @@ export async function acquireFullTextEvidence(
 
   let content: AcquiredContent | null = null;
   for (const step of steps) {
-    options.signal?.throwIfAborted();
+    signal?.throwIfAborted();
     const startedAt = Date.now();
     try {
       const acquired = await step.run(work, metadata);
+      if (acquired && compareWorkIdentity(work, acquired.document.identifiers) === 'conflict') {
+        throw new Error('Provider returned a conflicting work identifier');
+      }
       if (acquired) {
         content = acquired;
         attempts.push({ provider: step.provider, status: 'success', durationMs: Date.now() - startedAt });
@@ -346,7 +354,7 @@ export async function acquireFullTextEvidence(
     if (articleIds.length > 0) {
       const startedAt = Date.now();
       try {
-        const annotations = await fetchEuropePmcAnnotations(articleIds);
+        const annotations = await fetchEuropePmcAnnotations(articleIds, signal);
         if (annotations.length > 0) {
           content.providerAnnotations = [
             ...(content.providerAnnotations || []),
@@ -365,6 +373,7 @@ export async function acquireFullTextEvidence(
   }
 
   await Promise.allSettled(metadataTasks);
+  signal?.throwIfAborted();
   return { content, metadata, attempts };
 }
 

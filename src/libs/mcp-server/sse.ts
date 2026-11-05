@@ -1,3 +1,4 @@
+import { readBoundedJson, RequestBodyError } from "@/utils/request-json";
 import { customAlphabet } from "nanoid";
 import { Transport } from "./shared/transport";
 import type { ReadableStreamController } from "stream/web";
@@ -293,12 +294,7 @@ export class SSEServerTransport implements Transport {
 
     let rawMessage: any;
     try {
-      // Request.json() handles content-type and parses JSON
-      rawMessage = await req.json();
-      // Add size limit check if req.json() doesn't strictly enforce it based on serverless provider
-      // const bodyText = await req.text();
-      // if (bodyText.length > /* calculated byte limit from MAXIMUM_MESSAGE_SIZE */) { ... throw Error('Too large') ... }
-      // rawMessage = JSON.parse(bodyText);
+      rawMessage = await readBoundedJson(req, 2 * 1024 * 1024);
     } catch (error) {
       console.error(`[${this._sessionId}] Failed to parse POST body:`, error);
       this.onerror?.(error as Error);
@@ -309,7 +305,7 @@ export class SSEServerTransport implements Transport {
           error: { code: -32700, message: "Parse error", data: String(error) },
           id: null,
         }),
-        { status: 400, headers }
+        { status: error instanceof RequestBodyError ? error.status : 400, headers }
       );
     }
 

@@ -94,7 +94,8 @@ function decodeXmlEntities(value: string): string {
   });
 }
 
-export async function parseUserResearchPdf(documentId: string): Promise<FullTextDocument> {
+export async function parseUserResearchPdf(documentId: string, signal?: AbortSignal): Promise<FullTextDocument> {
+  signal?.throwIfAborted();
   const { descriptor, bytes } = await loadResearchDocument(documentId);
   const { segmentPdfDocument } = await import('@/utils/full-text/segment/pdf');
   return segmentPdfDocument({
@@ -104,6 +105,7 @@ export async function parseUserResearchPdf(documentId: string): Promise<FullText
     documentSha256: descriptor.sha256,
     retrievedAt: descriptor.uploadedAt,
     origin: 'user_upload',
+    signal,
   });
 }
 

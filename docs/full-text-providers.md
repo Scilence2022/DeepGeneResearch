@@ -41,7 +41,7 @@ UNPAYWALL_EMAIL=you@example.org     # OA copy locator + PDF fallback
 ```bash
 NCBI_API_KEY=...                    # PubTator 3/s -> 10/s, shared NCBI budget
 OPENALEX_API_KEY=...                # cross-disciplinary full-text fallback
-ASTA_API_KEY=...                    # snippet-level evidence of last resort
+ASTA_API_KEY=...                    # snippet discovery context
 ```
 
 Restart the server after changing `.env.local`; provider configuration is read
@@ -95,10 +95,7 @@ dashboard (battery icon on openalex.org) if you run large batches.
 2. The key is delivered by email; it may not be instant.
 3. Set `ASTA_API_KEY`.
 
-Asta is used as the **no-download last resort**: when every document source fails
-for a work, the gene engine calls `snippet_search` (top 3 snippets) so the target
-still gets located, quotable evidence. Note the [Asta corpus license
-terms](https://allenai.org/asta-corpus-license/2025-08-26).
+Asta provides snippet context when a full-text provider returns no document. The engine issues one topic search per run and attaches a candidate only if its publication identifier matches without conflicts. Snippets remain separate from citation-bound full-text evidence and full-text coverage. See the [Asta corpus license](https://allenai.org/asta-corpus-license/2025-08-26).
 
 ### CORE API key (free for academics)
 
@@ -124,7 +121,7 @@ optional entry in this list.
 | Provider | Role                 | Auth               | Cost                        | Notes                                                                            |
 | -------- | -------------------- | ------------------ | --------------------------- | -------------------------------------------------------------------------------- |
 | OpenAlex | acquisition fallback | `OPENALEX_API_KEY` | $0.01/download, $1/day free | GROBID TEI from the content host; the only cross-disciplinary full-text fallback |
-| Ai2 Asta | snippet evidence     | `ASTA_API_KEY`     | free                        | MCP-native (`snippet_search`); no document download                              |
+| Ai2 Asta | snippet context      | `ASTA_API_KEY`     | free                        | MCP-native (`snippet_search`); no document download                              |
 | CORE     | acquisition fallback | `CORE_API_KEY`     | free (academics)            | green-OA author manuscripts from 14k+ repositories                               |
 
 ### Tier 3 — only via explicit `FULL_TEXT_PROVIDERS` whitelist
@@ -204,8 +201,8 @@ Europe PMC JATS -> PubTator BioC -> [bioc_pmc] -> bioRxiv PDF (preprints)
 | Crossref        | free                                    | polite pool with `CROSSREF_MAILTO`                    |
 | Unpaywall       | free                                    | polite fetcher                                        |
 | bioRxiv/medRxiv | free                                    | polite fetcher                                        |
-| OpenAlex        | $0.01 per content download; $1/day free | self-cap 100 successful downloads/day/process         |
-| Asta            | free                                    | snippet fallback only (≤3 snippets per failed work)   |
+| OpenAlex        | $0.01 per content download; $1/day free | self-cap 100 download attempts/day/process         |
+| Asta            | free                                    | snippet discovery (≤3 candidates per run)   |
 | CORE            | free tier                               | polite fetcher                                        |
 
 ## Verifying your setup
@@ -225,3 +222,7 @@ Common symptoms:
 | PubTator attempts `error` with HTTP 429                       | shared 3 req/s budget exhausted — set `NCBI_API_KEY`                                                                                                |
 | `asta` never fires                                            | it only runs when every document source failed for a work, and needs `ASTA_API_KEY`                                                                 |
 | `Private-network URLs are not allowed` on every guarded fetch | a fake-ip local proxy (Clash/Surge) answers DNS from 198.18.0.0/15; current releases allow that range because it is unroutable without such a proxy |
+
+## Previously archived provider URLs
+
+OpenAlex and PubTator requests may use a credential in the query string. New artifacts keep the credential-free source URL. Review earlier reports and detailed result archives from deployments that used these providers. Rotate affected keys if a credential-bearing artifact was shared outside the intended audience.

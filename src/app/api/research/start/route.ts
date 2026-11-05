@@ -1,120 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import DeepResearch from '@/utils/deep-research';
-import { useHistoryStore } from '@/store/history';
-import { getAIProviderBaseURL, getAIProviderApiKey, getSearchProviderBaseURL, getSearchProviderApiKey } from '../../utils';
+import { requireMcpAuth } from '../../mcp/auth';
+import { TaskValidationError, taskQueue } from '@/services/task-queue';
+import { IdempotencyConflictError, TaskCapacityError } from '@/services/task-store';
+import { readBoundedJson, RequestBodyError } from '@/utils/request-json';
+import { legacyStatus, privateResponse, researchOptions } from '../shared';
 
-const AI_PROVIDER = process.env.MCP_AI_PROVIDER || '';
-const SEARCH_PROVIDER = process.env.MCP_SEARCH_PROVIDER || 'model';
-const THINKING_MODEL = process.env.MCP_THINKING_MODEL || '';
-const TASK_MODEL = process.env.MCP_TASK_MODEL || '';
+export const runtime = 'nodejs';
 
-interface StartResearchRequest {
-  query: string;
-  language?: string;
-  enableCitationImage?: boolean;
-  enableReferences?: boolean;
-  maxResult?: number;
-}
+export async function POST(request: NextRequest) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
 
-export async function POST(req: NextRequest) {
   try {
-    const body: StartResearchRequest = await req.json();
-    
-    // Validate required fields
-    if (!body.query || body.query.trim() === '') {
-      return NextResponse.json(
-        { error: 'Query is required' },
-        { status: 400 }
-      );
+    const parsed = researchOptions.safeParse(await readBoundedJson(request, 32 * 1024));
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid research options', issues: parsed.error.issues }, { status: 400 });
     }
-    
-    // Get the history store
-    const historyStore = useHistoryStore.getState();
-    
-    // Create a new research task
-    const taskId = historyStore.createTask({
-      query: body.query,
-      status: 'in-progress',
-      config: {
-        language: body.language || 'English',
-        enableCitationImage: body.enableCitationImage ?? true,
-        enableReferences: body.enableReferences ?? true,
-        maxResult: body.maxResult ?? 5
-      }
+    const task = await taskQueue.addTask({
+      mode: 'general',
+      ...parsed.data,
+      idempotencyKey: request.headers.get('idempotency-key') || undefined,
     });
-    
-    // Initialize DeepResearch instance
-    const deepResearch = new DeepResearch({
-      AIProvider: {
-        baseURL: getAIProviderBaseURL(AI_PROVIDER),
-        apiKey: getAIProviderApiKey(AI_PROVIDER),
-        provider: AI_PROVIDER,
-        thinkingModel: THINKING_MODEL,
-        taskModel: TASK_MODEL,
-      },
-      searchProvider: {
-        baseURL: getSearchProviderBaseURL(SEARCH_PROVIDER),
-        apiKey: getSearchProviderApiKey(SEARCH_PROVIDER),
-        provider: SEARCH_PROVIDER,
-        scope: process.env.MCP_SEARXNG_SCOPE || undefined,
-        maxResult: body.maxResult ?? 5,
-      },
-      language: body.language || 'English',
-      onMessage: (event, data) => {
-        // Update task status when receiving progress updates
-        if (event === 'task-status') {
-          historyStore.updateTaskStatus(
-            taskId,
-            data.taskStatus || data.status,
-            data
-          );
-        } else if (event === 'progress') {
-          historyStore.updateTaskStatus(
-            taskId, 
-            'in-progress',
-            data
-          );
-        } else if (event === 'error') {
-          historyStore.updateTaskStatus(
-            taskId, 
-            'failed',
-            { error: data.message }
-          );
-        }
-      },
-    });
-    
-    // Start research asynchronously
-    deepResearch.start(
-      body.query,
-      body.enableCitationImage ?? true,
-      body.enableReferences ?? true,
-      taskId
-    ).then((result) => {
-      // Update task with result when completed
-      historyStore.updateTaskResult(taskId, result);
-    }).catch((error) => {
-      // Update task with error when failed
-      historyStore.updateTaskStatus(
-        taskId, 
-        'failed',
-        { error: error.message }
-      );
-    });
-    
-    // Return taskId to client
     return NextResponse.json({
-      taskId,
-      status: 'in-progress',
-      createdAt: new Date().toISOString(),
-      message: 'Research task started successfully'
-    });
-    
+      taskId: task.id,
+      status: legacyStatus(task.status),
+      createdAt: task.createdAt,
+      message: 'Research task accepted',
+    }, { headers: privateResponse });
   } catch (error) {
-    console.error('Error starting research task:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to start research task' },
-      { status: 500 }
-    );
+    if (error instanceof RequestBodyError || error instanceof TaskValidationError || error instanceof IdempotencyConflictError) {
+      const status = error instanceof RequestBodyError ? error.status : error instanceof IdempotencyConflictError ? 409 : 400;
+      return NextResponse.json({ error: error.message }, { status });
+    }
+    if (error instanceof TaskCapacityError) {
+      return NextResponse.json({ error: error.message }, { status: 429, headers: { 'Retry-After': '10' } });
+    }
+    console.error('[Research] Unable to submit task', error instanceof Error ? error.name : 'UnknownError');
+    return NextResponse.json({ error: 'Research queue unavailable' }, { status: 503 });
   }
 }

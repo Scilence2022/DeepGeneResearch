@@ -1,107 +1,32 @@
-import { NextResponse, type NextRequest } from "next/server";
-import DeepResearch from "@/utils/deep-research";
-import { multiApiKeyPolling } from "@/utils/model";
-import {
-  getAIProviderBaseURL,
-  getAIProviderApiKey,
-  getSearchProviderBaseURL,
-  getSearchProviderApiKey,
-} from "../../utils";
+import { type NextRequest } from 'next/server';
+import { requireMcpAuth } from '../../mcp/auth';
+import { streamResearch } from '../stream';
 
-// The research engine relies on Node-only modules (fs, dns, http, crypto) for
-// task storage, SSRF-hardened fetching, and evidence hashing, so this route
-// must run on the Node.js runtime; the edge bundle cannot resolve them.
-export const dynamic = "force-dynamic";
-export const preferredRegion = [
-  "cle1",
-  "iad1",
-  "pdx1",
-  "sfo1",
-  "sin1",
-  "syd1",
-  "hnd1",
-  "kix1",
-];
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
-export async function GET(req: NextRequest) {
-  function getValueFromSearchParams(key: string) {
-    return req.nextUrl.searchParams.get(key);
-  }
-  const query = getValueFromSearchParams("query") || "";
-  const provider = getValueFromSearchParams("provider") || "";
-  const thinkingModel = getValueFromSearchParams("thinkingModel") || "";
-  const taskModel = getValueFromSearchParams("taskModel") || "";
-  const searchProvider = getValueFromSearchParams("searchProvider") || "";
-  const language = getValueFromSearchParams("language") || "";
-  const maxResult = Number(getValueFromSearchParams("maxResult")) || 5;
-  const enableCitationImage =
-    getValueFromSearchParams("enableCitationImage") === "false";
-  const enableReferences =
-    getValueFromSearchParams("enableReferences") === "false";
+export function GET(request: NextRequest) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
 
-  const encoder = new TextEncoder();
-  const readableStream = new ReadableStream({
-    start: async (controller) => {
-      console.log("Client connected");
-
-      req.signal.addEventListener("abort", () => {
-        console.log("Client disconnected");
-      });
-
-      const deepResearch = new DeepResearch({
-        language,
-        AIProvider: {
-          baseURL: getAIProviderBaseURL(provider),
-          apiKey: multiApiKeyPolling(getAIProviderApiKey(provider)),
-          provider,
-          thinkingModel,
-          taskModel,
-        },
-        searchProvider: {
-          baseURL: getSearchProviderBaseURL(searchProvider),
-          apiKey: multiApiKeyPolling(getSearchProviderApiKey(searchProvider)),
-          provider: searchProvider,
-          maxResult,
-        },
-        onMessage: (event, data) => {
-          if (event === "message") {
-            controller.enqueue(encoder.encode(data.text));
-          } else if (event === "progress") {
-            console.log(
-              `[${data.step}]: ${data.name ? `"${data.name}" ` : ""}${
-                data.status
-              }`
-            );
-            if (data.step === "final-report" && data.status === "end") {
-              controller.close();
-            }
-          } else if (event === "error") {
-            console.error(data);
-            controller.close();
-          }
-        },
-      });
-
-      req.signal.addEventListener("abort", () => {
-        controller.close();
-      });
-
-      try {
-        await deepResearch.start(query, enableCitationImage, enableReferences);
-      } catch (err) {
-        throw new Error(err instanceof Error ? err.message : "Unknown error");
-      }
-      controller.close();
-    },
-  });
-
-  return new NextResponse(readableStream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
+  const params = request.nextUrl.searchParams;
+  const maxResult = params.get('maxResult');
+  const booleanOption = (name: string) => {
+    const value = params.get(name);
+    if (value === null) return undefined;
+    if (value === 'true' || value === 'false') return value === 'true';
+    return value;
+  };
+  return streamResearch(request, {
+    query: params.get('query'),
+    provider: params.get('provider') ?? undefined,
+    thinkingModel: params.get('thinkingModel') ?? undefined,
+    taskModel: params.get('taskModel') ?? undefined,
+    searchProvider: params.get('searchProvider') ?? undefined,
+    language: params.get('language') ?? undefined,
+    maxResult: maxResult === null ? undefined : Number(maxResult),
+    enableCitationImage: booleanOption('enableCitationImage'),
+    enableReferences: booleanOption('enableReferences'),
+  }, true);
 }

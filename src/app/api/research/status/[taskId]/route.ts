@@ -1,47 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { useHistoryStore } from '@/store/history';
-import { isValidTaskId } from '@/utils/task-id-generator';
+import { requireMcpAuth } from '../../../mcp/auth';
+import { legacyStatus, privateResponse, readGeneralTask } from '../../shared';
+import { taskQueue } from '@/services/task-queue';
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ taskId: string }> }
-) {
+type Context = { params: Promise<{ taskId: string }> };
+
+export async function GET(request: NextRequest, { params }: Context) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
+
   try {
-    const { taskId } = await params;
-    
-    // Validate taskId format
-    if (!isValidTaskId(taskId)) {
-      return NextResponse.json(
-        { error: 'Invalid task ID format' },
-        { status: 400 }
-      );
-    }
-    
-    // Get the task from history store
-    const task = useHistoryStore.getState().getTask(taskId);
-    
-    if (!task) {
-      return NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      );
-    }
-    
-    // Return task status
+    const task = await readGeneralTask((await params).taskId);
+    if (task instanceof NextResponse) return task;
+    const { language, maxResult, enableCitationImage, enableReferences } = task.parameters;
     return NextResponse.json({
       taskId: task.id,
-      status: task.status,
+      status: legacyStatus(task.status),
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
-      progress: task.progress,
-      config: task.config
-    });
-    
-  } catch (error) {
-    console.error('Error getting task status:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to get task status' },
-      { status: 500 }
-    );
+      eventSeq: task.eventSeq,
+      progress: { step: task.step, percent: task.progress },
+      config: { language, maxResult, enableCitationImage, enableReferences },
+    }, { headers: privateResponse });
+  } catch {
+    return NextResponse.json({ error: 'Research task store unavailable' }, { status: 503 });
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: Context) {
+  const unauthorized = requireMcpAuth(request);
+  if (unauthorized) return unauthorized;
+
+  try {
+    const task = await readGeneralTask((await params).taskId);
+    if (task instanceof NextResponse) return task;
+    const requested = await taskQueue.cancelTask(task.id);
+    const latest = await readGeneralTask(task.id);
+    if (latest instanceof NextResponse) return latest;
+    return NextResponse.json({ taskId: task.id, status: legacyStatus(latest.status), requested }, { headers: privateResponse });
+  } catch {
+    return NextResponse.json({ error: 'Research task store unavailable' }, { status: 503 });
   }
 }

@@ -1,9 +1,10 @@
 import { EventEmitter } from 'events';
-import { GeneResearchTask, GeneResearchParameters } from '@/models/task';
+import { setTimeout as delay } from 'node:timers/promises';
+import { GeneResearchTask, GeneResearchParameters, ResearchParameters } from '@/models/task';
 import { taskStore } from './task-store';
-import { initDeepResearchServer } from '@/app/api/mcp/server';
+import { initDeepResearchServer } from '@/services/research-engine';
 import { cacheService, isReusableResearchResult } from './cache';
-import { storeResearchResult } from '@/utils/mcp-research-store';
+import { createFetchSignal } from '@/utils/fetch-signal';
 import { buildCodeXomicsAnnotationProposal } from '@/utils/gene-research/codexomics-annotation';
 import { enforceTaskMediaPolicy } from './task-result-projection';
 import {
@@ -63,6 +64,11 @@ export function isSubstantiveResearchResult(
 
 // 任务队列类
 export class TaskQueue extends EventEmitter {
+  constructor() {
+    super();
+    this.setMaxListeners(50);
+  }
+
   private queue: GeneResearchTask[] = [];
   private maxConcurrent = this.normalizeConcurrency(Number(process.env.DGR_MAX_CONCURRENT_RESEARCH || 2));
   private processingTasks = new Set<string>();
@@ -79,7 +85,7 @@ export class TaskQueue extends EventEmitter {
     return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 2;
   }
 
-  private validateParameters(parameters: GeneResearchParameters) {
+  private validateParameters(parameters: ResearchParameters) {
     const boundedString = (value: unknown, field: string, maxLength: number, required = false) => {
       if (value === undefined || value === null || value === '') {
         if (required) throw new TaskValidationError(`${field} is required`);
@@ -97,6 +103,24 @@ export class TaskQueue extends EventEmitter {
       value.forEach((item, index) => boundedString(item, `${field}[${index}]`, maxLength, true));
     };
 
+    boundedString(parameters.language, 'language', 64);
+    boundedString(parameters.idempotencyKey, 'idempotencyKey', 256);
+    boundedString(parameters.correlationId, 'correlationId', 256);
+    for (const flag of ['enableCitationImage', 'enableReferences'] as const) {
+      if (parameters[flag] !== undefined && typeof parameters[flag] !== 'boolean') {
+        throw new TaskValidationError(`${flag} must be a boolean`);
+      }
+    }
+    const maxResults = parameters.mode === 'general' ? 20 : 100;
+    if (parameters.maxResult !== undefined
+      && (!Number.isInteger(parameters.maxResult) || parameters.maxResult < 1 || parameters.maxResult > maxResults)) {
+      throw new TaskValidationError(`maxResult must be an integer from 1 to ${maxResults}`);
+    }
+    if (parameters.mode === 'general') {
+      boundedString(parameters.query, 'query', 8_000, true);
+      return;
+    }
+
     boundedString(parameters.geneSymbol, 'geneSymbol', 128, true);
     boundedString(parameters.organism, 'organism', 256, true);
     boundedStringArray(parameters.researchFocus, 'researchFocus', 20, 128);
@@ -104,9 +128,6 @@ export class TaskQueue extends EventEmitter {
     boundedString(parameters.diseaseContext, 'diseaseContext', 1_000);
     boundedString(parameters.experimentalApproach, 'experimentalApproach', 1_000);
     boundedString(parameters.userPrompt, 'userPrompt', 8_000);
-    boundedString(parameters.language, 'language', 64);
-    boundedString(parameters.idempotencyKey, 'idempotencyKey', 256);
-    boundedString(parameters.correlationId, 'correlationId', 256);
     boundedStringArray(parameters.userDocumentIds, 'userDocumentIds', 8, 71);
     for (const documentId of parameters.userDocumentIds || []) {
       if (!/^sha256:[a-f0-9]{64}$/i.test(documentId)) {
@@ -115,12 +136,6 @@ export class TaskQueue extends EventEmitter {
     }
     if (parameters.forceRefresh !== undefined && typeof parameters.forceRefresh !== 'boolean') {
       throw new TaskValidationError('forceRefresh must be a boolean');
-    }
-    if (
-      parameters.maxResult !== undefined &&
-      (!Number.isInteger(parameters.maxResult) || parameters.maxResult < 1 || parameters.maxResult > 100)
-    ) {
-      throw new TaskValidationError('maxResult must be an integer from 1 to 100');
     }
     if (
       parameters.literatureBudget !== undefined &&
@@ -186,7 +201,7 @@ export class TaskQueue extends EventEmitter {
     if (parameters.target.organism && normalize(parameters.target.organism) !== normalize(parameters.organism)) {
       throw new TaskValidationError('Research organism does not match the organism resolved by CodeXomics');
     }
-    if (parameters.target.geneSymbol && normalize(parameters.target.geneSymbol) !== normalize(parameters.geneSymbol)) {
+    if (parameters.target.geneSymbol && parameters.target.geneSymbol.trim() !== parameters.geneSymbol.trim()) {
       throw new TaskValidationError('Research geneSymbol does not match the feature resolved by CodeXomics');
     }
   }
@@ -231,10 +246,10 @@ export class TaskQueue extends EventEmitter {
   }
 
   // 添加任务到队列
-  async addTask(parameters: GeneResearchParameters): Promise<GeneResearchTask> {
+  async addTask(parameters: ResearchParameters): Promise<GeneResearchTask> {
     this.validateParameters(parameters);
     await this.start();
-    const { task, created } = await taskStore.createOrGetTask(parameters);
+    const { task, created } = await taskStore.createOrGetTask(parameters, 100);
     if (!created) {
       void this.processQueue();
       return task;
@@ -269,7 +284,7 @@ export class TaskQueue extends EventEmitter {
 
   private async isCancellationRequested(taskId: string): Promise<boolean> {
     if (this.cancelledTasks.has(taskId)) return true;
-    const currentTask = await taskStore.getTask(taskId);
+    const currentTask = await taskStore.getTaskMetadata(taskId);
     return currentTask?.status === 'cancel_requested' || currentTask?.status === 'cancelled';
   }
 
@@ -282,7 +297,7 @@ export class TaskQueue extends EventEmitter {
   }
 
   private ensureCodeXomicsAnnotationProposal(task: GeneResearchTask, result: any) {
-    if (task.parameters.includeCodeXomicsAnnotationProposal === false || !result || result.annotationProposal) {
+    if (task.parameters.mode === 'general' || task.parameters.includeCodeXomicsAnnotationProposal === false || !result || result.annotationProposal) {
       return result;
     }
 
@@ -314,12 +329,12 @@ export class TaskQueue extends EventEmitter {
   }
 
   private prepareResultForTask(task: GeneResearchTask, result: any) {
-    if (!task.parameters.returnReportAsUrl && !task.parameters.returnDetailsAsUrl) {
-      return result;
+    const artifactUri = `dgr://runs/${task.id}/result`;
+    if (task.parameters.mode === 'general' || (!task.parameters.returnReportAsUrl && !task.parameters.returnDetailsAsUrl)) {
+      return { ...result, artifactUri };
     }
 
-    const reportContent = result.finalReport || result.report?.content || '';
-    const researchId = storeResearchResult(reportContent, result);
+    const researchId = task.id;
     const download = {
       researchId,
       reportUrl: task.parameters.returnReportAsUrl
@@ -346,9 +361,38 @@ export class TaskQueue extends EventEmitter {
     // Keep the canonical report and workflow in the durable task record. URL
     // download helpers are convenience views and may expire; a task result is
     // the authoritative artifact used by CodeXomics recovery and audit.
-    responseResult.artifactUri = `dgr://runs/${task.id}/result`;
+    responseResult.artifactUri = artifactUri;
 
     return responseResult;
+  }
+
+  private trackProgress(taskId: string, engine: ReturnType<typeof initDeepResearchServer>) {
+    const progressByStep: Record<string, number> = {
+      'report-plan': 20,
+      'serp-query': 35,
+      'task-list': 45,
+      'search-task': 55,
+      'gene-research': 50,
+      'gene-search': 60,
+      'gene-llm-queries': 20,
+      'gene-llm-learnings': 68,
+      'gene-llm-report': 82,
+      'final-report': 88,
+    };
+    let previousStep = '';
+    let previousProgress = 0;
+    engine.onMessage = (event, { step, status }) => {
+      if (event !== 'progress' || !Object.hasOwn(progressByStep, step)) return;
+      const progress = Math.max(previousProgress, progressByStep[step] + (status === 'end' ? 10 : 0));
+      if (step === previousStep && progress === previousProgress) return;
+      previousStep = step;
+      previousProgress = progress;
+      void taskStore.updateTaskStatus(taskId, 'in_progress', progress, step)
+        .then(task => {
+          if (task.status === 'in_progress') this.emit('task:progress', task, task.progress, step);
+        })
+        .catch(() => console.error('[TaskQueue] Unable to persist progress', taskId));
+    };
   }
 
   // 处理单个任务（带重试机制）
@@ -367,6 +411,26 @@ export class TaskQueue extends EventEmitter {
         return;
       }
       this.emit('task:started', startedTask);
+
+      if (task.parameters.mode === 'general') {
+        const controller = new AbortController();
+        this.abortControllers.set(task.id, controller);
+        if (this.cancelledTasks.has(task.id)) controller.abort();
+        const { query, language, maxResult, enableCitationImage, enableReferences } = task.parameters;
+        const engine = initDeepResearchServer({ language, maxResult });
+        this.trackProgress(task.id, engine);
+        const signal = createFetchSignal(controller.signal, 600_000);
+        const result = await engine.start(query, enableCitationImage, enableReferences, task.id, signal);
+        if (await this.isCancellationRequested(task.id)) {
+          await this.finishCancellation(task, 'cancelled-before-result-commit');
+          return;
+        }
+        const taskResult = this.prepareResultForTask(task, result);
+        const completedTask = await taskStore.updateTaskResult(task.id, taskResult);
+        if (completedTask.status === 'completed') this.emit('task:completed', completedTask, taskResult);
+        if (completedTask.status === 'cancel_requested') await this.finishCancellation(completedTask, 'cancelled-before-result-commit');
+        return;
+      }
 
       // A refresh request invalidates the semantic cache entry before any read.
       // forceRefresh itself is deliberately excluded from the cache key.
@@ -411,6 +475,8 @@ export class TaskQueue extends EventEmitter {
             ...((cachedResultWithProposal as any)?.metadata || {}),
             cacheReplay: true,
             cacheReplayedAt: new Date().toISOString(),
+            cacheReplayTimeMs: Date.now() - new Date(task.createdAt).getTime(),
+            cacheSourceTaskId: cachedResultWithProposal.metadata?.researchRunId,
           },
         };
         const taskResult = this.prepareResultForTask(task, replayedResult);
@@ -427,68 +493,11 @@ export class TaskQueue extends EventEmitter {
       const { language, maxResult } = task.parameters;
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const abortController = new AbortController();
+      const signal = createFetchSignal(abortController.signal, 900_000);
       this.abortControllers.set(task.id, abortController);
       if (this.cancelledTasks.has(task.id)) abortController.abort();
 
-      // 设置进度回调
-      const originalOnMessage = deepResearch.onMessage;
-      deepResearch.onMessage = (event, data) => {
-        originalOnMessage(event, data);
-        if (event === 'progress') {
-          let progress = 0;
-          const step = data.step;
-          
-          // 根据步骤计算进度
-          switch (step) {
-            case 'report-plan':
-              progress = 20;
-              break;
-            case 'serp-query':
-              progress = 40;
-              break;
-            case 'task-list':
-              progress = 60;
-              break;
-            case 'search-task':
-              // Individual search queries running (60-75%)
-              progress = 60;
-              break;
-            case 'final-report':
-              progress = 80;
-              break;
-            case 'gene-research':
-              progress = 50;
-              break;
-            case 'gene-search':
-              progress = 60;
-              break;
-            case 'gene-llm-queries':
-              progress = 62;
-              break;
-            case 'gene-llm-learnings':
-              progress = 68;
-              break;
-            case 'gene-llm-report':
-              progress = 82;
-              break;
-          }
-
-          if (data.status === 'end') {
-            progress = step === 'final-report' || step === 'gene-research' ? 100 : progress + 10;
-          }
-
-          // 更新任务进度
-          void taskStore.updateTaskStatus(task.id, 'in_progress', progress, step)
-            .then((updatedTask) => {
-              if (updatedTask.status === 'in_progress') {
-                this.emit('task:progress', updatedTask, updatedTask.progress, step);
-              }
-            })
-            .catch((error) => {
-              console.error(`Failed to update progress for task ${task.id}:`, error);
-            });
-        }
-      };
+      this.trackProgress(task.id, deepResearch);
 
       // Build a user-facing query for the report, but pass the exact MCP
       // target into the specialized research engine. It must never recover a
@@ -532,7 +541,7 @@ export class TaskQueue extends EventEmitter {
         literatureBudget: task.parameters.literatureBudget,
         fullTextBudget: task.parameters.fullTextBudget,
         userDocumentIds: task.parameters.userDocumentIds,
-      }, abortController.signal, task.parameters.enableCitationImage !== false);
+      }, signal, task.parameters.enableCitationImage !== false, task.parameters.enableReferences !== false);
       if (await this.isCancellationRequested(task.id)) {
         await this.finishCancellation(task, 'cancelled-during-research');
         return;
@@ -540,12 +549,17 @@ export class TaskQueue extends EventEmitter {
 
       // Preserve the specialized engine's computed quality metrics instead of
       // publishing synthetic constants from the generic report pipeline.
-      const researchTime = Date.now() - new Date(task.createdAt).getTime();
+      const completedAt = Date.now();
+      const researchTime = completedAt - new Date(task.createdAt).getTime();
+      const attemptTimeMs = completedAt - new Date(startedTask.updatedAt).getTime();
       const sourceCoverage = summarizeSourceCoverage([], specializedResult.sources || []);
       const searchDiagnostics = (specializedResult as any).metadata?.searchDiagnostics;
       if (searchDiagnostics) {
         sourceCoverage.searchTaskCount = searchDiagnostics.queryCount;
-        sourceCoverage.tasksWithSources = searchDiagnostics.successfulSearches;
+        sourceCoverage.tasksWithSources = new Set<string>((searchDiagnostics.attempts || [])
+          .filter((attempt: { phase?: string; sourceCount: number }) =>
+            ['research', 'follow_up'].includes(attempt.phase || '') && attempt.sourceCount > 0)
+          .map((attempt: { query: string }) => attempt.query)).size;
         sourceCoverage.sourceCount = searchDiagnostics.sourceCount;
         sourceCoverage.uniqueSourceCount = searchDiagnostics.uniqueSourceCount;
       }
@@ -554,16 +568,15 @@ export class TaskQueue extends EventEmitter {
         metadata: {
           ...((specializedResult as any).metadata || {}),
           researchTime,
+          researchRunId: task.id,
+          attemptTimeMs,
+          queueAndRetryTimeMs: researchTime - attemptTimeMs,
+          attempts: startedTask.attempts,
           dataSources: sourceCoverage.sourceDomains,
           sourceCoverage,
         },
       });
       const resultWithProposal = this.ensureCodeXomicsAnnotationProposal(task, result);
-
-      // 存储结果到缓存
-      if (isSubstantiveResearchResult(resultWithProposal, task.parameters)) {
-        await cacheService.setCachedResult(task.parameters, resultWithProposal);
-      }
 
       if (await this.isCancellationRequested(task.id)) {
         await this.finishCancellation(task, 'cancelled-before-result-commit');
@@ -574,6 +587,9 @@ export class TaskQueue extends EventEmitter {
       const taskResult = this.prepareResultForTask(task, resultWithProposal);
       const completedTask = await taskStore.updateTaskResult(task.id, taskResult);
       if (completedTask.status === 'completed') {
+        if (isSubstantiveResearchResult(resultWithProposal, task.parameters)) {
+          await cacheService.setCachedResult(task.parameters, resultWithProposal);
+        }
         this.emit('task:completed', completedTask, taskResult);
       } else if (completedTask.status === 'cancel_requested') {
         await this.finishCancellation(completedTask, 'cancelled-before-result-commit');
@@ -587,13 +603,15 @@ export class TaskQueue extends EventEmitter {
       }
       
       // 检查是否需要重试
-      const currentTask = await taskStore.getTask(task.id);
+      const currentTask = await taskStore.getTaskMetadata(task.id);
       const attempts = currentTask?.attempts ?? 0;
-      if (attempts < this.maxAttempts) {
+      const statusCode = typeof error === 'object' && error && 'statusCode' in error ? Number(error.statusCode) : 0;
+      const transient = statusCode === 429 || (statusCode >= 500 && statusCode < 600);
+      if (transient && attempts < this.maxAttempts) {
         const nextAttempt = attempts + 1;
-        const delay = Math.pow(2, Math.max(0, attempts - 1)) * 1000; // 指数退避
+        const backoffMs = Math.pow(2, Math.max(0, attempts - 1)) * 1000; // 指数退避
         
-        console.log(`Task ${task.id} failed, retrying in ${delay}ms (attempt ${nextAttempt}/${this.maxAttempts})`);
+        console.log(`Task ${task.id} failed, retrying in ${backoffMs}ms (attempt ${nextAttempt}/${this.maxAttempts})`);
         
         // 更新任务状态为重试中
         const retryTask = await taskStore.updateTaskStatus(
@@ -609,7 +627,12 @@ export class TaskQueue extends EventEmitter {
         this.emit('task:progress', retryTask, 0, `retry-${nextAttempt}`);
         
         // 延迟后重试
-        await new Promise(resolve => setTimeout(resolve, delay));
+        try {
+          await delay(backoffMs, undefined, { signal: this.abortControllers.get(task.id)?.signal });
+        } catch {
+          await this.finishCancellation(task, 'cancelled-during-retry');
+          return;
+        }
         await this.processTask(task);
       } else {
         // 达到最大重试次数，标记任务失败
@@ -636,7 +659,7 @@ export class TaskQueue extends EventEmitter {
   // 取消任务
   async cancelTask(taskId: string): Promise<boolean> {
     await this.start();
-    const task = await taskStore.getTask(taskId);
+    const task = await taskStore.getTaskMetadata(taskId);
     if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return false;
 
     const index = this.queue.findIndex(task => task.id === taskId);
@@ -659,5 +682,7 @@ export class TaskQueue extends EventEmitter {
   }
 }
 
-// 导出单例实例
-export const taskQueue = new TaskQueue();
+const runtime = globalThis as typeof globalThis & { dgrTaskQueue?: TaskQueue };
+export const taskQueue = process.env.NODE_ENV === 'production'
+  ? (runtime.dgrTaskQueue ??= new TaskQueue())
+  : new TaskQueue();

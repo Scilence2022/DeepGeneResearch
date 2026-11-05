@@ -5,7 +5,7 @@ import {
   canonicalizeFullText,
   type FullTextDocument,
 } from '@/utils/gene-research/full-text';
-import { createPoliteFetcher, type PoliteFetcher } from '../http';
+import { createPoliteFetcher, readProviderText, type PoliteFetcher } from '../http';
 import type { AcquiredContent } from '../types';
 
 const ASTA_MCP_URL = 'https://asta-tools.allen.ai/mcp/v1';
@@ -47,8 +47,10 @@ async function postMcp(
   apiKey: string,
   body: Record<string, unknown>,
   sessionId?: string,
+  signal?: AbortSignal,
 ): Promise<{ message: JsonRpcMessage | null; sessionId?: string }> {
   const response = await astaFetcher().fetch(ASTA_MCP_URL, {
+    signal,
     init: {
       method: 'POST',
       headers: {
@@ -63,11 +65,11 @@ async function postMcp(
   const nextSessionId = response.headers.get('mcp-session-id') || sessionId;
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
   if (contentType.includes('text/event-stream')) {
-    return { message: parseSseLastMessage(await response.text()), sessionId: nextSessionId };
+    return { message: parseSseLastMessage(await readProviderText(response, 1024 * 1024)), sessionId: nextSessionId };
   }
   // 202 Accepted is the MCP acknowledgement for notifications: no body.
   if (response.status === 202) return { message: null, sessionId: nextSessionId };
-  const message = (await response.json()) as JsonRpcMessage;
+  const message = JSON.parse(await readProviderText(response, 1024 * 1024)) as JsonRpcMessage;
   return { message, sessionId: nextSessionId };
 }
 
@@ -78,9 +80,9 @@ async function postMcp(
  * MCP initialize handshake once (reusing the mcp-session-id header) and
  * retry the call a single time.
  */
-async function callAstaTool(apiKey: string, name: string, args: Record<string, unknown>): Promise<any> {
+async function callAstaTool(apiKey: string, name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<any> {
   const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } };
-  let { message, sessionId } = await postMcp(apiKey, request);
+  let { message, sessionId } = await postMcp(apiKey, request, undefined, signal);
   if (message?.error) {
     const initialized = await postMcp(apiKey, {
       jsonrpc: '2.0',
@@ -91,13 +93,13 @@ async function callAstaTool(apiKey: string, name: string, args: Record<string, u
         capabilities: {},
         clientInfo: { name: 'deep-gene-research', version: '1.0' },
       },
-    }, sessionId);
+    }, sessionId, signal);
     sessionId = initialized.sessionId;
     if (initialized.message?.error) {
       throw new Error(`asta initialize failed: ${initialized.message.error.message || 'unknown error'}`);
     }
-    await postMcp(apiKey, { jsonrpc: '2.0', method: 'notifications/initialized' }, sessionId);
-    ({ message } = await postMcp(apiKey, request, sessionId));
+    await postMcp(apiKey, { jsonrpc: '2.0', method: 'notifications/initialized' }, sessionId, signal);
+    ({ message } = await postMcp(apiKey, request, sessionId, signal));
   }
   if (!message) throw new Error('asta returned no JSON-RPC response');
   if (message.error) {
@@ -182,15 +184,16 @@ function snippetPassage(entry: any): string {
  */
 export async function searchAstaSnippets(
   query: string,
-  options: { apiKey?: string; limit?: number },
+  options: { apiKey?: string; limit?: number; signal?: AbortSignal },
 ): Promise<AcquiredContent[]> {
   const apiKey = String(options?.apiKey || '').trim();
   const trimmed = String(query || '').trim();
   if (!apiKey || !trimmed) return [];
   let result: any;
   try {
-    result = await callAstaTool(apiKey, 'snippet_search', { query: trimmed, limit: options?.limit ?? 5 });
+    result = await callAstaTool(apiKey, 'snippet_search', { query: trimmed, limit: options?.limit ?? 5 }, options.signal);
   } catch {
+    options.signal?.throwIfAborted();
     return [];
   }
   const contents: AcquiredContent[] = [];

@@ -28,13 +28,13 @@ export interface PmcOaPackageLocation {
  * only records the location; the archive itself is never downloaded.
  * Returns null when the record is not in the PMC OA subset (`<error>`).
  */
-export async function locatePmcOaPackage(pmcid: string): Promise<PmcOaPackageLocation | null> {
+export async function locatePmcOaPackage(pmcid: string, signal?: AbortSignal): Promise<PmcOaPackageLocation | null> {
   const normalized = String(pmcid || '').trim().toUpperCase();
   if (!/^PMC\d+$/.test(normalized)) return null;
   const sourceUrl = `${PMC_OA_BASE}?id=${encodeURIComponent(normalized)}`;
   let xml: string;
   try {
-    xml = await pmcOaFetcher().fetchText(sourceUrl);
+    xml = await pmcOaFetcher().fetchText(sourceUrl, { signal });
   } catch (error) {
     if (is404(error)) return null;
     throw error;

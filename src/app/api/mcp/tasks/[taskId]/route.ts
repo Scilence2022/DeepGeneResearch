@@ -17,7 +17,7 @@ export async function GET(
     await taskQueue.start();
     const task = await taskStore.getTask(taskId);
     
-    if (!task) {
+    if (!task || task.parameters.mode === "general") {
       return NextResponse.json(
         { error: `Task ${taskId} not found` },
         { status: 404 }
@@ -36,7 +36,7 @@ export async function GET(
       ...task,
       resultMode,
       result: projectTaskResult(task.result, resultMode),
-    });
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     console.error(`Error getting task ${taskId}:`, error);
     return NextResponse.json(
@@ -58,6 +58,10 @@ export async function DELETE(
   try {
     // DELETE is a cancellation request, not destructive task deletion. Keeping
     // the terminal record is required for audit and client restart recovery.
+    const existing = await taskStore.getTaskMetadata(taskId);
+    if (!existing || existing.parameters.mode === "general") {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
     const canceledFromQueue = await taskQueue.cancelTask(taskId);
     if (!canceledFromQueue) {
       return NextResponse.json(
@@ -66,7 +70,7 @@ export async function DELETE(
       );
     }
 
-    const task = await taskStore.getTask(taskId);
+    const task = await taskStore.getTaskMetadata(taskId);
     return NextResponse.json({ success: true, status: task?.status || 'cancel_requested', message: `Cancellation requested for task ${taskId}` });
   } catch (error) {
     console.error(`Error deleting task ${taskId}:`, error);

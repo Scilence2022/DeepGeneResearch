@@ -71,7 +71,7 @@ function useWebSearch() {
     }
 
     if (mode === "proxy") {
-      options.apiKey = generateSignature(accessPassword, Date.now());
+      options.apiKey = await generateSignature(accessPassword, Date.now());
     }
     return createSearchProvider(options);
   }

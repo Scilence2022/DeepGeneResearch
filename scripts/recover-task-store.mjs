@@ -2,6 +2,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 const VALID_STATUSES = new Set(['pending', 'in_progress', 'completed', 'failed', 'cancel_requested', 'cancelled']);
 
@@ -64,7 +65,9 @@ function validateTasks(tasks) {
       throw new Error(`Task ${task.id} has an invalid progress value`);
     }
     if (!task.parameters || typeof task.parameters !== 'object') throw new Error(`Task ${task.id} has no parameters`);
-    if (typeof task.parameters.geneSymbol !== 'string' || typeof task.parameters.organism !== 'string') {
+    if (task.parameters.mode === 'general'
+      ? typeof task.parameters.query !== 'string'
+      : typeof task.parameters.geneSymbol !== 'string' || typeof task.parameters.organism !== 'string') {
       throw new Error(`Task ${task.id} is missing geneSymbol or organism`);
     }
     if (Number.isNaN(new Date(task.createdAt).getTime()) || Number.isNaN(new Date(task.updatedAt).getTime())) {
@@ -118,6 +121,17 @@ async function main() {
   const parsed = parseRecoverableLedger(contents);
   validateTasks(parsed.tasks);
   const tasks = options.cancelInterrupted ? cancelInterruptedTasks(parsed.tasks) : parsed.tasks;
+  for (const task of tasks) {
+    if (task.resultSha256 === undefined) continue;
+    if (!/^[a-f0-9]{64}$/.test(task.resultSha256) || task.status !== 'completed' || task.result !== undefined) {
+      throw new Error(`Task ${task.id} has an invalid artifact reference`);
+    }
+    const artifact = path.join(path.dirname(options.destination), 'research-results', `${task.resultSha256}.json`);
+    const bytes = await fs.readFile(artifact);
+    if (createHash('sha256').update(bytes).digest('hex') !== task.resultSha256) {
+      throw new Error(`Task ${task.id} has a corrupt result artifact`);
+    }
+  }
   const summary = tasks.reduce((counts, task) => {
     counts[task.status] = (counts[task.status] || 0) + 1;
     return counts;

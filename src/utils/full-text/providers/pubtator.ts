@@ -34,17 +34,15 @@ function is404(error: unknown): boolean {
  */
 export async function acquirePubtatorBioc(
   pmid: string,
-  options?: { ncbiApiKey?: string },
+  options?: { ncbiApiKey?: string; signal?: AbortSignal },
 ): Promise<AcquiredContent | null> {
   const normalized = String(pmid || '').trim();
   if (!/^\d+$/.test(normalized)) return null;
-  const sourceUrl = withApiKey(
-    `${PUBTATOR_BASE}/publications/export/biocjson?pmids=${encodeURIComponent(normalized)}&full=true`,
-    options?.ncbiApiKey,
-  );
+  const sourceUrl = `${PUBTATOR_BASE}/publications/export/biocjson?pmids=${encodeURIComponent(normalized)}&full=true`;
+  const requestUrl = withApiKey(sourceUrl, options?.ncbiApiKey);
   let payload: unknown;
   try {
-    payload = await pubtatorFetcher(Boolean(options?.ncbiApiKey)).fetchJson(sourceUrl);
+    payload = await pubtatorFetcher(Boolean(options?.ncbiApiKey)).fetchJson(requestUrl, { signal: options?.signal });
   } catch (error) {
     if (is404(error)) return null;
     throw error;
@@ -65,7 +63,7 @@ export async function acquirePubtatorBioc(
  */
 export async function searchPubtatorGeneAutocomplete(
   query: string,
-  options?: { ncbiApiKey?: string },
+  options?: { ncbiApiKey?: string; signal?: AbortSignal },
 ): Promise<Array<{ id: string; name: string }>> {
   const trimmed = String(query || '').trim();
   if (!trimmed) return [];
@@ -74,7 +72,7 @@ export async function searchPubtatorGeneAutocomplete(
     options?.ncbiApiKey,
   );
   try {
-    const payload = await pubtatorFetcher(Boolean(options?.ncbiApiKey)).fetchJson(url);
+    const payload = await pubtatorFetcher(Boolean(options?.ncbiApiKey)).fetchJson(url, { signal: options?.signal });
     const entries = Array.isArray(payload) ? payload : [];
     const results: Array<{ id: string; name: string }> = [];
     for (const entry of entries) {

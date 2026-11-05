@@ -31,14 +31,14 @@ export interface BioRxivWorkRef {
  * lists every posted version oldest-first, so the LAST entry is the current
  * version. Returns null when neither server indexes the DOI.
  */
-export async function resolveBioRxivWork(doi: string): Promise<BioRxivWorkRef | null> {
+export async function resolveBioRxivWork(doi: string, signal?: AbortSignal): Promise<BioRxivWorkRef | null> {
   const normalized = String(doi || '').trim();
   if (!normalized) return null;
   for (const server of ['biorxiv', 'medrxiv'] as const) {
     const url = `${BIORXIV_DETAILS_BASE}/${server}/${encodeURIComponent(normalized)}`;
     let payload: any;
     try {
-      payload = await biorxivFetcher().fetchJson(url);
+      payload = await biorxivFetcher().fetchJson(url, { signal });
     } catch (error) {
       if (is404(error)) continue;
       throw error;
@@ -62,14 +62,15 @@ export async function resolveBioRxivWork(doi: string): Promise<BioRxivWorkRef | 
  * no scraping is needed; the payload is validated via the %PDF- magic bytes
  * before parsing. Any resolution/download/parse failure yields null.
  */
-export async function acquireBioRxivPreprintPdf(doi: string): Promise<AcquiredContent | null> {
-  const work = await resolveBioRxivWork(doi);
+export async function acquireBioRxivPreprintPdf(doi: string, signal?: AbortSignal): Promise<AcquiredContent | null> {
+  const work = await resolveBioRxivWork(doi, signal);
   if (!work) return null;
   const sourceUrl = `https://www.${work.server}.org/content/${work.doi}v${work.version ?? '1'}.full.pdf`;
   try {
     const { body } = await fetchPublicBytes(sourceUrl, {
       maxBytes: MAX_PDF_BYTES,
       timeoutMs: PDF_DOWNLOAD_TIMEOUT_MS,
+      ...(signal ? { signal } : {}),
     });
     if (body.length < 5 || body.subarray(0, 5).toString('latin1') !== '%PDF-') return null;
     const document = await segmentPdfDocument({
@@ -78,9 +79,11 @@ export async function acquireBioRxivPreprintPdf(doi: string): Promise<AcquiredCo
       origin: 'pdf',
       identifiers: { doi: work.doi },
       sourceUrl,
+      ...(signal ? { signal } : {}),
     });
     return { provider: 'biorxiv', format: 'pdf', document };
   } catch {
+    signal?.throwIfAborted();
     return null;
   }
 }

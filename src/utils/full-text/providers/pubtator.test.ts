@@ -60,10 +60,11 @@ describe('acquirePubtatorBioc', () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(biocFixture)));
     vi.stubGlobal('fetch', fetchMock);
 
-    await acquirePubtatorBioc('12345678', { ncbiApiKey: 'secret-key' });
+    const result = await acquirePubtatorBioc('12345678', { ncbiApiKey: 'secret-key' });
 
     const url = String(fetchMock.mock.calls[0][0]);
     expect(url).toContain('api_key=secret-key');
+    expect(result?.document.sourceUrl).not.toContain('api_key');
   });
 
   it('returns null on 404 and on payloads without usable text', async () => {

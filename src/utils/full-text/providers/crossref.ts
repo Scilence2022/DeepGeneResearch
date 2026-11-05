@@ -19,7 +19,7 @@ function crossrefFetcher(): PoliteFetcher {
  */
 export async function fetchCrossrefWorkMetadata(
   doi: string,
-  options?: { mailto?: string },
+  options?: { mailto?: string; signal?: AbortSignal },
 ): Promise<WorkMetadata | null> {
   const normalized = String(doi || '').trim();
   if (!normalized) return null;
@@ -27,7 +27,7 @@ export async function fetchCrossrefWorkMetadata(
   const url = `${CROSSREF_BASE}/works/${encodeURIComponent(normalized)}${mailto ? `?mailto=${encodeURIComponent(mailto)}` : ''}`;
   let message: any;
   try {
-    message = (await crossrefFetcher().fetchJson<{ message?: any }>(url))?.message;
+    message = (await crossrefFetcher().fetchJson<{ message?: any }>(url, { signal: options?.signal }))?.message;
   } catch (error) {
     if (/404\b/.test(error instanceof Error ? error.message : String(error))) return null;
     throw error;

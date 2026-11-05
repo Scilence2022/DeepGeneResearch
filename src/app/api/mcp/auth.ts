@@ -7,8 +7,7 @@ const ALLOW_UNAUTHENTICATED_DEV = process.env.DGR_ALLOW_UNAUTHENTICATED_DEV === 
 
 function getBearerToken(request: NextRequest): string {
   const authorization = request.headers.get("authorization") || "";
-  const [scheme, token] = authorization.split(/\s+/, 2);
-  return scheme?.toLowerCase() === "bearer" ? token || "" : "";
+  return /^Bearer\s+([^\s]+)$/i.exec(authorization)?.[1] || "";
 }
 
 function secretsEqual(left: string, right: string): boolean {
@@ -42,22 +41,22 @@ function authConfigurationError(): NextResponse | null {
   return null;
 }
 
-export function getMcpBaseUrl(request?: NextRequest): string {
-  const configuredBaseUrl = (process.env.MCP_SERVER_BASE_URL || "").trim();
-  if (configuredBaseUrl) {
-    return configuredBaseUrl.replace(/\/+$/, "");
-  }
-
-  if (!request) {
-    return "";
-  }
-
-  const proto = request.headers.get("x-forwarded-proto") || request.nextUrl.protocol.replace(":", "");
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
-  return host ? `${proto}://${host}` : "";
+function isAllowedOrigin(origin: string): boolean {
+  const configured = [process.env.MCP_SERVER_BASE_URL, ...(process.env.DGR_ALLOWED_ORIGINS || '').split(',')];
+  return configured.some(value => {
+    try {
+      return Boolean(value) && new URL(value!.trim()).origin === origin;
+    } catch {
+      return false;
+    }
+  });
 }
 
 export function requireMcpAuth(request: NextRequest): NextResponse | null {
+  const origin = request.headers.get('origin');
+  if (origin !== null && !isAllowedOrigin(origin)) {
+    return NextResponse.json({ error: 403, error_description: 'Origin is not allowed' }, { status: 403 });
+  }
   const configurationError = authConfigurationError();
   if (configurationError) return configurationError;
   if (!ACCESS_PASSWORD) return null;
@@ -85,13 +84,13 @@ export function requireMcpAuth(request: NextRequest): NextResponse | null {
 }
 
 /** Browser crawler requests use the app's short-lived signed bearer token. */
-export function requireCrawlerAuth(request: NextRequest): NextResponse | null {
+export async function requireCrawlerAuth(request: NextRequest): Promise<NextResponse | null> {
   const configurationError = authConfigurationError();
   if (configurationError) return configurationError;
   if (!ACCESS_PASSWORD) return null;
 
   const token = getBearerToken(request);
-  if (secretsEqual(token, ACCESS_PASSWORD) || verifySignature(token, ACCESS_PASSWORD, Date.now())) {
+  if (secretsEqual(token, ACCESS_PASSWORD) || await verifySignature(token, ACCESS_PASSWORD, Date.now())) {
     return null;
   }
   return NextResponse.json(

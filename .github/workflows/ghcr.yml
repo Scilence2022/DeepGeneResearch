@@ -14,7 +14,10 @@ env:
 
 # There is a single job in this workflow. It's configured to run on the latest available version of Ubuntu.
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
   build-and-push-image:
+    needs: verify
     runs-on: ubuntu-latest
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
     permissions:

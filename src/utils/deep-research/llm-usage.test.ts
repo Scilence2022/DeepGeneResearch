@@ -37,6 +37,8 @@ describe('LLM token usage accounting', () => {
     expect(usage.totalTokens).toBe(1150);
     expect(usage.phases['gene-llm-learnings']).toEqual({
       calls: 2,
+      callsWithoutUsage: 0,
+      callsWithReportedCache: 0,
       promptTokens: 700,
       cachedPromptTokens: 0,
       completionTokens: 300,
@@ -45,7 +47,7 @@ describe('LLM token usage accounting', () => {
     expect(usage.phases['serp-query'].calls).toBe(1);
   });
 
-  it('ignores missing usage payloads and tolerates partial fields', () => {
+  it('counts missing usage separately and tolerates partial fields', () => {
     const research = createResearch();
     research.record('final-report', undefined);
     research.record('final-report', null);
@@ -53,6 +55,7 @@ describe('LLM token usage accounting', () => {
 
     const usage = research.getLlmUsage();
     expect(usage.calls).toBe(1);
+    expect(usage.callsWithoutUsage).toBe(2);
     expect(usage.totalTokens).toBe(42);
     expect(usage.promptTokens).toBe(0);
   });

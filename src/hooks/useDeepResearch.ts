@@ -614,7 +614,10 @@ function useDeepResearch() {
       
       // Generate report URL
       if (id) {
-        const reportUrl = `${window.location.origin}/report/${id}`;
+        const reportPath = process.env.NEXT_PUBLIC_BUILD_MODE === "export"
+          ? `/report/?id=${encodeURIComponent(id)}`
+          : `/report/${encodeURIComponent(id)}`;
+        const reportUrl = new URL(reportPath, window.location.origin).href;
         setReportUrl(reportUrl);
       }
       

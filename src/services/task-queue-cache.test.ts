@@ -62,7 +62,7 @@ describe.sequential('task queue research cache controls', () => {
   afterEach(async () => {
     delete process.env.MCP_TASK_STORAGE_FILE;
     delete process.env.DGR_WORKER_COUNT;
-    vi.doUnmock('@/app/api/mcp/server');
+    vi.doUnmock('@/services/research-engine');
     vi.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
   });
@@ -81,7 +81,7 @@ describe.sequential('task queue research cache controls', () => {
     const deleteCachedResult = vi.spyOn(cacheService, 'deleteCachedResult');
 
     const conductGeneResearch = vi.fn().mockResolvedValue(result('fresh'));
-    vi.doMock('@/app/api/mcp/server', () => ({
+    vi.doMock('@/services/research-engine', () => ({
       initDeepResearchServer: () => ({
         onMessage: () => undefined,
         conductGeneResearch,

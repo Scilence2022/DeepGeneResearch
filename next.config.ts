@@ -43,39 +43,22 @@ const SEARXNG_API_BASE_URL =
 export default async function Config(phase: string) {
   const nextConfig: NextConfig = {
     /* config options here */
+    poweredByHeader: false,
+    images: { unoptimized: true },
     experimental: {
       reactCompiler: true,
     },
     env: {
       NEXT_PUBLIC_VERSION: pkg.version,
     },
-    webpack: (config) => {
-      const devtool = config.devtool;
-      // Fix: Edge Runtime doesn't allow eval(), but eval-source-map devtool generates eval calls
-      if (typeof devtool === "string" && !devtool.includes('inline') && devtool !== 'eval') {
-        // Keep existing devtool setting if safe, otherwise use source-map
-      }
-      return config;
-    },
     transpilePackages: ["pdfjs-dist", "mermaid"],
   };
 
   if (BUILD_MODE === "export") {
     nextConfig.output = "export";
-    // Only used for static deployment, the default deployment directory is the root directory
-    nextConfig.basePath = "";
-    // Statically exporting a Next.js application via `next export` disables API routes and middleware.
-    nextConfig.webpack = (config) => {
-      config.module.rules.push({
-        test: /src\/app\/api/,
-        loader: "ignore-loader",
-      });
-      config.module.rules.push({
-        test: /src\/middleware/,
-        loader: "ignore-loader",
-      });
-      return config;
-    };
+    nextConfig.trailingSlash = true;
+    // The workspace CI lints the full source tree before building the staged UI.
+    nextConfig.eslint = { ignoreDuringBuilds: true };
   } else if (BUILD_MODE === "standalone") {
     nextConfig.output = "standalone";
   } else {

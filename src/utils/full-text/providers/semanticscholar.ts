@@ -35,6 +35,7 @@ export interface SemanticScholarEnrichment {
  */
 export async function fetchSemanticScholarEnrichment(
   doi: string,
+  signal?: AbortSignal,
 ): Promise<SemanticScholarEnrichment | null> {
   const normalized = String(doi || '').trim();
   if (!normalized) return null;
@@ -46,7 +47,7 @@ export async function fetchSemanticScholarEnrichment(
     openAccessPdf?: { url?: string };
   };
   try {
-    payload = await semanticScholarFetcher().fetchJson(url);
+    payload = await semanticScholarFetcher().fetchJson(url, { signal });
   } catch (error) {
     if (is404(error)) return null;
     throw error;

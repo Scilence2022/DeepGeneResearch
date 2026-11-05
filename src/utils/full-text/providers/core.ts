@@ -43,7 +43,7 @@ function collectCandidateUrls(payload: any): string[] {
  */
 export async function discoverCoreFullText(
   doi: string,
-  options?: { apiKey?: string },
+  options?: { apiKey?: string; signal?: AbortSignal },
 ): Promise<WorkMetadata | null> {
   const normalized = String(doi || '').trim();
   if (!normalized) return null;
@@ -51,6 +51,7 @@ export async function discoverCoreFullText(
   let payload: any;
   try {
     payload = await coreFetcher(Boolean(apiKey)).fetchJson(CORE_DISCOVER_URL, {
+      signal: options?.signal,
       init: {
         method: 'POST',
         headers: {

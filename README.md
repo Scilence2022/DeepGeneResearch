@@ -172,8 +172,8 @@ Visit [http://localhost:3000](http://localhost:3000) to access the application.
 
 ## 📋 **Prerequisites**
 
-- **Node.js**: Version 18.18.0 or later (Node 20 or 22 LTS recommended)
-- **Package Manager**: pnpm (recommended), npm, or yarn
+- **Node.js**: 24 LTS. Use the patch version in `.node-version` for reproducible builds.
+- **Package manager**: pnpm 10.15.1, pinned in `package.json`
 - **API Keys**: At least one AI provider API key
 - **Browser**: Modern browser with JavaScript enabled
 
@@ -207,7 +207,7 @@ NCBI_API_KEY=your_ncbi_eutilities_api_key
 # CORE_API_KEY=your_core_key               # green-OA repository fallback (free for academics)
 # FULL_TEXT_PROVIDERS=europe_pmc,pubtator  # explicit whitelist override (replaces the default set)
 
-# Required for MCP and crawler routes (at least 16 characters)
+# Required for server-side research, MCP, crawler and provider proxies (at least 16 characters)
 ACCESS_PASSWORD=replace_with_a_long_random_shared_secret
 
 # Development-only global auth bypass; never use on a shared host
@@ -221,6 +221,7 @@ ACCESS_PASSWORD=replace_with_a_long_random_shared_secret
 # DGR_MAX_CONCURRENT_RESEARCH=2
 # DGR_WORKER_COUNT=1
 # MCP_SERVER_BASE_URL=https://dgr.example.org
+# DGR_ALLOWED_ORIGINS=https://dgr.example.org
 
 # Optional: Custom Model Lists
 NEXT_PUBLIC_MODEL_LIST=gemini-2.0-flash-thinking-exp,gemini-2.0-flash-exp,gpt-4o
@@ -400,12 +401,12 @@ flowchart TB
 - [Deployment Guide](./docs/How-to-deploy-to-Cloudflare-Pages.md)
 
 ### **Self-Hosted**
-- Docker support
-- Custom domains
-- Full control
-- Enterprise features
+Use a single long-lived Node process with a persistent data directory for queued research, PDF uploads, and artifact downloads. The Docker image runs as the non-root `node` user. Compose mounts `./data` into `/app/data` and stores the ledger, result artifacts, and PDFs there. Make the host directory writable by the configured container UID and GID before starting. Set `DGR_CONTAINER_UID` and `DGR_CONTAINER_GID` in the Compose environment when the host owner differs from the default 1000:1000.
 
 ### **Static Export**
+
+The exported UI uses client-side provider configuration and local browser history. Node API routes, MCP and server-side storage require a separate Node deployment.
+
 ```bash
 pnpm build:export
 # Deploy the 'out' directory to any static hosting
@@ -682,8 +683,10 @@ Each database is assigned a quality score based on:
 - **Concurrent Users**: Durable MCP research currently requires a single long-lived Node process. Known ephemeral runtimes fail closed; `DGR_ALLOW_EPHEMERAL_TASK_STORAGE=true` is a non-production development override only and cannot enable ephemeral storage in production.
 - **Worker Topology**: Independently launched Node processes must not share the JSON task file. `DGR_WORKER_COUNT=1` (or `WEB_CONCURRENCY=1`) is enforced when declared, but the value cannot detect a separately launched second process. Horizontal deployment requires a database queue with cross-process leases.
 - **Caching**: In-process caching reduces repeated provider calls while the process is alive
-- **Access Control**: MCP routes require `Authorization: Bearer <ACCESS_PASSWORD>` with a shared secret of at least 16 characters; the browser crawler uses a short-lived signature derived from the same secret. Routes fail closed when the secret is absent or weak. `DGR_ALLOW_UNAUTHENTICATED_DEV=true` is an explicit global bypass for isolated non-production environments—not a loopback check.
+- **Access control**. MCP, REST research, and SSE require `Authorization: Bearer <ACCESS_PASSWORD>` with a shared secret of at least 16 characters. Browser provider proxies use short-lived HMAC signatures derived from the same secret. Set `MCP_SERVER_BASE_URL` or comma-separated `DGR_ALLOWED_ORIGINS` for browser requests that send `Origin`. `DGR_ALLOW_UNAUTHENTICATED_DEV=true` enables the shared bypass in isolated non-production environments.
 - **Error Recovery**: Interrupted `pending` and `in_progress` tasks are re-queued after restart. The durable retry budget is four total execution attempts, including attempts before a restart. Cancellation and terminal records are retained for audit.
+
+The first successful ledger mutation upgrades inline completed results to SHA-256-addressed files in the sibling `research-results/` directory. Keep that directory and `tasks.json` together in backups. Back up the legacy inline ledger before upgrading if you need to roll back to the prior format. A configured worker resumes interrupted jobs on startup. Existing download identifiers continue to resolve from completed records.
 
 If the task ledger cannot be parsed or violates its invariants, DGR renames it to a `.corrupt.*` quarantine and locks task storage. Restore a verified ledger or reconcile the quarantined task and idempotency records before reopening the queue. Starting from an empty file without reconciliation can duplicate research work.
 
@@ -862,8 +865,9 @@ curl -X POST https://your-domain.com/api/mcp \
 
 ### **Current Production Boundaries**
 
-- `ACCESS_PASSWORD` is one service-wide bearer secret, not a user identity or scope system. Multi-tenant operation requires an identity-aware reverse proxy and task ownership checks.
-- The JSON task ledger has atomic single-process writes but no cross-process or distributed lease. Do not place it on shared storage for multiple workers.
+- `ACCESS_PASSWORD` is a service-wide bearer secret. Multi-tenant operation requires a separate identity and task ownership layer.
+- The task store coordinates writes within one process. Deploy a shared database and a lease-aware worker before enabling multiple processes.
+- The lockfile applies a local Zod 3 backport for early rejection of oversized arrays and sets with upper bounds. HTTP JSON input also has byte and structure limits. Registry audits still flag the upstream Zod 3 version under [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5). The MCP and AI SDK integration still depends on Zod 3 compatibility.
 - Static provider and MCP secrets need an external secret manager and rotation process in production.
 - An evidence-linked annotation proposal is a research artifact, not an automatically trusted biological annotation. CodeXomics curator review remains mandatory.
 

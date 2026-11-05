@@ -1,4 +1,4 @@
-# (Optional) Server API Access Password for enhanced security
+# Server API access password, minimum 16 characters when server features are used
 ACCESS_PASSWORD=
 
 # (Deprecated) Server-side Gemini API Proxy URL. Default, `https://generativelanguage.googleapis.com`
@@ -107,11 +107,17 @@ MCP_THINKING_MODEL=
 # (Optional) MCP Server task model id, used for secondary tasks, high output models are recommended.
 MCP_TASK_MODEL=
 # (Optional) Base URL for MCP Server download links.
-# Auto-detected from request headers if not set. Example: https://your-domain.com
+# Defaults to relative links when unset. Also allows this origin for authenticated browser API calls.
 MCP_SERVER_BASE_URL=http://localhost:3000
+# (Optional) Additional allowed browser origins, comma-separated.
+DGR_ALLOWED_ORIGINS=
 # (Optional) File path for the built-in file-backed MCP task store.
-# Use durable external storage for serverless or horizontally scaled deployments.
+# Use a persistent disk and a single Node process. Back up the sibling research-results directory with this file.
 MCP_TASK_STORAGE_FILE=
+MCP_RESEARCH_DOCUMENT_STORAGE_DIR=
+DGR_WORKER_COUNT=1
+DGR_MAX_CONCURRENT_RESEARCH=2
+DGR_ALLOW_UNAUTHENTICATED_DEV=false
 
 # (Optional) Disable server-side AI provider usage permissions
 # Possible values ​​include: google, openai, anthropic, deepseek, xai, mistral, azure, openrouter, openaicompatible, pollinations, ollama, siliconflow
@@ -124,11 +130,6 @@ NEXT_PUBLIC_MODEL_LIST=
 
 # (Optional) Injected script code can be used for statistics or error tracking.
 HEAD_SCRIPTS=
-
-# (Optional) MCP Server timeout configuration (in seconds)
-MCP_SERVER_TIMEOUT=600
-# (Optional) SSE API timeout configuration (in seconds)
-SSE_API_TIMEOUT=600
 
 # ---- Full-text evidence layer providers ----
 # Full configuration guide: docs/full-text-providers.md

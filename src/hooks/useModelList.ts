@@ -117,7 +117,7 @@ function useModelList() {
 
   async function refresh(provider: string): Promise<string[]> {
     const { accessPassword } = useSettingStore.getState();
-    const accessKey = generateSignature(accessPassword, Date.now());
+    const accessKey = await generateSignature(accessPassword, Date.now());
 
     if (provider === "google") {
       const { apiKey = "", apiProxy } = useSettingStore.getState();

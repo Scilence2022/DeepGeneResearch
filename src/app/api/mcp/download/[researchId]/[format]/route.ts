@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-    getResearchReport,
-    getResearchDetails
-} from '@/utils/mcp-research-store';
+import { taskStore } from '@/services/task-store';
 import { requireMcpAuth } from '../../../auth';
 
 export const runtime = 'nodejs';
@@ -32,52 +29,25 @@ export async function GET(
         }
 
         // Validate researchId (basic validation)
-        if (!researchId || researchId.length < 8) {
+        if (!/^[-_a-zA-Z0-9]{8,64}$/.test(researchId)) {
             return NextResponse.json(
                 { error: 'Invalid research ID' },
                 { status: 400 }
             );
         }
 
-        let content: string;
-        let contentType: string;
-        let filename: string;
-
-        switch (lowerFormat) {
-            case 'report': {
-                const report = getResearchReport(researchId);
-                if (!report) {
-                    return NextResponse.json(
-                        { error: 'Research report not found or expired' },
-                        { status: 404 }
-                    );
-                }
-                content = report;
-                contentType = 'text/markdown; charset=utf-8';
-                filename = `research-report-${researchId}.md`;
-                break;
-            }
-
-            case 'details': {
-                const details = getResearchDetails(researchId);
-                if (!details) {
-                    return NextResponse.json(
-                        { error: 'Research details not found or expired' },
-                        { status: 404 }
-                    );
-                }
-                content = JSON.stringify(details, null, 2);
-                contentType = 'application/json; charset=utf-8';
-                filename = `research-details-${researchId}.json`;
-                break;
-            }
-
-            default:
-                return NextResponse.json(
-                    { error: 'Unsupported format' },
-                    { status: 400 }
-                );
+        const task = await taskStore.getTaskByArtifactId(researchId);
+        if (task?.status !== 'completed' || task.parameters.mode === 'general' || !task.result) {
+            return NextResponse.json({ error: 'Research artifact not found' }, { status: 404 });
         }
+
+        const report = task.result.finalReport || task.result.report?.content;
+        if (lowerFormat === 'report' && typeof report !== 'string') {
+            return NextResponse.json({ error: 'Research report not found' }, { status: 404 });
+        }
+        const content = lowerFormat === 'report' ? report : JSON.stringify(task.result, null, 2);
+        const contentType = lowerFormat === 'report' ? 'text/markdown; charset=utf-8' : 'application/json; charset=utf-8';
+        const filename = lowerFormat === 'report' ? `research-report-${researchId}.md` : `research-details-${researchId}.json`;
 
         // Return the file as response with download headers
         return new NextResponse(content, {
@@ -85,7 +55,8 @@ export async function GET(
                 'Content-Type': contentType,
                 'Content-Disposition': `attachment; filename="${filename}"`,
                 'Content-Length': Buffer.byteLength(content, 'utf-8').toString(),
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Cache-Control': 'private, no-store',
+                'X-Content-Type-Options': 'nosniff',
                 'Pragma': 'no-cache',
                 'Expires': '0'
             }
