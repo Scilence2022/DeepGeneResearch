@@ -39,7 +39,8 @@ describe.sequential('durable task queue lifecycle', () => {
         conductGeneResearch,
       }),
     }));
-    vi.doMock('@/services/cache', () => ({
+    vi.doMock('@/services/cache', async importOriginal => ({
+      ...await importOriginal<typeof import('@/services/cache')>(),
       cacheService: {
         getCachedResult: vi.fn().mockResolvedValue(null),
         setCachedResult: vi.fn().mockResolvedValue(undefined),

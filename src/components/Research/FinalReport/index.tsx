@@ -37,6 +37,7 @@ import { Separator } from "@/components/ui/separator";
 import useAccurateTimer from "@/hooks/useAccurateTimer";
 import useDeepResearch from "@/hooks/useDeepResearch";
 import useKnowledge from "@/hooks/useKnowledge";
+import { useSettingStore } from "@/store/setting";
 import { useTaskStore } from "@/store/task";
 import { useKnowledgeStore } from "@/store/knowledge";
 import { getSystemPrompt } from "@/utils/deep-research/prompts";
@@ -59,6 +60,7 @@ const formSchema = z.object({
 function FinalReport() {
   const { t } = useTranslation();
   const taskStore = useTaskStore();
+  const allowImages = useSettingStore(state => state.citationImage === "enable");
   const { status, writeFinalReport } = useDeepResearch();
   const { generateId } = useKnowledge();
   const {
@@ -242,6 +244,7 @@ function FinalReport() {
             <MagicDown
               className="min-h-72"
               value={taskStore.finalReport}
+              allowImages={allowImages}
               onChange={(value) => taskStore.updateFinalReport(value)}
               tools={
                 <>

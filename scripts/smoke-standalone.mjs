@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHmac, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
@@ -12,10 +12,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 const host = '127.0.0.1';
 const password = 'local-standalone-smoke-only';
 const model = 'audit-local';
+const alpha = { Authorization: 'Bearer test-alpha-workspace-token-xxxxxxxxx' };
+const beta = { Authorization: 'Bearer test-beta-workspace-token-xxxxxxxxxx' };
 const report = '# Offline report\n\nSynthetic smoke-test content.';
 const directory = await mkdtemp(path.join(os.tmpdir(), 'dgr-standalone-smoke-'));
 const ledger = path.join(directory, 'tasks.json');
 const previousRun = randomUUID();
+const workspaceRun = randomUUID();
 let upstreamCalls = 0;
 let rejectUpstream = false;
 let app;
@@ -79,7 +82,7 @@ async function call(route, { method = 'GET', authenticated = true, body, headers
   });
 }
 
-async function startApp() {
+async function startApp(backend = 'json') {
   const listener = net.createServer();
   listener.listen(0, host);
   await once(listener, 'listening');
@@ -101,8 +104,11 @@ async function startApp() {
       OPENAI_API_BASE_URL: `http://${host}:${upstream.address().port}`,
       OPENAI_API_KEY: 'offline',
       ACCESS_PASSWORD: password,
+      DGR_WORKSPACE_TOKENS: JSON.stringify({ alpha: alpha.Authorization.slice(7), beta: beta.Authorization.slice(7) }),
+      MCP_RESEARCH_DOCUMENT_STORAGE_DIR: path.join(directory, 'documents'),
       DGR_ALLOWED_ORIGINS: base,
       DGR_WORKER_COUNT: '1',
+      DGR_TASK_BACKEND: backend,
     },
   });
   app.stdout.on('data', chunk => { output += chunk; });
@@ -135,10 +141,19 @@ try {
     updatedAt: now,
     eventSeq: 1,
     result: { finalReport: report, download: { researchId: 'legacy-offline-id' } },
+  }, {
+    id: workspaceRun, workspaceId: 'alpha', status: 'completed', progress: 100,
+    parameters: { geneSymbol: 'mock', organism: 'mock' }, createdAt: now, updatedAt: now, eventSeq: 5,
+    result: { finalReport: report, annotationNote: { status: 'test' } },
   }]));
   upstream.listen(0, host);
   await once(upstream, 'listening');
   await startApp();
+
+  const page = await call('/', { authenticated: false });
+  assert.match(page.headers.get('Content-Security-Policy'), /frame-src 'none'/);
+  assert.match(page.headers.get('Content-Security-Policy'), /script-src-attr 'none'/);
+  await page.body.cancel();
 
   const query = { query: 'Explain queue fairness in an offline system.' };
   const anonymous = await call('/api/research/start', { method: 'POST', authenticated: false, body: query });
@@ -167,6 +182,47 @@ try {
   const mcp = await call('/api/mcp', { method: 'POST', body: rpc, headers: { Accept: accept, Origin: base } });
   assert.equal(mcp.status, 200);
   assert.equal((await mcp.json()).result.protocolVersion, '2025-03-26');
+
+  const beforeDenied = upstreamCalls;
+  for (const headers of [beta, {}]) {
+    for (const route of [`/api/mcp/tasks/${workspaceRun}`, `/api/mcp/tasks/${workspaceRun}/progress`,
+      `/api/mcp/download/${workspaceRun}/report`]) {
+      assert.equal((await call(route, { headers })).status, 404);
+    }
+    assert.equal((await call(`/api/mcp/tasks/${workspaceRun}`, { method: 'DELETE', headers })).status, 404);
+  }
+  assert.equal(upstreamCalls, beforeDenied);
+  const emptyList = await call('/api/mcp/tasks', { headers: beta });
+  assert.equal(emptyList.headers.get('X-Total-Count'), '0');
+  assert.deepEqual(await emptyList.json(), []);
+  const statusRpc = { jsonrpc: '2.0', id: 2, method: 'tools/call',
+    params: { name: 'get-task-status', arguments: { taskId: workspaceRun, resultMode: 'annotation' } } };
+  const acceptedRpc = await call('/api/mcp', { method: 'POST', body: statusRpc, headers: { ...alpha, Accept: accept } });
+  const projection = JSON.parse((await acceptedRpc.json()).result.content[0].text);
+  assert.equal(projection.result.annotationNote.status, 'test');
+  assert.equal(projection.result.finalReport, undefined);
+  const deniedRpc = await call('/api/mcp', { method: 'POST', body: statusRpc, headers: { ...beta, Accept: accept } });
+  assert.equal((await deniedRpc.json()).result.isError, true);
+  for (const lastEventId of ['3', '5']) {
+    const reconnect = await call(`/api/mcp/tasks/${workspaceRun}/progress`, {
+      headers: { ...alpha, 'Last-Event-ID': lastEventId },
+    });
+    const snapshot = await reconnect.text();
+    assert.match(snapshot, /^id: 5\ndata:/);
+    assert.equal(JSON.parse(snapshot.split('\n')[1].slice(6)).status, 'completed');
+  }
+  const legacySse = await call('/api/mcp/sse', { headers: alpha });
+  assert.equal(legacySse.status, 200);
+  const reader = legacySse.body.getReader();
+  try {
+    const endpoint = new TextDecoder().decode((await reader.read()).value).match(/^data: (.+)$/m)?.[1];
+    assert.ok(endpoint);
+    assert.equal((await call(endpoint, { method: 'POST', body: rpc, headers: beta })).status, 404);
+    assert.equal((await call(endpoint, { method: 'POST', body: rpc, headers: alpha })).status, 202);
+    assert.match(new TextDecoder().decode((await reader.read()).value), /2025-03-26/);
+  } finally {
+    await reader.cancel();
+  }
 
   const submitted = await call('/api/research/start', { method: 'POST', body: query });
   assert.equal(submitted.status, 200);
@@ -215,6 +271,22 @@ try {
   const restored = await (await call(`/api/research/result/${taskId}`)).json();
   assert.equal(restored.status, 'completed');
   assert.match(restored.result.finalReport, /Offline report/);
+  assert.equal(await (await call('/api/mcp/download/legacy-offline-id/report')).text(), report);
+  await stopApp();
+  await startApp('sqlite');
+  assert.equal(await (await call('/api/mcp/download/legacy-offline-id/report')).text(), report);
+  assert.match(await (await call(`/api/mcp/download/${workspaceRun}/report`, { headers: alpha })).text(), /Offline report/);
+  const lockProbe = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import { DatabaseSync } from 'node:sqlite';
+    const lock = new DatabaseSync(process.argv[1]);
+    try { lock.exec('BEGIN IMMEDIATE'); process.exitCode = 1; }
+    catch (error) { if (!/database is locked/i.test(error.message)) process.exitCode = 2; }
+    finally { lock.close(); }
+  `, ledger + '.lock.sqlite']);
+  assert.equal(lockProbe.status, 0);
+  await stopApp();
+  await startApp('sqlite');
+  assert.equal((await (await call(`/api/research/result/${taskId}`)).json()).status, 'completed');
   assert.equal(await (await call('/api/mcp/download/legacy-offline-id/report')).text(), report);
   console.log('Standalone smoke passed: authenticated queue, signed proxy, MCP handshake, SSE errors, worker and artifact recovery.');
 } catch (error) {

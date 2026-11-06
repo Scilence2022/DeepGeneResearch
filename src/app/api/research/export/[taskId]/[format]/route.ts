@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireMcpAuth } from '../../../../mcp/auth';
+import { authenticateResearch } from '../../../../mcp/auth';
 import { privateResponse, readGeneralTask } from '../../../shared';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string; format: string }> }) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
 
   try {
     const { taskId, format } = await params;
     if (format.toLowerCase() !== 'markdown') {
       return NextResponse.json({ error: 'Unsupported export format', supportedFormats: ['markdown'] }, { status: 400 });
     }
-    const task = await readGeneralTask(taskId, true);
+    const task = await readGeneralTask(taskId, principal.workspaceId, true);
     if (task instanceof NextResponse) return task;
     if (task.status !== 'completed' || typeof task.result?.finalReport !== 'string') {
       return NextResponse.json({ error: 'Research report unavailable', status: task.status }, { status: 409 });

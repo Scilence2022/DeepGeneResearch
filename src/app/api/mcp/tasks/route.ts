@@ -1,13 +1,14 @@
+import { admitResearchRequest } from '@/app/api/mcp/admission';
 import { NextRequest, NextResponse } from 'next/server';
 import { IdempotencyConflictError, TaskCapacityError, taskStore } from '@/services/task-store';
 import { TaskValidationError, taskQueue } from '@/services/task-queue';
 import { readBoundedJson, RequestBodyError } from '@/utils/request-json';
-import { requireMcpAuth } from '../auth';
+import { authenticateResearch } from '../auth';
 import { geneResearchRequest } from '../task-parameters';
 
 export async function GET(request: NextRequest) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
 
   const params = request.nextUrl.searchParams;
   const offset = Number(params.get('offset') ?? '0');
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   try {
     await taskQueue.start();
-    const { tasks, total } = await taskStore.listTasks(offset, limit, params.get('includeResult') === 'true');
+    const { tasks, total } = await taskStore.listTasks(offset, limit, params.get('includeResult') === 'true', principal.workspaceId);
     return NextResponse.json(tasks, { headers: { 'Cache-Control': 'private, no-store', 'X-Total-Count': String(total) } });
   } catch {
     return NextResponse.json({ error: 'Research task store unavailable' }, { status: 503 });
@@ -26,15 +27,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
+  const limited = admitResearchRequest(principal.workspaceId);
+  if (limited) return limited;
 
   try {
     const parsed = geneResearchRequest.safeParse(await readBoundedJson(request, 1024 * 1024));
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid gene research options', issues: parsed.error.issues }, { status: 400 });
     }
-    const task = await taskQueue.addTask(parsed.data);
+    const task = await taskQueue.addTask(parsed.data, principal.workspaceId);
     return NextResponse.json(task, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     if (error instanceof RequestBodyError || error instanceof TaskValidationError || error instanceof IdempotencyConflictError) {

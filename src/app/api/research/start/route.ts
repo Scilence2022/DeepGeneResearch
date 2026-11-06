@@ -1,5 +1,6 @@
+import { admitResearchRequest } from '@/app/api/mcp/admission';
 import { NextRequest, NextResponse } from 'next/server';
-import { requireMcpAuth } from '../../mcp/auth';
+import { authenticateResearch } from '../../mcp/auth';
 import { TaskValidationError, taskQueue } from '@/services/task-queue';
 import { IdempotencyConflictError, TaskCapacityError } from '@/services/task-store';
 import { readBoundedJson, RequestBodyError } from '@/utils/request-json';
@@ -8,8 +9,10 @@ import { legacyStatus, privateResponse, researchOptions } from '../shared';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
+  const limited = admitResearchRequest(principal.workspaceId);
+  if (limited) return limited;
 
   try {
     const parsed = researchOptions.safeParse(await readBoundedJson(request, 32 * 1024));
@@ -20,7 +23,7 @@ export async function POST(request: NextRequest) {
       mode: 'general',
       ...parsed.data,
       idempotencyKey: request.headers.get('idempotency-key') || undefined,
-    });
+    }, principal.workspaceId);
     return NextResponse.json({
       taskId: task.id,
       status: legacyStatus(task.status),

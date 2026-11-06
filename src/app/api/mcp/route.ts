@@ -1,17 +1,20 @@
+import { admitResearchRequest } from '@/app/api/mcp/admission';
 import { NextResponse, type NextRequest } from "next/server";
 import { StreamableHTTPServerTransport } from "@/libs/mcp-server/streamableHttp";
 import { initMcpServer } from "./server";
-import { requireMcpAuth } from "./auth";
+import { authenticateResearch } from "./auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 600; // 10 分钟超时
 
 export async function POST(req: NextRequest) {
-  const unauthorized = requireMcpAuth(req);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(req);
+  if (principal instanceof NextResponse) return principal;
+  const limited = admitResearchRequest(principal.workspaceId);
+  if (limited) return limited;
 
-  const server = initMcpServer();
+  const server = initMcpServer(principal.workspaceId);
   try {
     const transport: StreamableHTTPServerTransport =
       new StreamableHTTPServerTransport({

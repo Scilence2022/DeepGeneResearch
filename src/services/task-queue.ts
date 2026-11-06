@@ -1,9 +1,10 @@
 import { EventEmitter } from 'events';
-import { setTimeout as delay } from 'node:timers/promises';
+import { estimateResearchCost, recordResearchEvent } from './research-telemetry';
+import { ResearchBudgetExceededError, researchBudget, runWithResearchBudget } from './research-run-budget';
 import { GeneResearchTask, GeneResearchParameters, ResearchParameters } from '@/models/task';
 import { taskStore } from './task-store';
 import { initDeepResearchServer } from '@/services/research-engine';
-import { cacheService, isReusableResearchResult } from './cache';
+import { cacheService, generateCacheKey, isReusableResearchResult } from './cache';
 import { createFetchSignal } from '@/utils/fetch-signal';
 import { buildCodeXomicsAnnotationProposal } from '@/utils/gene-research/codexomics-annotation';
 import { enforceTaskMediaPolicy } from './task-result-projection';
@@ -72,20 +73,21 @@ export class TaskQueue extends EventEmitter {
   private queue: GeneResearchTask[] = [];
   private maxConcurrent = this.normalizeConcurrency(Number(process.env.DGR_MAX_CONCURRENT_RESEARCH || 2));
   private processingTasks = new Set<string>();
+  private processingSemanticKeys = new Set<string>();
   private cancelledTasks = new Set<string>();
+  private cancellationStarted = new Map<string, number>();
   private abortControllers = new Map<string, AbortController>();
   private recoveryPromise: Promise<void> | null = null;
-  private readonly maxRetries = 3;
-
-  private get maxAttempts() {
-    return this.maxRetries + 1;
-  }
+  private readonly maxAttempts = 4;
 
   private normalizeConcurrency(value: number) {
     return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 2;
   }
 
-  private validateParameters(parameters: ResearchParameters) {
+  private validateParameters(parameters: ResearchParameters, workspaceId?: string) {
+    if (workspaceId && parameters.mode !== 'general' && parameters.target && parameters.target.workspaceId !== workspaceId) {
+      throw new TaskValidationError('Annotation target does not belong to the authenticated workspace');
+    }
     const boundedString = (value: unknown, field: string, maxLength: number, required = false) => {
       if (value === undefined || value === null || value === '') {
         if (required) throw new TaskValidationError(`${field} is required`);
@@ -212,7 +214,7 @@ export class TaskQueue extends EventEmitter {
         .then(async tasks => {
           for (const task of tasks) {
             try {
-              this.validateParameters(task.parameters);
+              this.validateParameters(task.parameters, task.workspaceId);
               if ((task.attempts ?? 0) >= this.maxAttempts) {
                 await taskStore.updateTaskError(
                   task.id,
@@ -246,10 +248,10 @@ export class TaskQueue extends EventEmitter {
   }
 
   // 添加任务到队列
-  async addTask(parameters: ResearchParameters): Promise<GeneResearchTask> {
-    this.validateParameters(parameters);
+  async addTask(parameters: ResearchParameters, workspaceId?: string): Promise<GeneResearchTask> {
+    this.validateParameters(parameters, workspaceId);
     await this.start();
-    const { task, created } = await taskStore.createOrGetTask(parameters, 100);
+    const { task, created } = await taskStore.createOrGetTask(parameters, 100, workspaceId);
     if (!created) {
       void this.processQueue();
       return task;
@@ -262,20 +264,34 @@ export class TaskQueue extends EventEmitter {
     return task;
   }
 
+  private semanticKey(task: GeneResearchTask) {
+    if (task.parameters.mode === 'general' || !task.parameters.target) return undefined;
+    return JSON.stringify([task.workspaceId, generateCacheKey(task.parameters)]);
+  }
+
   // 处理队列
   private async processQueue() {
     await this.ensureRecovered();
     while (this.queue.length > 0 && this.processingTasks.size < this.maxConcurrent) {
-      const task = this.queue.shift()!;
+      const index = this.queue.findIndex(task => {
+        const key = this.semanticKey(task);
+        return !key || !this.processingSemanticKeys.has(key);
+      });
+      if (index < 0) break;
+      const [task] = this.queue.splice(index, 1);
       if (this.processingTasks.has(task.id)) continue;
       this.processingTasks.add(task.id);
-      void this.processTask(task)
+      const semanticKey = this.semanticKey(task);
+      if (semanticKey) this.processingSemanticKeys.add(semanticKey);
+      void runWithResearchBudget(() => this.processTask(task))
         .catch(error => {
           console.error(`Unhandled queue error for task ${task.id}:`, error);
         })
         .finally(() => {
           this.processingTasks.delete(task.id);
+          if (semanticKey) this.processingSemanticKeys.delete(semanticKey);
           this.cancelledTasks.delete(task.id);
+          this.cancellationStarted.delete(task.id);
           this.abortControllers.delete(task.id);
           void this.processQueue();
         });
@@ -291,6 +307,12 @@ export class TaskQueue extends EventEmitter {
   private async finishCancellation(task: GeneResearchTask, step: string) {
     const cancelledTask = await taskStore.updateTaskStatus(task.id, 'cancelled', undefined, step);
     if (cancelledTask.status === 'cancelled') {
+      const requestedAt = this.cancellationStarted.get(task.id);
+      recordResearchEvent('cancelled', {
+        taskId: task.id, attempt: cancelledTask.attempts,
+        durationMs: requestedAt === undefined ? undefined : Date.now() - requestedAt,
+      });
+      this.cancellationStarted.delete(task.id);
       this.emit('task:cancelled', cancelledTask);
     }
     return cancelledTask;
@@ -379,10 +401,18 @@ export class TaskQueue extends EventEmitter {
       'gene-llm-report': 82,
       'final-report': 88,
     };
+    const phaseMs: Record<string, number> = {};
+    const active = new Map<string, number>();
     let previousStep = '';
     let previousProgress = 0;
     engine.onMessage = (event, { step, status }) => {
       if (event !== 'progress' || !Object.hasOwn(progressByStep, step)) return;
+      if (status === 'start' && !active.has(step)) active.set(step, performance.now());
+      const phaseStarted = active.get(step);
+      if (status === 'end' && phaseStarted !== undefined) {
+        phaseMs[step] = Math.round((phaseMs[step] ?? 0) + performance.now() - phaseStarted);
+        active.delete(step);
+      }
       const progress = Math.max(previousProgress, progressByStep[step] + (status === 'end' ? 10 : 0));
       if (step === previousStep && progress === previousProgress) return;
       previousStep = step;
@@ -393,6 +423,7 @@ export class TaskQueue extends EventEmitter {
         })
         .catch(() => console.error('[TaskQueue] Unable to persist progress', taskId));
     };
+    return phaseMs;
   }
 
   // 处理单个任务（带重试机制）
@@ -410,7 +441,28 @@ export class TaskQueue extends EventEmitter {
         await this.finishCancellation(startedTask, 'cancelled-before-research');
         return;
       }
+      const attemptStartedAt = new Date(startedTask.updatedAt);
+      const attempt = startedTask.attempts;
+      const queueMs = Math.max(0, attemptStartedAt.getTime() - new Date(task.createdAt).getTime());
+      recordResearchEvent('started', { taskId: task.id, attempt, queueMs });
       this.emit('task:started', startedTask);
+
+      const runMetadata = (phaseMs?: Record<string, number>) => ({
+        queuedAt: new Date(task.createdAt).toISOString(),
+        attemptStartedAt: attemptStartedAt.toISOString(),
+        finishedAt: new Date().toISOString(),
+        phaseMs,
+      });
+      const logCompleted = async (phaseMs?: Record<string, number>, cacheReplay = false, cost?: ReturnType<typeof estimateResearchCost>) => {
+        if (process.env.DGR_RESEARCH_TELEMETRY !== '1') return;
+        const artifactBytes = await taskStore.getArtifactSize(task.id).catch(() => undefined);
+        recordResearchEvent('completed', {
+          taskId: task.id, attempt, queueMs, durationMs: Date.now() - attemptStartedAt.getTime(), phaseMs, cacheReplay,
+          artifactBytes, estimatedUsd: cost?.usd,
+          rateVersion: cost?.kind === 'estimated' ? cost.rateVersion : undefined,
+          costIncomplete: cost?.kind === 'estimated' ? cost.incomplete : !cacheReplay,
+        });
+      };
 
       if (task.parameters.mode === 'general') {
         const controller = new AbortController();
@@ -418,16 +470,27 @@ export class TaskQueue extends EventEmitter {
         if (this.cancelledTasks.has(task.id)) controller.abort();
         const { query, language, maxResult, enableCitationImage, enableReferences } = task.parameters;
         const engine = initDeepResearchServer({ language, maxResult });
-        this.trackProgress(task.id, engine);
+        const phaseMs = this.trackProgress(task.id, engine);
         const signal = createFetchSignal(controller.signal, 600_000);
         const result = await engine.start(query, enableCitationImage, enableReferences, task.id, signal);
         if (await this.isCancellationRequested(task.id)) {
           await this.finishCancellation(task, 'cancelled-before-result-commit');
           return;
         }
-        const taskResult = this.prepareResultForTask(task, result);
+        const taskResult = this.prepareResultForTask(task, {
+          ...result,
+          metadata: {
+            ...('metadata' in result ? result.metadata : {}),
+            ...runMetadata(phaseMs),
+            runBudget: researchBudget()?.snapshot(),
+            llmCost: estimateResearchCost(engine.getLlmUsage()),
+          },
+        });
         const completedTask = await taskStore.updateTaskResult(task.id, taskResult);
-        if (completedTask.status === 'completed') this.emit('task:completed', completedTask, taskResult);
+        if (completedTask.status === 'completed') {
+          void logCompleted(phaseMs, false, taskResult.metadata?.llmCost);
+          this.emit('task:completed', completedTask, taskResult);
+        }
         if (completedTask.status === 'cancel_requested') await this.finishCancellation(completedTask, 'cancelled-before-result-commit');
         return;
       }
@@ -436,12 +499,12 @@ export class TaskQueue extends EventEmitter {
       // forceRefresh itself is deliberately excluded from the cache key.
       let cachedResult: any | null = null;
       if (task.parameters.forceRefresh) {
-        await cacheService.deleteCachedResult(task.parameters);
+        await cacheService.deleteCachedResult(task.parameters, task.workspaceId);
       } else {
-        cachedResult = await cacheService.getCachedResult(task.parameters);
+        cachedResult = await cacheService.getCachedResult(task.parameters, task.workspaceId);
       }
       if (cachedResult && !isSubstantiveResearchResult(cachedResult, task.parameters)) {
-        await cacheService.deleteCachedResult(task.parameters);
+        await cacheService.deleteCachedResult(task.parameters, task.workspaceId);
         cachedResult = null;
       }
       if (cachedResult) {
@@ -473,15 +536,21 @@ export class TaskQueue extends EventEmitter {
           ...cachedResultWithProposal,
           metadata: {
             ...((cachedResultWithProposal as any)?.metadata || {}),
+            ...runMetadata(),
+            runBudget: researchBudget()?.snapshot(),
+            cacheSourceLlmCost: cachedResultWithProposal.metadata?.llmCost,
+            llmCost: { schema: 'dgr.llm-cost.v1', kind: 'replay', currency: 'USD', usd: 0 },
             cacheReplay: true,
             cacheReplayedAt: new Date().toISOString(),
             cacheReplayTimeMs: Date.now() - new Date(task.createdAt).getTime(),
             cacheSourceTaskId: cachedResultWithProposal.metadata?.researchRunId,
+            cacheReplayProvenance: 'report-and-note-retain-original-source-references',
           },
         };
         const taskResult = this.prepareResultForTask(task, replayedResult);
         const completedTask = await taskStore.updateTaskResult(task.id, taskResult);
         if (completedTask.status === 'completed') {
+          void logCompleted(undefined, true);
           this.emit('task:completed', completedTask, taskResult);
         } else if (completedTask.status === 'cancel_requested') {
           await this.finishCancellation(completedTask, 'cancelled-during-cache-hit');
@@ -497,7 +566,7 @@ export class TaskQueue extends EventEmitter {
       this.abortControllers.set(task.id, abortController);
       if (this.cancelledTasks.has(task.id)) abortController.abort();
 
-      this.trackProgress(task.id, deepResearch);
+      const phaseMs = this.trackProgress(task.id, deepResearch);
 
       // Build a user-facing query for the report, but pass the exact MCP
       // target into the specialized research engine. It must never recover a
@@ -541,6 +610,7 @@ export class TaskQueue extends EventEmitter {
         literatureBudget: task.parameters.literatureBudget,
         fullTextBudget: task.parameters.fullTextBudget,
         userDocumentIds: task.parameters.userDocumentIds,
+        workspaceId: task.workspaceId,
       }, signal, task.parameters.enableCitationImage !== false, task.parameters.enableReferences !== false);
       if (await this.isCancellationRequested(task.id)) {
         await this.finishCancellation(task, 'cancelled-during-research');
@@ -566,11 +636,14 @@ export class TaskQueue extends EventEmitter {
       const result = enforceTaskMediaPolicy(task.parameters, {
         ...specializedResult,
         metadata: {
-          ...((specializedResult as any).metadata || {}),
+          ...specializedResult.metadata,
+          ...runMetadata(phaseMs),
+          llmCost: estimateResearchCost(specializedResult.metadata?.llmUsage),
           researchTime,
           researchRunId: task.id,
           attemptTimeMs,
           queueAndRetryTimeMs: researchTime - attemptTimeMs,
+          runBudget: researchBudget()?.snapshot(),
           attempts: startedTask.attempts,
           dataSources: sourceCoverage.sourceDomains,
           sourceCoverage,
@@ -588,61 +661,32 @@ export class TaskQueue extends EventEmitter {
       const completedTask = await taskStore.updateTaskResult(task.id, taskResult);
       if (completedTask.status === 'completed') {
         if (isSubstantiveResearchResult(resultWithProposal, task.parameters)) {
-          await cacheService.setCachedResult(task.parameters, resultWithProposal);
+          await cacheService.setCachedResult(task.parameters, resultWithProposal, task.workspaceId);
         }
+        void logCompleted(phaseMs, false, taskResult.metadata?.llmCost);
         this.emit('task:completed', completedTask, taskResult);
       } else if (completedTask.status === 'cancel_requested') {
         await this.finishCancellation(completedTask, 'cancelled-before-result-commit');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorCode = error instanceof ResearchBudgetExceededError ? 'budget_exhausted'
+        : error instanceof Error && error.name === 'TimeoutError' ? 'deadline_exceeded'
+        : 'research_failed';
+      const errorMessage = error instanceof ResearchBudgetExceededError ? error.message
+        : errorCode === 'deadline_exceeded' ? 'Research deadline exceeded' : 'Research execution failed';
 
       if (await this.isCancellationRequested(task.id)) {
         await this.finishCancellation(task, 'cancelled-after-research-error');
         return;
       }
       
-      // 检查是否需要重试
-      const currentTask = await taskStore.getTaskMetadata(task.id);
-      const attempts = currentTask?.attempts ?? 0;
-      const statusCode = typeof error === 'object' && error && 'statusCode' in error ? Number(error.statusCode) : 0;
-      const transient = statusCode === 429 || (statusCode >= 500 && statusCode < 600);
-      if (transient && attempts < this.maxAttempts) {
-        const nextAttempt = attempts + 1;
-        const backoffMs = Math.pow(2, Math.max(0, attempts - 1)) * 1000; // 指数退避
-        
-        console.log(`Task ${task.id} failed, retrying in ${backoffMs}ms (attempt ${nextAttempt}/${this.maxAttempts})`);
-        
-        // 更新任务状态为重试中
-        const retryTask = await taskStore.updateTaskStatus(
-          task.id, 
-          'in_progress', 
-          0, 
-          `retry-${nextAttempt}`
-        );
-        if (retryTask.status !== 'in_progress') {
-          await this.finishCancellation(retryTask, 'cancelled-before-retry');
-          return;
-        }
-        this.emit('task:progress', retryTask, 0, `retry-${nextAttempt}`);
-        
-        // 延迟后重试
-        try {
-          await delay(backoffMs, undefined, { signal: this.abortControllers.get(task.id)?.signal });
-        } catch {
-          await this.finishCancellation(task, 'cancelled-during-retry');
-          return;
-        }
-        await this.processTask(task);
-      } else {
-        // 达到最大重试次数，标记任务失败
-        const failedTask = await taskStore.updateTaskError(
-          task.id,
-          `Failed after ${attempts} attempts: ${errorMessage}`
-        );
-        if (failedTask.status === 'failed') {
-          this.emit('task:failed', failedTask, errorMessage);
-        }
+      // Provider-specific retry policies run within each stage. Replaying a
+      // whole run here would repeat already paid calls and completed searches.
+      const attempts = (await taskStore.getTaskMetadata(task.id))?.attempts ?? 0;
+      const failedTask = await taskStore.updateTaskError(task.id, `Failed after ${attempts} attempts: ${errorMessage}`);
+      if (failedTask.status === 'failed') {
+        recordResearchEvent('failed', { taskId: task.id, attempt: attempts, errorCode });
+        this.emit('task:failed', failedTask, errorMessage);
       }
     }
   }
@@ -670,6 +714,7 @@ export class TaskQueue extends EventEmitter {
       return true;
     }
     this.cancelledTasks.add(taskId);
+    if (!this.cancellationStarted.has(taskId)) this.cancellationStarted.set(taskId, Date.now());
     this.abortControllers.get(taskId)?.abort();
     await taskStore.requestCancellation(taskId);
     return true;

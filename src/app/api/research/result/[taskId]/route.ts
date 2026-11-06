@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireMcpAuth } from '../../../mcp/auth';
+import { authenticateResearch } from '../../../mcp/auth';
 import { legacyStatus, privateResponse, readGeneralTask } from '../../shared';
 import { TERMINAL_TASK_STATUSES } from '@/models/task';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ taskId: string }> }) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
 
   try {
-    const task = await readGeneralTask((await params).taskId, true);
+    const task = await readGeneralTask((await params).taskId, principal.workspaceId, true);
     if (task instanceof NextResponse) return task;
     const summary = {
       taskId: task.id,

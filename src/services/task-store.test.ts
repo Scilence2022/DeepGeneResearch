@@ -34,6 +34,7 @@ describe.sequential('durable task store', () => {
     if (originalNodeEnv === undefined) delete mutableEnv.NODE_ENV;
     else mutableEnv.NODE_ENV = originalNodeEnv;
     delete process.env.DGR_ALLOW_EPHEMERAL_TASK_STORAGE;
+    vi.unstubAllEnvs();
     if (originalWorkerCount === undefined) delete process.env.DGR_WORKER_COUNT;
     else process.env.DGR_WORKER_COUNT = originalWorkerCount;
     if (originalWebConcurrency === undefined) delete process.env.WEB_CONCURRENCY;
@@ -58,6 +59,22 @@ describe.sequential('durable task store', () => {
     expect(results.filter(result => result.created)).toHaveLength(1);
     expect(JSON.parse(await readFile(storageFile, 'utf8'))).toHaveLength(1);
     expect((await stat(storageFile)).mode & 0o777).toBe(0o600);
+  });
+
+  it('isolates identical idempotency keys and durable artifact lookups across workspaces', async () => {
+    const { taskStore } = await import('./task-store');
+    const parameters = { geneSymbol: 'thrL', organism: 'Escherichia coli', idempotencyKey: 'shared' };
+    const alpha = (await taskStore.createOrGetTask(parameters, 100, 'alpha')).task;
+    const beta = (await taskStore.createOrGetTask(parameters, 100, 'beta')).task;
+    expect(alpha.id).not.toBe(beta.id);
+    expect(await taskStore.listTasks(0, 10, false, 'alpha')).toMatchObject({ total: 1, tasks: [{ id: alpha.id }] });
+    expect(await taskStore.getTaskByArtifactId(alpha.id, 'beta')).toBeNull();
+    expect(await taskStore.getTaskByArtifactId(alpha.id)).toBeNull();
+
+    vi.resetModules();
+    const { taskStore: reopened } = await import('./task-store');
+    expect((await reopened.createOrGetTask(parameters, 100, 'alpha')).task.id).toBe(alpha.id);
+    expect((await reopened.createOrGetTask(parameters, 100, 'beta')).task.id).toBe(beta.id);
   });
 
   it('rejects reuse of an idempotency key for a different target', async () => {
@@ -122,6 +139,31 @@ describe.sequential('durable task store', () => {
     expect((await reopened.getTaskMetadata(task.id))?.result).toBeUndefined();
     expect((await reopened.getTask(task.id))?.result.finalReport).toBe('original report');
 
+  });
+
+  it('imports a JSON ledger with inline results into transactional SQLite and reopens it', async () => {
+    const now = new Date().toISOString();
+    const original = JSON.stringify([{
+      id: 'legacy', status: 'completed', progress: 100, createdAt: now, updatedAt: now,
+      parameters: { geneSymbol: 'thrL', organism: 'Escherichia coli', idempotencyKey: 'migrate' },
+      result: { finalReport: 'migrated' }, eventSeq: 1,
+    }]);
+    await writeFile(storageFile, original);
+    vi.stubEnv('DGR_TASK_BACKEND', 'sqlite');
+    const { taskStore } = await import('./task-store');
+    expect((await taskStore.getTask('legacy'))?.result.finalReport).toBe('migrated');
+    const pending = await taskStore.createTask({ geneSymbol: 'lacZ', organism: 'Escherichia coli' });
+    expect(await readFile(storageFile, 'utf8')).toBe(original);
+
+    vi.resetModules();
+    const { taskStore: reopened } = await import('./task-store');
+    expect((await reopened.getTask('legacy'))?.result.finalReport).toBe('migrated');
+    expect((await reopened.getTask(pending.id))?.status).toBe('pending');
+
+    vi.stubEnv('DGR_TASK_BACKEND', 'json');
+    vi.resetModules();
+    const { taskStore: oldBackend } = await import('./task-store');
+    await expect(oldBackend.getAllTasks()).rejects.toThrow('SQLite task ledger exists');
   });
 
   it('persists and enforces the execution-attempt budget', async () => {

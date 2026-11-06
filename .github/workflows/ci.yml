@@ -25,9 +25,19 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm audit --prod --audit-level critical
+      - run: pnpm audit:production
+      - run: pnpm build
+      - run: npx --yes --package @playwright/cli@0.1.23 playwright-cli install-browser chromium --only-shell --with-deps
+      - run: sh scripts/smoke-report-browser.sh
       - run: pnpm build:standalone
       - run: pnpm smoke:standalone
       - run: pnpm build:export
+      - run: cmp public/_headers out/_headers
+      - run: sh scripts/check-docker-isolation.sh
       - run: docker build --tag dgr-ci .
       - run: docker run --rm --entrypoint node dgr-ci -e "if (process.getuid() === 0) process.exit(1)"
+      - run: docker run --rm --entrypoint node dgr-ci --input-type=module -e "await import('pdfjs-dist/legacy/build/pdf.mjs')"
+      - run: |
+          expected=$(node -p "require('next/package.json').version")
+          actual=$(docker run --rm --entrypoint node dgr-ci -p "require('next/package.json').version")
+          test "$expected" = "$actual"

@@ -4,6 +4,38 @@ import path from 'path';
 
 export const MAX_RESEARCH_DOCUMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_RESEARCH_DOCUMENTS_PER_TASK = 8;
+const MAX_WORKSPACE_PDF_BYTES = 512 * 1024 * 1024;
+const MAX_WORKSPACE_PDFS = 1_000;
+
+export class ResearchDocumentQuotaError extends Error {
+  constructor() {
+    super('Research PDF storage quota reached');
+    this.name = 'ResearchDocumentQuotaError';
+  }
+}
+
+const uploadLocks = new Map<string, Promise<unknown>>();
+
+async function serializeUpload<T>(directory: string, upload: () => Promise<T>): Promise<T> {
+  const operation = (uploadLocks.get(directory) ?? Promise.resolve()).catch(() => undefined).then(upload);
+  uploadLocks.set(directory, operation);
+  try {
+    return await operation;
+  } finally {
+    if (uploadLocks.get(directory) === operation) uploadLocks.delete(directory);
+  }
+}
+
+async function checkDocumentQuota(directory: string, incoming: number) {
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+  const pdfs = entries.filter(entry => entry.isFile() && /^[a-f0-9]{64}\.pdf$/.test(entry.name));
+  if (pdfs.length >= MAX_WORKSPACE_PDFS) throw new ResearchDocumentQuotaError();
+  let bytes = incoming;
+  for (const pdf of pdfs) {
+    bytes += (await fs.stat(path.join(directory, pdf.name))).size;
+    if (bytes > MAX_WORKSPACE_PDF_BYTES) throw new ResearchDocumentQuotaError();
+  }
+}
 
 export interface ResearchDocumentDescriptor {
   documentId: string;
@@ -53,9 +85,13 @@ function assertPdf(bytes: Buffer, mediaType: string): void {
   }
 }
 
+function workspaceDirectory(workspaceId?: string): string {
+  return workspaceId
+    ? path.join(STORAGE_DIR, 'workspaces', createHash('sha256').update(workspaceId).digest('hex'))
+    : STORAGE_DIR;
+}
+
 async function durableWrite(filePath: string, contents: Buffer | string): Promise<void> {
-  await fs.mkdir(STORAGE_DIR, { recursive: true, mode: 0o700 });
-  await fs.chmod(STORAGE_DIR, 0o700);
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   const handle = await fs.open(tempPath, 'wx', 0o600);
   let renamed = false;
@@ -75,7 +111,7 @@ export async function storeResearchDocument(input: {
   bytes: Buffer;
   name: string;
   mediaType: string;
-}): Promise<ResearchDocumentDescriptor> {
+}, workspaceId?: string): Promise<ResearchDocumentDescriptor> {
   assertSupportedStorageRuntime();
   const name = safeDocumentName(input.name);
   const bytes = Buffer.from(input.bytes);
@@ -94,48 +130,55 @@ export async function storeResearchDocument(input: {
     uploadedAt: new Date().toISOString(),
     origin: 'user_upload',
   };
-  const pdfPath = path.join(STORAGE_DIR, `${sha256}.pdf`);
-  const metadataPath = path.join(STORAGE_DIR, `${sha256}.json`);
+  const directory = workspaceDirectory(workspaceId);
+  const pdfPath = path.join(directory, `${sha256}.pdf`);
+  const metadataPath = path.join(directory, `${sha256}.json`);
 
-  await fs.mkdir(STORAGE_DIR, { recursive: true, mode: 0o700 });
-  await fs.chmod(STORAGE_DIR, 0o700);
-  let pdfAlreadyStored = false;
-  try {
-    const existing = await fs.readFile(pdfPath);
-    if (createHash('sha256').update(existing).digest('hex') !== sha256) {
-      throw new Error(`Stored research document failed integrity verification: ${sha256}`);
-    }
-    pdfAlreadyStored = true;
+  return serializeUpload(directory, async () => {
+    await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+    await fs.chmod(directory, 0o700);
+    let pdfAlreadyStored = false;
     try {
-      const existingDescriptor = JSON.parse(await fs.readFile(metadataPath, 'utf8')) as ResearchDocumentDescriptor;
-      if (
-        existingDescriptor.documentId !== descriptor.documentId
-        || existingDescriptor.sha256 !== sha256
-        || existingDescriptor.size !== existing.length
-        || existingDescriptor.mediaType !== 'application/pdf'
-      ) {
-        throw new Error(`Stored research document metadata failed integrity verification: ${sha256}`);
+      const existing = await fs.readFile(pdfPath);
+      if (createHash('sha256').update(existing).digest('hex') !== sha256) {
+        throw new Error(`Stored research document failed integrity verification: ${sha256}`);
       }
-      return existingDescriptor;
+      pdfAlreadyStored = true;
+      try {
+        const existingDescriptor = JSON.parse(await fs.readFile(metadataPath, 'utf8')) as ResearchDocumentDescriptor;
+        if (
+          existingDescriptor.documentId !== descriptor.documentId
+          || existingDescriptor.sha256 !== sha256
+          || existingDescriptor.size !== existing.length
+          || existingDescriptor.mediaType !== 'application/pdf'
+        ) {
+          throw new Error(`Stored research document metadata failed integrity verification: ${sha256}`);
+        }
+        return existingDescriptor;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  if (!pdfAlreadyStored) await durableWrite(pdfPath, bytes);
-  await durableWrite(metadataPath, JSON.stringify(descriptor, null, 2));
-  return descriptor;
+    if (!pdfAlreadyStored) {
+      await checkDocumentQuota(directory, bytes.length);
+      await durableWrite(pdfPath, bytes);
+    }
+    await durableWrite(metadataPath, JSON.stringify(descriptor, null, 2));
+    return descriptor;
+  });
 }
 
-export async function loadResearchDocument(documentId: string): Promise<{
+export async function loadResearchDocument(documentId: string, workspaceId?: string): Promise<{
   descriptor: ResearchDocumentDescriptor;
   bytes: Buffer;
 }> {
   assertSupportedStorageRuntime();
   const sha256 = documentHashFromId(documentId);
-  const pdfPath = path.join(STORAGE_DIR, `${sha256}.pdf`);
-  const metadataPath = path.join(STORAGE_DIR, `${sha256}.json`);
+  const directory = workspaceDirectory(workspaceId);
+  const pdfPath = path.join(directory, `${sha256}.pdf`);
+  const metadataPath = path.join(directory, `${sha256}.json`);
   const [bytes, metadataText] = await Promise.all([
     fs.readFile(pdfPath),
     fs.readFile(metadataPath, 'utf8'),

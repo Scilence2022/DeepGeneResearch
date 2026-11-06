@@ -288,10 +288,6 @@ export class SSEServerTransport implements Transport {
       );
     }
 
-    req.signal.addEventListener("abort", () => {
-      this.close();
-    });
-
     let rawMessage: any;
     try {
       rawMessage = await readBoundedJson(req, 2 * 1024 * 1024);

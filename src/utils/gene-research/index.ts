@@ -11,7 +11,7 @@ import { GeneAPIIntegrations, createGeneAPIIntegrations } from './api-integratio
 import { createSearchProvider } from '@/utils/deep-research/search';
 import { fetchPublicText } from '@/utils/safe-public-fetch';
 import pLimit from 'p-limit';
-import { compareWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
+import { compareSourceWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
 import {
   buildFullTextEvidenceSpans,
   parseUserResearchPdf,
@@ -89,6 +89,7 @@ export interface GeneResearchConfig {
   signal?: AbortSignal;
   onProgress?: (data: Record<string, any>) => void;
   userDocumentIds?: string[];
+  workspaceId?: string;
 }
 
 export interface GeneResearchResult {
@@ -812,7 +813,7 @@ export class GeneResearchEngine {
       this.assertNotCancelled();
       const startedAt = Date.now();
       try {
-        const fullText = await parseUserResearchPdf(documentId, this.config.signal);
+        const fullText = await parseUserResearchPdf(documentId, this.config.signal, this.config.workspaceId);
         const relevance = this.assessSourceRelevance({ title: fullText.name, content: fullText.text });
         const evidence = relevance.accepted
           ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
@@ -823,8 +824,6 @@ export class GeneResearchEngine {
           url: `urn:${documentId}`,
           database: 'user_document',
           sourceId: documentId,
-          pmid: fullText.identifiers.pmid,
-          doi: fullText.identifiers.doi,
           geneSymbol: this.config.geneSymbol,
           organism: this.config.organism,
           targetMatch: accepted,
@@ -940,6 +939,7 @@ export class GeneResearchEngine {
         if (acquisition.metadata.isRetracted) {
           source.evidenceRole = 'excluded';
           source.structuredData = { ...(source.structuredData || {}), retracted: true };
+          return;
         }
         const content = acquisition.content;
         if (!content && enabledProviders.includes('asta') && fullTextEnv.astaApiKey) {
@@ -954,7 +954,7 @@ export class GeneResearchEngine {
               }));
             const snippets = await astaDiscovery;
             const snippet = snippets.find(({ document }) =>
-              compareWorkIdentity(identifiers, document.identifiers) === 'match'
+              compareSourceWorkIdentity(source, document.identifiers) === 'match'
               && this.assessSourceRelevance({ title: document.name, content: document.text }).accepted);
             if (snippet && !acquisition.metadata.isRetracted) {
               source.structuredData = {
@@ -986,7 +986,7 @@ export class GeneResearchEngine {
         }
         const fullText = content?.document;
         if (!content || !fullText) return;
-        if (fullText.origin === 'snippet' || compareWorkIdentity(identifiers, fullText.identifiers) === 'conflict') {
+        if (fullText.origin === 'snippet' || compareSourceWorkIdentity(source, fullText.identifiers) !== 'match') {
           throw new Error('Acquired document is not verified as full text for the requested work');
         }
         const relevance = this.assessSourceRelevance({ title: source.title, content: fullText.text });
@@ -2019,8 +2019,9 @@ export class GeneResearchEngine {
     const fullTextFindingLines = fullTextFindingCount > 0
       ? fullTextSources.flatMap(source => {
           const reference = source.structuredData?.literatureReferences?.[0] || {};
-          const pmid = source.pmid || reference.pmid || source.fullText?.identifiers?.pmid;
-          const doi = source.doi || reference.doi || source.fullText?.identifiers?.doi;
+          const privateUpload = source.fullText?.origin === 'user_upload';
+          const pmid = privateUpload ? undefined : source.pmid || reference.pmid || source.fullText?.identifiers?.pmid;
+          const doi = privateUpload ? undefined : source.doi || reference.doi || source.fullText?.identifiers?.doi;
           const citation = pmid
             ? `[PMID:${pmid}](https://pubmed.ncbi.nlm.nih.gov/${pmid}/)`
             : doi
@@ -2028,7 +2029,8 @@ export class GeneResearchEngine {
               : `user PDF \`${escapeMarkdown(source.fullText?.name || source.title)}\``;
           return (source.fullTextEvidence || []).map((finding: any) => {
             const locator = finding.pageNumber ? `, PDF page ${finding.pageNumber}` : '';
-            return `- **${finding.category}**: ${escapeMarkdown(finding.excerpt)} — ${citation}${locator}; UTF-16 chars ${finding.excerptStart}-${finding.excerptEnd}; excerpt SHA-256 \`${finding.excerptSha256}\``;
+            const reviewOnly = pmid ? '' : ' (review only)';
+            return `- **${finding.category}**${reviewOnly}: ${escapeMarkdown(finding.excerpt)} — ${citation}${locator}; UTF-16 chars ${finding.excerptStart}-${finding.excerptEnd}; excerpt SHA-256 \`${finding.excerptSha256}\``;
           });
         }).join('\n')
       : '- No exact-target statement was verified against parsed full text.';
@@ -2046,7 +2048,7 @@ export class GeneResearchEngine {
           const pageCoverage = document.pageCount
             ? `${document.parsedPageCount}/${document.pageCount} pages parsed`
             : 'structured XML fully parsed';
-          const identifiers = [
+          const identifiers = document.origin === 'user_upload' ? '' : [
             document.identifiers?.pmid ? `PMID:${document.identifiers.pmid}` : '',
             document.identifiers?.pmcid || '',
             document.identifiers?.doi ? `DOI:${document.identifiers.doi}` : '',
@@ -2131,7 +2133,7 @@ export class GeneResearchEngine {
       },
       {
         id: 'evidence', title: 'Evidence', priority: 'high', required: true,
-        content: `## Retained Literature (${retainedLiteratureTotal})\n\nDirect target: ${relevantLiterature.length}, gene-linked context: ${geneLinkedContext.length}, preprints: ${preprintSources.length}, user documents: ${userDocumentSources.length}.\n\n## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Full-Text Sources (${fullTextSources.length})\n\n${fullTextSourceLines}\n\n## Citation-Bound Full-Text Findings (${fullTextFindingCount})\n\n${fullTextFindingLines}\n\n## Citation-Bound Abstract Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their retained evidence may be abstract-only or lack sufficiently direct target wording. They are included for bibliography coverage and are not used to generate unsupported annotation operations.\n\n${linkedContextLines}`,
+        content: `## Retained Literature (${retainedLiteratureTotal})\n\nDirect target: ${relevantLiterature.length}, gene-linked context: ${geneLinkedContext.length}, preprints: ${preprintSources.length}, user documents: ${userDocumentSources.length}.\n\n## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Full-Text Sources (${fullTextSources.length})\n\n${fullTextSourceLines}\n\n## Full-Text Findings (${fullTextFindingCount})\n\n${fullTextFindingLines}\n\n## Citation-Bound Abstract Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their retained evidence may be abstract-only or lack sufficiently direct target wording. They are included for bibliography coverage and are not used to generate unsupported annotation operations.\n\n${linkedContextLines}`,
         visualizations: [],
       },
       {

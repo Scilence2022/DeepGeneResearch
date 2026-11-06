@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { fetchResearchProvider, ResearchBudgetExceededError, researchBudget } from '@/services/research-run-budget';
 import { createFetchSignal } from '@/utils/fetch-signal';
 
 /**
@@ -10,32 +12,18 @@ import { createFetchSignal } from '@/utils/fetch-signal';
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
-function abortableDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
-  if (delayMs <= 0) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason || new Error('Request aborted'));
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, delayMs);
-    signal?.addEventListener('abort', onAbort, { once: true });
-  });
+async function abortableDelay(delayMs: number, signal?: AbortSignal) {
+  if (delayMs > 0) await delay(delayMs, undefined, { signal });
+  signal?.throwIfAborted();
 }
 
 function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
   const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 10_000);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
   const date = Date.parse(value);
   if (!Number.isFinite(date)) return null;
-  return Math.min(Math.max(0, date - Date.now()), 10_000);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return Math.max(0, date - Date.now());
 }
 
 export interface PoliteFetcherOptions {
@@ -100,14 +88,14 @@ export function createPoliteFetcher({
       await waitForSlot(signal);
       let response: Response;
       try {
-        response = await fetch(url, {
+        response = await fetchResearchProvider(url, {
           ...init,
           headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
           signal: createFetchSignal(signal, timeoutMs),
-        });
+        }, provider, attempt);
       } catch (error) {
         signal?.throwIfAborted();
-        if (attempt === attempts) throw error;
+        if (error instanceof ResearchBudgetExceededError || attempt === attempts) throw error;
         await abortableDelay(Math.min(2_000, 250 * (2 ** (attempt - 1))), signal);
         continue;
       }
@@ -117,7 +105,7 @@ export function createPoliteFetcher({
         return requireOk(response);
       }
       const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
-      if (retryAfterMs !== null && retryAfterMs > 30_000) return requireOk(response);
+      if (retryAfterMs !== null && retryAfterMs > 10_000) return requireOk(response);
       const backoffMs = retryAfterMs ?? Math.min(2_000, 250 * (2 ** (attempt - 1)));
       void response.body?.cancel().catch(() => undefined);
       await abortableDelay(backoffMs, signal);
@@ -129,10 +117,11 @@ export function createPoliteFetcher({
     fetch: politeFetch,
     async fetchJson<T = any>(url: string, options: PoliteFetchOptions = {}): Promise<T> {
       const response = await politeFetch(url, options);
+      const text = await readProviderText(response);
       try {
-        return JSON.parse(await readProviderText(response)) as T;
-      } catch (error) {
-        throw new Error(`${provider} returned invalid JSON: ${errorMessage(error)}`);
+        return JSON.parse(text) as T;
+      } catch {
+        throw new Error(`${provider} returned invalid JSON`);
       }
     },
     async fetchText(url: string, options: PoliteFetchOptions = {}): Promise<string> {
@@ -152,6 +141,12 @@ export async function readProviderText(response: Response, maxBytes = 16 * 1024 
     for (;;) {
       const { value, done } = await reader.read();
       if (done) return text + decoder.decode();
+      try {
+        researchBudget()?.charge('downloadedBytes', value.byteLength);
+      } catch (error) {
+        void reader.cancel().catch(() => undefined);
+        throw error;
+      }
       bytes += value.byteLength;
       if (bytes > maxBytes) {
         void reader.cancel().catch(() => undefined);

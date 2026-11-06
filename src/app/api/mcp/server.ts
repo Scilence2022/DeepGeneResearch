@@ -1,3 +1,4 @@
+import { runAdmittedResearchTool } from './admission';
 import { z } from "zod";
 import { geneResearchInput } from "./task-parameters";
 import { McpServer } from "@/libs/mcp-server/mcp";
@@ -22,7 +23,7 @@ function asJsonText(data: unknown) {
   };
 }
 
-export function initMcpServer() {
+export function initMcpServer(workspaceId?: string) {
   // Loading an MCP route is also the durable worker's restart signal. The
   // singleton makes this safe across the stateless MCP server instances.
   void taskQueue.start().catch(error => {
@@ -106,7 +107,7 @@ export function initMcpServer() {
           currentAnnotation,
           idempotencyKey,
           correlationId,
-        });
+        }, workspaceId);
 
         // 返回任务 ID 和状态
         const taskPath = `/api/mcp/tasks/${task.id}`;
@@ -149,7 +150,7 @@ export function initMcpServer() {
         signal.throwIfAborted();
         await taskQueue.start();
         const task = await taskStore.getTask(taskId);
-        if (!task || task.parameters.mode === "general") {
+        if (!task || task.workspaceId !== workspaceId || task.parameters.mode === "general") {
           return {
             isError: true,
             content: [
@@ -194,7 +195,9 @@ export function initMcpServer() {
     "Request cancellation of a queued or running gene research run. The task record remains available for audit and recovery.",
     { taskId: z.string().describe("The research run/task ID to cancel.") },
     async ({ taskId }) => {
-      const cancelled = await taskQueue.cancelTask(taskId);
+      const existing = await taskStore.getTaskMetadata(taskId);
+      const cancelled = existing && existing.workspaceId === workspaceId && existing.parameters.mode !== "general"
+        && await taskQueue.cancelTask(taskId);
       if (!cancelled) {
         return {
           isError: true,
@@ -214,13 +217,13 @@ export function initMcpServer() {
       language: z.string().optional().describe("The response language."),
       maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum search results to configure for downstream steps."),
     },
-    async ({ query, language, maxResult }, { signal }) => {
+    async ({ query, language, maxResult }, { signal }) => runAdmittedResearchTool(workspaceId, async () => {
       signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const reportPlan = await deepResearch.writeReportPlan(query, createFetchSignal(signal, 120_000));
       signal.throwIfAborted();
       return asJsonText({ reportPlan });
-    }
+    })
   );
 
   server.tool(
@@ -231,13 +234,13 @@ export function initMcpServer() {
       language: z.string().optional().describe("The response language."),
       maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum search results to configure for downstream steps."),
     },
-    async ({ plan, language, maxResult }, { signal }) => {
+    async ({ plan, language, maxResult }, { signal }) => runAdmittedResearchTool(workspaceId, async () => {
       signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const tasks = await deepResearch.generateSERPQuery(plan, createFetchSignal(signal, 120_000));
       signal.throwIfAborted();
       return asJsonText({ tasks });
-    }
+    })
   );
 
   server.tool(
@@ -252,13 +255,13 @@ export function initMcpServer() {
       maxResult: z.number().int().min(1).max(20).optional().default(5).describe("Maximum number of search results per task."),
       enableReferences: z.boolean().optional().default(true).describe("Whether to include source references."),
     },
-    async ({ tasks, language, maxResult, enableReferences }, { signal }) => {
+    async ({ tasks, language, maxResult, enableReferences }, { signal }) => runAdmittedResearchTool(workspaceId, async () => {
       signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const completedTasks = await deepResearch.runSearchTask(tasks, enableReferences, createFetchSignal(signal, 240_000));
       signal.throwIfAborted();
       return asJsonText({ tasks: completedTasks });
-    }
+    })
   );
 
   server.tool(
@@ -281,7 +284,7 @@ export function initMcpServer() {
     async (
       { plan, tasks, language, maxResult, enableCitationImage, enableReferences },
       { signal }
-    ) => {
+    ) => runAdmittedResearchTool(workspaceId, async () => {
       signal.throwIfAborted();
       const deepResearch = initDeepResearchServer({ language, maxResult });
       const report = await deepResearch.writeFinalReport(
@@ -293,7 +296,7 @@ export function initMcpServer() {
       );
       signal.throwIfAborted();
       return asJsonText(report);
-    }
+    })
   );
 
   server.prompt(

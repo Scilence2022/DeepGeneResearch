@@ -13,6 +13,7 @@ describe.sequential('MCP and crawler authentication', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (originalPassword === undefined) delete process.env.ACCESS_PASSWORD;
     else process.env.ACCESS_PASSWORD = originalPassword;
     if (originalUnauthenticatedDev === undefined) delete process.env.DGR_ALLOW_UNAUTHENTICATED_DEV;
@@ -61,6 +62,19 @@ describe.sequential('MCP and crawler authentication', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('authenticates named workspaces and rejects duplicated credentials', async () => {
+    const token = 'workspace-alpha-with-a-unique-random-token';
+    vi.stubEnv('DGR_WORKSPACE_TOKENS', JSON.stringify({ alpha: token }));
+    let { authenticateResearch } = await import('./auth');
+    expect(authenticateResearch(request(token))).toEqual({ workspaceId: 'alpha' });
+    expect(authenticateResearch(request())).toMatchObject({ status: 401 });
+
+    vi.stubEnv('DGR_WORKSPACE_TOKENS', JSON.stringify({ alpha: token, beta: token }));
+    vi.resetModules();
+    ({ authenticateResearch } = await import('./auth'));
+    expect(authenticateResearch(request(token))).toMatchObject({ status: 503 });
   });
 
   it('accepts the browser crawler short-lived signature derived from the same secret', async () => {

@@ -1,5 +1,6 @@
-import { type NextRequest } from 'next/server';
-import { requireMcpAuth } from '../../mcp/auth';
+import { admitResearchRequest } from '@/app/api/mcp/admission';
+import { NextResponse, type NextRequest } from 'next/server';
+import { authenticateResearch } from '../../mcp/auth';
 import { streamResearch } from '../stream';
 
 export const runtime = 'nodejs';
@@ -7,8 +8,10 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 export function GET(request: NextRequest) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
+  const limited = admitResearchRequest(principal.workspaceId);
+  if (limited) return limited;
 
   const params = request.nextUrl.searchParams;
   const maxResult = params.get('maxResult');
@@ -28,5 +31,5 @@ export function GET(request: NextRequest) {
     maxResult: maxResult === null ? undefined : Number(maxResult),
     enableCitationImage: booleanOption('enableCitationImage'),
     enableReferences: booleanOption('enableReferences'),
-  }, true);
+  }, true, principal.workspaceId);
 }

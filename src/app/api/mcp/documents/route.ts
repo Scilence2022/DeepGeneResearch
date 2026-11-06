@@ -1,12 +1,16 @@
+import { admitResearchRequest } from '@/app/api/mcp/admission';
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireMcpAuth } from '../auth';
+import { authenticateResearch } from '../auth';
+import { ensureTaskLedgerOwnership } from '@/services/task-store';
 import {
   MAX_RESEARCH_DOCUMENT_BYTES,
+  ResearchDocumentQuotaError,
   storeResearchDocument,
 } from '@/services/research-document-store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+const uploading = new Set<string>();
 
 async function readBoundedBody(request: NextRequest): Promise<Buffer> {
   if (!request.body) return Buffer.alloc(0);
@@ -31,8 +35,10 @@ async function readBoundedBody(request: NextRequest): Promise<Buffer> {
 }
 
 export async function POST(request: NextRequest) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
+  const limited = admitResearchRequest(principal.workspaceId);
+  if (limited) return limited;
 
   const declaredLength = Number(request.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESEARCH_DOCUMENT_BYTES) {
@@ -47,15 +53,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Research document name encoding is invalid' }, { status: 400 });
   }
 
+  const workspace = principal.workspaceId ?? '';
+  try {
+    await ensureTaskLedgerOwnership();
+  } catch {
+    return NextResponse.json({ error: 'Research document storage unavailable' }, { status: 503 });
+  }
+  if (uploading.size >= 4 || uploading.has(workspace)) {
+    return NextResponse.json({ error: 'Research PDF upload capacity reached' }, { status: 429 });
+  }
+  uploading.add(workspace);
   try {
     const bytes = await readBoundedBody(request);
-    const document = await storeResearchDocument({ bytes, name, mediaType });
+    const document = await storeResearchDocument({ bytes, name, mediaType }, principal.workspaceId);
     return NextResponse.json({ document });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Research document upload failed';
     return NextResponse.json(
       { error: message },
-      { status: message === 'Research PDF exceeds the upload limit' ? 413 : 400 },
+      { status: error instanceof ResearchDocumentQuotaError ? 429 : message === 'Research PDF exceeds the upload limit' ? 413 : 400 },
     );
+  } finally {
+    uploading.delete(workspace);
   }
 }

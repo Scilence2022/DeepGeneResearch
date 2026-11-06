@@ -387,6 +387,8 @@ flowchart TB
 
 ## 🚢 **Deployment Options**
 
+[Research operations guide](./docs/research-operations.md) covers deployment modes, workspace credentials, storage migration, retention, and verification.
+
 ### **Vercel (Recommended)**
 - One-click deployment
 - Automatic HTTPS

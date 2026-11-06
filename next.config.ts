@@ -54,6 +54,20 @@ export default async function Config(phase: string) {
     transpilePackages: ["pdfjs-dist", "mermaid"],
   };
 
+  if (BUILD_MODE !== "export") {
+    nextConfig.headers = async () => [{
+      source: "/:path*",
+      headers: [
+        {
+          key: "Content-Security-Policy",
+          value: "base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; script-src-attr 'none'",
+        },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      ],
+    }];
+  }
+
   if (BUILD_MODE === "export") {
     nextConfig.output = "export";
     nextConfig.trailingSlash = true;

@@ -331,8 +331,8 @@ export async function acquireFullTextEvidence(
     const startedAt = Date.now();
     try {
       const acquired = await step.run(work, metadata);
-      if (acquired && compareWorkIdentity(work, acquired.document.identifiers) === 'conflict') {
-        throw new Error('Provider returned a conflicting work identifier');
+      if (acquired && compareWorkIdentity(work, acquired.document.identifiers) !== 'match') {
+        throw new Error('Provider returned an unverified work identifier');
       }
       if (acquired) {
         content = acquired;

@@ -40,6 +40,13 @@ describe('createPoliteFetcher', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('does not retry ahead of a provider asking for an excessive delay', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, 429, { 'retry-after': '120' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(createPoliteFetcher({ provider: 'test' }).fetchJson('https://example.test/a')).rejects.toThrow('429');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('does not retry non-retryable statuses and names the provider', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: 'nope' }, 400));
     vi.stubGlobal('fetch', fetchMock);

@@ -8,6 +8,8 @@
 !tailwind.config.ts
 !tsconfig.json
 !eslint.config.mjs
+!scripts/
+!scripts/stage-standalone-pdf-runtime.mjs
 !src/
 !src/**
 !public/

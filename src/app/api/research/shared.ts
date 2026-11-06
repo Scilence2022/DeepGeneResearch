@@ -18,10 +18,10 @@ export function legacyStatus(status: TaskStatus) {
   return status === 'in_progress' ? 'in-progress' : status;
 }
 
-export async function readGeneralTask(taskId: string, includeResult = false) {
+export async function readGeneralTask(taskId: string, workspaceId?: string, includeResult = false) {
   if (!isValidTaskId(taskId)) return NextResponse.json({ error: 'Invalid task ID format' }, { status: 400 });
   const task = includeResult ? await taskStore.getTask(taskId) : await taskStore.getTaskMetadata(taskId);
-  if (!task || task.parameters.mode !== 'general') {
+  if (!task || task.workspaceId !== workspaceId || task.parameters.mode !== 'general') {
     return NextResponse.json({ error: 'Task not found' }, { status: 404 });
   }
   return { ...task, parameters: task.parameters };

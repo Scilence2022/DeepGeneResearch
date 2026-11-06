@@ -54,11 +54,19 @@ export function projectTaskResult(result: any, mode: TaskResultMode): any {
         // these it would have to re-read the whole multi-megabyte result to
         // find a handful of integers.
         llmUsage: result.metadata.llmUsage,
+        llmCost: result.metadata.llmCost,
+        cacheSourceLlmCost: result.metadata.cacheSourceLlmCost,
+        runBudget: result.metadata.runBudget,
+        queuedAt: result.metadata.queuedAt,
+        attemptStartedAt: result.metadata.attemptStartedAt,
+        finishedAt: result.metadata.finishedAt,
+        phaseMs: result.metadata.phaseMs,
         llmSynthesis: result.metadata.llmSynthesis,
         literatureMetrics: result.metadata.literatureMetrics,
         cacheReplay: result.metadata.cacheReplay,
         cacheReplayTimeMs: result.metadata.cacheReplayTimeMs,
         cacheSourceTaskId: result.metadata.cacheSourceTaskId,
+        cacheReplayProvenance: result.metadata.cacheReplayProvenance,
         // Only the coverage sub-object: `attempts` is unbounded and would
         // defeat the purpose of a compact projection.
         searchDiagnostics: diagnostics?.literatureCoverage
@@ -72,6 +80,7 @@ export function projectTaskResult(result: any, mode: TaskResultMode): any {
     // The mutation-ready Note is the payload a curator reviews, and it is
     // bounded by construction.
     annotationNote: result.annotationNote,
+    reviewEvidence: result.reviewEvidence,
     artifactUri: result.artifactUri,
     download: result.download,
     title: result.title,

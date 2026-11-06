@@ -3,7 +3,7 @@ import type { GeneResearchTask } from '@/models/task';
 import { TERMINAL_TASK_STATUSES } from '@/models/task';
 import { taskQueue } from '@/services/task-queue';
 import { taskStore } from '@/services/task-store';
-import { requireMcpAuth } from '../../../auth';
+import { authenticateResearch } from '../../../auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,14 +15,14 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> },
 ) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
 
   const { taskId } = await params;
   try {
     await taskQueue.start();
     const task = await taskStore.getTaskMetadata(taskId);
-    if (!task || task.parameters.mode === 'general') return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+    if (!task || task.workspaceId !== principal.workspaceId || task.parameters.mode === 'general') return NextResponse.json({ error: 'Task not found' }, { status: 404 });
   } catch {
     return NextResponse.json({ error: 'Research task store unavailable' }, { status: 503 });
   }
@@ -56,7 +56,7 @@ export async function GET(
         controller.close();
       };
       const send = (task: GeneResearchTask, type: string) => {
-        if (closed || task.eventSeq < eventSeq) return;
+        if (closed || task.eventSeq <= eventSeq) return;
         eventSeq = task.eventSeq;
         const snapshot = {
           type,
@@ -72,7 +72,7 @@ export async function GET(
         controller.enqueue(encoder.encode(`id: ${eventSeq}\ndata: ${JSON.stringify(snapshot)}\n\n`));
       };
       const onTask = (task: GeneResearchTask) => {
-        if (task.id !== taskId || task.eventSeq <= eventSeq || closed) return;
+        if (task.id !== taskId || task.workspaceId !== principal.workspaceId || task.eventSeq <= eventSeq || closed) return;
         const terminal = TERMINAL_TASK_STATUSES.has(task.status);
         send(task, terminal ? task.status : 'progress');
         if (terminal) close();
