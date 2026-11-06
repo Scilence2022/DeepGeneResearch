@@ -30,3 +30,16 @@ export function workIdentifiers(source: {
     doi: source.doi || reference?.doi,
   };
 }
+
+
+/** A child may match an independently recorded alias, but none may conflict. */
+export function compareSourceWorkIdentity(source: Parameters<typeof workIdentifiers>[0], document: WorkIdentifiers) {
+  const reference = source.structuredData?.literatureReferences?.[0];
+  const recorded = source.provenance?.provider === 'pubmed' ? { pmid: source.provenance.recordId } : {};
+  const aliases = [source, reference ?? {}, recorded];
+  for (const [index, alias] of aliases.entries()) {
+    if (compareWorkIdentity(alias, document) === 'conflict'
+      || aliases.slice(index + 1).some(other => compareWorkIdentity(alias, other) === 'conflict')) return 'conflict';
+  }
+  return compareWorkIdentity(workIdentifiers(source), document);
+}

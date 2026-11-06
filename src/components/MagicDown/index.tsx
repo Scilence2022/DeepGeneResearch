@@ -17,6 +17,7 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   hideTools?: boolean;
+  allowImages?: boolean;
   fixedTopOffset?: number;
   fixedRightOffset?: number;
   tools?: ReactNode;
@@ -27,6 +28,7 @@ function MagicDown({
   onChange,
   className,
   hideTools,
+  allowImages,
   fixedTopOffset,
   fixedRightOffset,
   tools,
@@ -49,7 +51,7 @@ function MagicDown({
     <div className={cn("relative", className)} ref={containerRef}>
       {mode === "view" ? (
         <div className="magicdown-view prose prose-slate dark:prose-invert max-w-full">
-          <View>{value}</View>
+          <View allowImages={allowImages}>{value}</View>
         </div>
       ) : (
         <div className="magicdown-editor my-2">

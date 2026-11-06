@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { taskStore } from '@/services/task-store';
 import { taskQueue } from '@/services/task-queue';
-import { requireMcpAuth } from '../../auth';
+import { authenticateResearch } from '../../auth';
 import { projectTaskResult, type TaskResultMode } from '@/services/task-result-projection';
 
 // GET /api/mcp/tasks/[taskId] - 获取单个任务
@@ -9,15 +9,15 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
 
   const { taskId } = await params;
   try {
     await taskQueue.start();
     const task = await taskStore.getTask(taskId);
     
-    if (!task || task.parameters.mode === "general") {
+    if (!task || task.workspaceId !== principal.workspaceId || task.parameters.mode === "general") {
       return NextResponse.json(
         { error: `Task ${taskId} not found` },
         { status: 404 }
@@ -51,15 +51,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
-  const unauthorized = requireMcpAuth(request);
-  if (unauthorized) return unauthorized;
+  const principal = authenticateResearch(request);
+  if (principal instanceof NextResponse) return principal;
 
   const { taskId } = await params;
   try {
     // DELETE is a cancellation request, not destructive task deletion. Keeping
     // the terminal record is required for audit and client restart recovery.
     const existing = await taskStore.getTaskMetadata(taskId);
-    if (!existing || existing.parameters.mode === "general") {
+    if (!existing || existing.workspaceId !== principal.workspaceId || existing.parameters.mode === "general") {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
     const canceledFromQueue = await taskQueue.cancelTask(taskId);

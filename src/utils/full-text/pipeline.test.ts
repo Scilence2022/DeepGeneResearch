@@ -181,7 +181,7 @@ describe('acquireFullTextEvidence waterfall', () => {
     acquireBioRxivPreprintPdf.mockResolvedValue({
       provider: 'biorxiv',
       format: 'pdf',
-      document: documentOf('preprint pdf text', 'pdf'),
+      document: { ...documentOf('preprint pdf text', 'pdf'), identifiers: { doi: '10.1101/2024.01.01.1' } },
     });
 
     const result = await acquireFullTextEvidence(

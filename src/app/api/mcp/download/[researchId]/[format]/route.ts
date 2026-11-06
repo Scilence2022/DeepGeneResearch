@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { taskStore } from '@/services/task-store';
-import { requireMcpAuth } from '../../../auth';
+import { authenticateResearch } from '../../../auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,8 +13,8 @@ export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ researchId: string; format: string }> }
 ) {
-    const unauthorized = requireMcpAuth(req);
-    if (unauthorized) return unauthorized;
+    const principal = authenticateResearch(req);
+    if (principal instanceof NextResponse) return principal;
 
     try {
         const { researchId, format } = await params;
@@ -36,7 +36,7 @@ export async function GET(
             );
         }
 
-        const task = await taskStore.getTaskByArtifactId(researchId);
+        const task = await taskStore.getTaskByArtifactId(researchId, principal.workspaceId);
         if (task?.status !== 'completed' || task.parameters.mode === 'general' || !task.result) {
             return NextResponse.json({ error: 'Research artifact not found' }, { status: 404 });
         }

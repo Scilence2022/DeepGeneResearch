@@ -2,6 +2,7 @@ import { GeneResearchTask, ResearchParameters, TERMINAL_TASK_STATUSES, createTas
 import { promises as fs } from 'fs';
 import path from 'path';
 import { createHash, randomUUID } from 'node:crypto';
+import { acquireTaskLedgerLock, SqliteTaskLedger, type StoredTask } from './sqlite-task-ledger';
 
 export class IdempotencyConflictError extends Error {
   constructor(idempotencyKey: string) {
@@ -47,12 +48,17 @@ const STORAGE_FILE = process.env.MCP_TASK_STORAGE_FILE
   : path.join(process.cwd(), 'tasks.json');
 const STORAGE_DIR = path.dirname(STORAGE_FILE);
 const RESULT_DIR = path.join(STORAGE_DIR, 'research-results');
+const SQLITE_FILE = STORAGE_FILE + '.sqlite';
+const BACKEND = process.env.DGR_TASK_BACKEND || 'json';
+let sqliteLedger: SqliteTaskLedger | undefined;
 const IS_EPHEMERAL_RUNTIME = Boolean(process.env.VERCEL || process.env.CF_PAGES);
 const ALLOW_EPHEMERAL_TASK_STORAGE = process.env.DGR_ALLOW_EPHEMERAL_TASK_STORAGE === 'true';
 const CONFIGURED_WORKER_COUNT = Number(process.env.DGR_WORKER_COUNT || process.env.WEB_CONCURRENCY || 1);
 let warnedAboutEphemeralOverride = false;
 
 function assertSupportedRuntime() {
+  if (!['json', 'sqlite'].includes(BACKEND)) throw new Error('Invalid DGR_TASK_BACKEND');
+
   if (!Number.isInteger(CONFIGURED_WORKER_COUNT) || CONFIGURED_WORKER_COUNT !== 1) {
     throw new Error(
       'The file-backed durable task store requires exactly one Node worker. ' +
@@ -85,9 +91,8 @@ function assertSupportedRuntime() {
 // 1. 内存缓存所有任务（读写 O(1)）
 // 2. 文件操作排队执行（串行化，消除单进程 race condition）
 // 3. 每次状态变更使用临时文件 + 原子重命名持久化
-// This lock is intentionally process-local. Deployment is fail-closed when a
-// multi-worker configuration is declared; a horizontally scaled deployment
-// requires a database queue and cross-process lease implementation.
+// A separate SQLite lock guards the ledger against a second process. The
+// Promise chain serializes mutations inside the owning process.
 
 // 内存缓存
 let taskCache: Map<string, GeneResearchTask> = new Map();
@@ -149,6 +154,14 @@ async function withFileLock<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 // 确保存储文件存在
+export async function ensureTaskLedgerOwnership(): Promise<void> {
+  assertSupportedRuntime();
+  await fs.mkdir(STORAGE_DIR, { recursive: true, mode: 0o700 });
+  if (process.env.NODE_ENV !== 'test') {
+    acquireTaskLedgerLock(path.join(await fs.realpath(STORAGE_DIR), path.basename(STORAGE_FILE)));
+  }
+}
+
 async function ensureStorageFile(): Promise<void> {
   await fs.mkdir(STORAGE_DIR, { recursive: true });
   try {
@@ -180,14 +193,30 @@ async function loadFromDisk(): Promise<void> {
 
   await withFileLock(async () => {
     if (cacheLoaded) return;
+    let fromSqlite = false;
     try {
-      await ensureStorageFile();
-      const data = await fs.readFile(STORAGE_FILE, 'utf8');
-      const parsed: unknown = JSON.parse(data);
+      await ensureTaskLedgerOwnership();
+      if (BACKEND === 'sqlite') {
+        sqliteLedger ??= new SqliteTaskLedger(SQLITE_FILE);
+      } else {
+        const migrated = await fs.stat(SQLITE_FILE).catch(error => {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          return null;
+        });
+        if (migrated) throw new Error('SQLite task ledger exists. Use DGR_TASK_BACKEND=sqlite or restore an explicit backup.');
+      }
+      fromSqlite = Boolean(sqliteLedger);
+      const sqliteRows = sqliteLedger?.read() ?? null;
+      let parsed: unknown = sqliteRows;
+      if (sqliteRows === null) {
+        fromSqlite = false;
+        await ensureStorageFile();
+        parsed = JSON.parse(await fs.readFile(STORAGE_FILE, 'utf8'));
+      }
       if (!Array.isArray(parsed)) {
         throw new TaskStoreCorruptionError('Task store root must be a JSON array');
       }
-      const tasks = parsed as (GeneResearchTask & { resultSha256?: string })[];
+      const tasks = parsed as StoredTask[];
       taskCache.clear();
       const idempotencyKeys = new Set<string>();
       for (const task of tasks) {
@@ -195,6 +224,7 @@ async function loadFromDisk(): Promise<void> {
           !task ||
           typeof task.id !== 'string' ||
           !task.id ||
+          (task.workspaceId !== undefined && (typeof task.workspaceId !== 'string' || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(task.workspaceId))) ||
           !task.parameters ||
           (task.parameters.mode === 'general'
             ? typeof task.parameters.query !== 'string'
@@ -213,12 +243,13 @@ async function loadFromDisk(): Promise<void> {
           throw new TaskStoreCorruptionError(`Task store contains duplicate task id ${task.id}`);
         }
         if (task.parameters.idempotencyKey) {
-          if (idempotencyKeys.has(task.parameters.idempotencyKey)) {
+          const scopedKey = JSON.stringify([task.workspaceId, task.parameters.idempotencyKey]);
+          if (idempotencyKeys.has(scopedKey)) {
             throw new TaskStoreCorruptionError(
               `Task store contains duplicate idempotency key ${task.parameters.idempotencyKey}`
             );
           }
-          idempotencyKeys.add(task.parameters.idempotencyKey);
+          idempotencyKeys.add(scopedKey);
         }
         const { resultSha256, ...data } = task;
         const restored = {
@@ -238,13 +269,14 @@ async function loadFromDisk(): Promise<void> {
         }
         taskCache.set(task.id, restored);
       }
+      if (sqliteLedger && sqliteRows === null) await writeCacheToDiskUnlocked(taskCache, new Map(), true);
       cacheLoaded = true;
       console.log(`[TaskStore] Loaded ${tasks.length} tasks from disk`);
     } catch (error) {
-      console.error('[TaskStore] Failed to load from disk:', error);
+      console.error('[TaskStore] Failed to load from disk:', error instanceof Error ? error.name : 'UnknownError');
       // Preserve a corrupt ledger for forensic recovery rather than silently
       // destroying every queued research task.
-      if (error instanceof SyntaxError || error instanceof TaskStoreCorruptionError) {
+      if (!fromSqlite && (error instanceof SyntaxError || error instanceof TaskStoreCorruptionError)) {
         const quarantinePath = `${STORAGE_FILE}.corrupt.${Date.now()}`;
         console.log(`[TaskStore] Detected corrupted task store; moving it to ${quarantinePath}`);
         try {
@@ -302,9 +334,14 @@ function digestResult(contents: string): string {
   return createHash('sha256').update(contents).digest('hex');
 }
 
-async function writeCacheToDiskUnlocked(snapshot: Map<string, GeneResearchTask>): Promise<void> {
-  const tasks = [];
+async function writeCacheToDiskUnlocked(
+  snapshot: Map<string, GeneResearchTask>,
+  previous: Map<string, GeneResearchTask>,
+  initialize = false,
+): Promise<void> {
+  const tasks: StoredTask[] = [];
   for (const task of snapshot.values()) {
+    if (sqliteLedger && previous.get(task.id) === task) continue;
     if (task.status !== 'completed' || task.result === undefined) {
       tasks.push(task);
       continue;
@@ -312,6 +349,9 @@ async function writeCacheToDiskUnlocked(snapshot: Map<string, GeneResearchTask>)
     let digest = resultDigests.get(task);
     if (!digest) {
       const contents = JSON.stringify(task.result);
+      if (!initialize && Buffer.byteLength(contents) > 64 * 1024 * 1024) {
+        throw new Error('Research result exceeds the 64 MiB artifact limit');
+      }
       digest = digestResult(contents);
       // Persist the immutable result first. A failed index write can leave an
       // unreferenced artifact, but an acknowledged task always has its result.
@@ -321,7 +361,11 @@ async function writeCacheToDiskUnlocked(snapshot: Map<string, GeneResearchTask>)
     const { result: _result, ...metadata } = task;
     tasks.push({ ...metadata, resultSha256: digest });
   }
-  await writeStorageFileDurably(JSON.stringify(tasks, null, 2));
+  if (sqliteLedger) {
+    sqliteLedger.write(tasks, [...previous.keys()].filter(id => !snapshot.has(id)), initialize);
+  } else {
+    await writeStorageFileDurably(JSON.stringify(tasks, null, 2));
+  }
 }
 
 async function mutateCacheAndSync<T>(operation: () => { result: T; changed: boolean }): Promise<T> {
@@ -333,7 +377,7 @@ async function mutateCacheAndSync<T>(operation: () => { result: T; changed: bool
       const snapshot = taskCache;
       taskCache = previousCache;
       if (changed) {
-        await writeCacheToDiskUnlocked(snapshot);
+        await writeCacheToDiskUnlocked(snapshot, previousCache);
         taskCache = snapshot;
       }
       return result;
@@ -363,10 +407,10 @@ class TaskStore {
     return tasks;
   }
 
-  async listTasks(offset: number, limit: number, includeResult: boolean) {
+  async listTasks(offset: number, limit: number, includeResult: boolean, workspaceId?: string) {
     await this.ensureCache();
     await fileLock;
-    const tasks = Array.from(taskCache.values()).filter(task => task.parameters.mode !== 'general');
+    const tasks = Array.from(taskCache.values()).filter(task => task.workspaceId === workspaceId && task.parameters.mode !== 'general');
     return {
       total: tasks.length,
       tasks: tasks.slice(offset, offset + limit).map(task => {
@@ -387,12 +431,22 @@ class TaskStore {
     return task;
   }
 
-  async getTaskByArtifactId(artifactId: string): Promise<GeneResearchTask | null> {
+  async getTaskByArtifactId(artifactId: string, workspaceId?: string): Promise<GeneResearchTask | null> {
     await this.ensureCache();
     await fileLock;
-    const task = taskCache.get(artifactId) ?? Array.from(taskCache.values())
-      .find(candidate => candidate.result?.download?.researchId === artifactId);
+    const direct = taskCache.get(artifactId);
+    if (direct && direct.workspaceId === workspaceId) return cloneTask(direct);
+    const task = Array.from(taskCache.values()).find(candidate =>
+      candidate.workspaceId === workspaceId && candidate.result?.download?.researchId === artifactId);
     return task ? cloneTask(task) : null;
+  }
+
+  async getArtifactSize(taskId: string): Promise<number | undefined> {
+    await this.ensureCache();
+    await fileLock;
+    const task = taskCache.get(taskId);
+    const digest = task && resultDigests.get(task);
+    return digest ? (await fs.stat(path.join(RESULT_DIR, `${digest}.json`))).size : undefined;
   }
 
   async getTaskMetadata(taskId: string): Promise<GeneResearchTask | null> {
@@ -404,11 +458,11 @@ class TaskStore {
     return cloneTask(metadata);
   }
 
-  async findTaskByIdempotencyKey(idempotencyKey?: string): Promise<GeneResearchTask | null> {
+  async findTaskByIdempotencyKey(idempotencyKey?: string, workspaceId?: string): Promise<GeneResearchTask | null> {
     if (!idempotencyKey) return null;
     await this.ensureCache();
     await fileLock;
-    const task = Array.from(taskCache.values()).find(task => task.parameters.idempotencyKey === idempotencyKey);
+    const task = Array.from(taskCache.values()).find(task => task.workspaceId === workspaceId && task.parameters.idempotencyKey === idempotencyKey);
     return task ? cloneTask(task) : null;
   }
 
@@ -449,13 +503,13 @@ class TaskStore {
     });
   }
 
-  async createOrGetTask(parameters: ResearchParameters, maxActiveTasks = Infinity): Promise<{ task: GeneResearchTask; created: boolean }> {
+  async createOrGetTask(parameters: ResearchParameters, maxActiveTasks = Infinity, workspaceId?: string): Promise<{ task: GeneResearchTask; created: boolean }> {
     await this.ensureCache();
 
     return mutateCacheAndSync<{ task: GeneResearchTask; created: boolean }>(() => {
       if (parameters.idempotencyKey) {
         const existing = Array.from(taskCache.values()).find(
-          task => task.parameters.idempotencyKey === parameters.idempotencyKey
+          task => task.workspaceId === workspaceId && task.parameters.idempotencyKey === parameters.idempotencyKey
         );
         if (existing) {
           if (!sameIdempotentRequest(existing.parameters, parameters)) {
@@ -465,9 +519,19 @@ class TaskStore {
         }
       }
 
+      // Charge admission to the workspace even if a job fails or is cancelled.
+      // Idempotent replays above do not consume another slot.
+      const dailyCutoff = Date.now() - 86_400_000;
+      const dailyLimit = workspaceId ? 120 : 500;
+      let dailyTasks = 0;
       let activeTasks = 0;
+      let activeWorkspaceTasks = 0;
       for (const task of taskCache.values()) {
-        if (!TERMINAL_TASK_STATUSES.has(task.status) && ++activeTasks >= maxActiveTasks) {
+        if (task.workspaceId === workspaceId && task.createdAt.getTime() > dailyCutoff && ++dailyTasks >= dailyLimit) {
+          throw new TaskCapacityError();
+        }
+        if (TERMINAL_TASK_STATUSES.has(task.status)) continue;
+        if (++activeTasks >= maxActiveTasks || (workspaceId && task.workspaceId === workspaceId && ++activeWorkspaceTasks >= 10)) {
           throw new TaskCapacityError();
         }
       }
@@ -475,7 +539,7 @@ class TaskStore {
       // The durable record must not retain references owned by an HTTP/MCP
       // caller; later caller mutation would otherwise change cache state
       // without an event sequence increment or disk write.
-      const task = createTask(structuredClone(parameters));
+      const task = { ...createTask(structuredClone(parameters)), workspaceId };
       taskCache.set(task.id, task);
       return { result: { task: cloneTask(task), created: true }, changed: true };
     });

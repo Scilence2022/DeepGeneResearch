@@ -1,3 +1,4 @@
+import { researchBudget } from '@/services/research-run-budget';
 import { lookup } from 'node:dns/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
@@ -113,6 +114,13 @@ export function readBoundedTextResponse(response: IncomingMessage, maxBytes: num
     };
     const onData = (chunk: Buffer | string) => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      try {
+        researchBudget()?.charge('downloadedBytes', buffer.length);
+      } catch (error) {
+        fail(error as Error);
+        response.destroy();
+        return;
+      }
       received += buffer.length;
       if (received > maxBytes) {
         fail(new Error(`Crawler response exceeded ${maxBytes} bytes`));
@@ -209,6 +217,13 @@ export function readBoundedBufferResponse(response: IncomingMessage, maxBytes: n
     };
     const onData = (chunk: Buffer | string) => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      try {
+        researchBudget()?.charge('downloadedBytes', buffer.length);
+      } catch (error) {
+        fail(error as Error);
+        response.destroy();
+        return;
+      }
       received += buffer.length;
       if (received > maxBytes) {
         fail(new Error(`Crawler response exceeded ${maxBytes} bytes`));
@@ -271,6 +286,7 @@ async function fetchPublicResource<T>(
   const resolved = await resolvePublicUrl(rawUrl, deadline);
   const request = resolved.url.protocol === 'https:' ? httpsRequest : httpRequest;
 
+  researchBudget()?.charge('providerRequests');
   return new Promise((resolve, reject) => {
     const req = request(
       resolved.url,

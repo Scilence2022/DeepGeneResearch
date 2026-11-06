@@ -11,7 +11,7 @@ import { GeneAPIIntegrations, createGeneAPIIntegrations } from './api-integratio
 import { createSearchProvider } from '@/utils/deep-research/search';
 import { fetchPublicText } from '@/utils/safe-public-fetch';
 import pLimit from 'p-limit';
-import { compareWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
+import { compareSourceWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
 import {
   buildFullTextEvidenceSpans,
   parseUserResearchPdf,
@@ -89,6 +89,7 @@ export interface GeneResearchConfig {
   signal?: AbortSignal;
   onProgress?: (data: Record<string, any>) => void;
   userDocumentIds?: string[];
+  workspaceId?: string;
 }
 
 export interface GeneResearchResult {
@@ -812,7 +813,7 @@ export class GeneResearchEngine {
       this.assertNotCancelled();
       const startedAt = Date.now();
       try {
-        const fullText = await parseUserResearchPdf(documentId, this.config.signal);
+        const fullText = await parseUserResearchPdf(documentId, this.config.signal, this.config.workspaceId);
         const relevance = this.assessSourceRelevance({ title: fullText.name, content: fullText.text });
         const evidence = relevance.accepted
           ? buildFullTextEvidenceSpans(fullText, this.fullTextTarget(), this.evidenceSpanBudget)
@@ -823,8 +824,6 @@ export class GeneResearchEngine {
           url: `urn:${documentId}`,
           database: 'user_document',
           sourceId: documentId,
-          pmid: fullText.identifiers.pmid,
-          doi: fullText.identifiers.doi,
           geneSymbol: this.config.geneSymbol,
           organism: this.config.organism,
           targetMatch: accepted,
@@ -940,6 +939,7 @@ export class GeneResearchEngine {
         if (acquisition.metadata.isRetracted) {
           source.evidenceRole = 'excluded';
           source.structuredData = { ...(source.structuredData || {}), retracted: true };
+          return;
         }
         const content = acquisition.content;
         if (!content && enabledProviders.includes('asta') && fullTextEnv.astaApiKey) {
@@ -954,7 +954,7 @@ export class GeneResearchEngine {
               }));
             const snippets = await astaDiscovery;
             const snippet = snippets.find(({ document }) =>
-              compareWorkIdentity(identifiers, document.identifiers) === 'match'
+              compareSourceWorkIdentity(source, document.identifiers) === 'match'
               && this.assessSourceRelevance({ title: document.name, content: document.text }).accepted);
             if (snippet && !acquisition.metadata.isRetracted) {
               source.structuredData = {
@@ -986,7 +986,7 @@ export class GeneResearchEngine {
         }
         const fullText = content?.document;
         if (!content || !fullText) return;
-        if (fullText.origin === 'snippet' || compareWorkIdentity(identifiers, fullText.identifiers) === 'conflict') {
+        if (fullText.origin === 'snippet' || compareSourceWorkIdentity(source, fullText.identifiers) !== 'match') {
           throw new Error('Acquired document is not verified as full text for the requested work');
         }
         const relevance = this.assessSourceRelevance({ title: source.title, content: fullText.text });

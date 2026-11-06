@@ -263,7 +263,7 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     expect(repeated.operations.some(operation => operation.field === 'note')).toBe(false);
   });
 
-  it('binds a user-PDF finding to canonical full text, exact offsets, and one PMID record', () => {
+  it('binds a public PDF finding to canonical full text, exact offsets, and one PMID record', () => {
     const text = `${'Background measurements established the experimental conditions. '.repeat(4)}The Escherichia coli lysC gene was tested. Deletion of lysC reduced growth under lysine limitation.`;
     const excerpt = 'Deletion of lysC reduced growth under lysine limitation.';
     const excerptStart = text.indexOf(excerpt);
@@ -274,16 +274,16 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
       organism: 'Escherichia coli',
       target: { ...target, featureId: 'b4024', locusTag: 'b4024', geneSymbol: 'lysC' },
       sources: [{
-        title: 'User-provided lysC study',
+        title: 'Public lysC study',
         sourceId: `sha256:${documentSha256}`,
-        url: `urn:sha256:${documentSha256}`,
-        database: 'user_document',
+        url: 'https://pubmed.ncbi.nlm.nih.gov/28751/',
+        database: 'pubmed',
         pmid: '28751',
         evidenceRole: 'reference',
         structuredData: { targetRelevance: { accepted: true, directness: 'direct' } },
         fullText: {
           schema: 'dgr.full-text-document.v1',
-          origin: 'user_upload',
+          origin: 'pdf',
           name: 'lysC-study.pdf',
           documentSha256,
           text,
@@ -329,10 +329,10 @@ describe('CodeXomics annotation ChangeSet proposal v2', () => {
     });
     const record = proposal.evidenceManifest.sourceRecords.find(item => item.id === fact?.evidenceIds[0]);
     expect(record).toMatchObject({
-      database: 'user_document',
+      database: 'pubmed',
       identifiers: [{ scheme: 'pmid', value: '28751' }],
       sourceBinding: {
-        selector: { database: 'user_document', identifier: { scheme: 'pmid', value: '28751' } },
+        selector: { database: 'pubmed', identifier: { scheme: 'pmid', value: '28751' } },
         content: {
           relativeJsonPointer: '/fullText/text',
           canonicalization: 'dgr.full-text.v1',

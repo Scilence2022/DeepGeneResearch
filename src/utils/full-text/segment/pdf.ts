@@ -1,3 +1,6 @@
+import { Worker } from 'node:worker_threads';
+import { researchBudget } from '@/services/research-run-budget';
+import { pdfWorkerSource } from './pdf-worker-source';
 import { createHash } from 'crypto';
 import {
   FULL_TEXT_CANONICALIZATION,
@@ -29,48 +32,47 @@ export interface PdfSegmentInput {
  * CORE, OpenAlex fallbacks).
  */
 export async function segmentPdfDocument(input: PdfSegmentInput): Promise<FullTextDocument> {
-  input.signal?.throwIfAborted();
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  input.signal?.throwIfAborted();
-  const loadingTask = pdfjs.getDocument({
-    data: input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes),
-    disableFontFace: true,
-    isEvalSupported: false,
-    useSystemFonts: true,
-  });
-  let disposal: Promise<void> | undefined;
-  const dispose = () => (disposal ??= loadingTask.destroy());
-  const onAbort = () => { void dispose().catch(() => undefined); };
-  input.signal?.addEventListener('abort', onAbort, { once: true });
-  let pageCount = 0;
-  let characters = 0;
-  const pageTexts: string[] = [];
-  try {
-    const document = await loadingTask.promise;
-    pageCount = document.numPages;
-    if (pageCount > 500) throw new Error(`${input.name} exceeds the 500-page PDF limit`);
-    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-      input.signal?.throwIfAborted();
-      const page = await document.getPage(pageNumber);
-      const textContent = await page.getTextContent();
-      const text = canonicalizeFullText(
-        textContent.items
-          .filter((item: any) => typeof item?.str === 'string')
-          .map((item: any) => item.str)
-          .join(' '),
-      );
-      pageTexts.push(text);
-      page.cleanup();
-      characters += text.length;
-      if (characters > MAX_FULL_TEXT_CHARACTERS) {
-        throw new Error(`${input.name} exceeds the ${MAX_FULL_TEXT_CHARACTERS}-character full-text limit`);
+  const signal = input.signal
+    ? AbortSignal.any([input.signal, AbortSignal.timeout(25_000)])
+    : AbortSignal.timeout(25_000);
+  signal.throwIfAborted();
+  const budget = researchBudget();
+  const rawPages = await new Promise<string[]>((resolve, reject) => {
+    const worker = new Worker(pdfWorkerSource, {
+      eval: true,
+      workerData: {
+        bytes: input.bytes,
+        pageLimit: Math.min(500, budget?.remaining('parsedPages') ?? Infinity),
+        characterLimit: Math.min(MAX_FULL_TEXT_CHARACTERS, budget?.remaining('parsedCharacters') ?? Infinity),
+      },
+      resourceLimits: { maxOldGenerationSizeMb: 256 },
+    });
+    const finish = (error?: unknown, pages?: string[]) => {
+      signal.removeEventListener('abort', abort);
+      void worker.terminate().catch(() => undefined);
+      if (pages) resolve(pages);
+      else reject(error);
+    };
+    const abort = () => finish(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    worker.on('message', message => {
+      try {
+        if ('parsedCharacters' in message) {
+          budget?.charge('parsedPages');
+          budget?.charge('parsedCharacters', message.parsedCharacters);
+        } else if (message.pages) finish(undefined, message.pages);
+        else finish(new Error('PDF is unreadable or exceeds parsing limits'));
+      } catch (error) {
+        finish(error);
       }
-    }
-  } finally {
-    input.signal?.removeEventListener('abort', onAbort);
-    await dispose().catch(() => undefined);
-  }
-  input.signal?.throwIfAborted();
+    });
+    worker.once('error', () => finish(new Error('PDF worker failed')));
+    worker.once('exit', () => finish(new Error('PDF worker exited before returning text')));
+    if (signal.aborted) abort();
+  });
+  signal.throwIfAborted();
+  const pageTexts = rawPages.map(canonicalizeFullText);
+  const pageCount = pageTexts.length;
 
   const pages: FullTextPage[] = [];
   let text = '';

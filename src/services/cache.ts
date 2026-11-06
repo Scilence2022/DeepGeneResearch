@@ -3,14 +3,14 @@ import { Md5 } from 'ts-md5';
 import packageMetadata from '../../package.json';
 import { normalizeAnnotationQualifierValue } from '@/utils/gene-research/current-annotation';
 import type { CurrentAnnotationSnapshot } from '@/contracts/annotation-change-set';
-import { compareWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
+import { compareSourceWorkIdentity } from '@/utils/full-text/work-identity';
 
 // v7 invalidates results built before no-information notes and the agent/timestamp
 // provenance clause. v6 invalidated pre-note results; v6-era results lack the
 // provenance suffix and must not be reused.
 // and all-source-citation semantics. Older cached results lack the note
 // artifact and would silently suppress the Genome Annotation Note update.
-const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v9';
+const CACHE_SCHEMA_VERSION = 'dgr-research-cache-v10';
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 const NON_SEMANTIC_PARAMETER_KEYS = new Set([
   'idempotencyKey',
@@ -280,8 +280,10 @@ export function isReusableResearchResult(
 
   const uniqueSources = new Map<string, any>();
   for (const source of Array.isArray(result?.sources) ? result.sources : []) {
+    if (source?.structuredData?.retracted === true) return false;
     if (source?.fullText && (source.fullText.origin === 'snippet'
-      || compareWorkIdentity(workIdentifiers(source), source.fullText.identifiers || {}) === 'conflict')) return false;
+      || (source.fullText.origin !== 'user_upload'
+        && compareSourceWorkIdentity(source, source.fullText.identifiers || {}) !== 'match'))) return false;
     const identity = sourceIdentity(source);
     if (!identity || sourcePayload(source).length < 80) continue;
     const existing = uniqueSources.get(identity);
@@ -309,9 +311,9 @@ class CacheService {
     return cacheStorage.delete(key);
   }
 
-  async getCachedResult(parameters: GeneResearchParameters): Promise<any | null> {
+  async getCachedResult(parameters: GeneResearchParameters, workspaceId?: string): Promise<any | null> {
     try {
-      const key = generateCacheKey(parameters);
+      const key = JSON.stringify([workspaceId, generateCacheKey(parameters)]);
       const cacheItem = cacheStorage.get(key);
       if (!cacheItem) return null;
 
@@ -329,10 +331,10 @@ class CacheService {
     }
   }
 
-  async setCachedResult(parameters: GeneResearchParameters, result: any): Promise<void> {
+  async setCachedResult(parameters: GeneResearchParameters, result: any, workspaceId?: string): Promise<void> {
     try {
       if (!isReusableResearchResult(parameters, result)) return;
-      const key = generateCacheKey(parameters);
+      const key = JSON.stringify([workspaceId, generateCacheKey(parameters)]);
       const now = new Date();
       const bytes = Buffer.byteLength(JSON.stringify(result));
       if (bytes > MAX_CACHE_BYTES) return;
@@ -353,9 +355,9 @@ class CacheService {
     }
   }
 
-  async deleteCachedResult(parameters: GeneResearchParameters): Promise<boolean> {
+  async deleteCachedResult(parameters: GeneResearchParameters, workspaceId?: string): Promise<boolean> {
     try {
-      return this.evict(generateCacheKey(parameters));
+      return this.evict(JSON.stringify([workspaceId, generateCacheKey(parameters)]));
     } catch (error) {
       console.error('Error deleting cached result:', error);
       return false;

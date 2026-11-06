@@ -1,3 +1,5 @@
+import { reserveModelCall } from '@/services/research-run-budget';
+import { buildReviewEvidence } from '@/utils/gene-research/review-evidence';
 import { streamText, generateText } from "ai";
 import { type GoogleGenerativeAIProviderMetadata } from "@ai-sdk/google";
 import { createAIProvider } from "./provider";
@@ -244,7 +246,7 @@ class DeepResearch {
     this.onMessage("progress", { step: "report-plan", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const result = streamText({
-      maxTokens: 8192,
+      ...reserveModelCall(8192),
       abortSignal: signal,
       model: await this.getThinkingModel(),
       system: getSystemPrompt(),
@@ -291,7 +293,7 @@ class DeepResearch {
     this.onMessage("progress", { step: "serp-query", status: "start" });
     const thinkTagStreamProcessor = new ThinkTagStreamProcessor();
     const { text, usage, providerMetadata } = await generateText({
-      maxTokens: 4096,
+      ...reserveModelCall(4096),
       abortSignal: signal,
       model: await this.getThinkingModel(),
       system: getSystemPrompt(),
@@ -386,7 +388,7 @@ class DeepResearch {
         };
 
         searchResult = streamText({
-          maxTokens: 4096,
+          ...reserveModelCall(4096),
           abortSignal: signal,
           model: await this.getTaskModel(),
           system: getSystemPrompt(),
@@ -414,7 +416,7 @@ class DeepResearch {
           throw new Error(errorMessage);
         }
         searchResult = streamText({
-          maxTokens: 4096,
+          ...reserveModelCall(4096),
           abortSignal: signal,
           model: await this.getTaskModel(),
           system: getSystemPrompt(),
@@ -551,7 +553,7 @@ class DeepResearch {
       (item) => item.url
     );
     const result = streamText({
-      maxTokens: 8192,
+      ...reserveModelCall(8192),
       abortSignal: signal,
       model: await this.getThinkingModel(),
       system: [getSystemPrompt(), outputGuidelinesPrompt].join("\n\n"),
@@ -765,6 +767,7 @@ class DeepResearch {
       literatureBudget?: number;
       fullTextBudget?: number;
       userDocumentIds?: string[];
+      workspaceId?: string;
     },
     signal?: AbortSignal,
     enableVisualization = true,
@@ -810,6 +813,7 @@ class DeepResearch {
         userPrompt: explicitGeneInfo?.userPrompt,
         reportReference: taskId ? `DGR-${taskId}` : undefined,
         userDocumentIds: explicitGeneInfo?.userDocumentIds,
+        workspaceId: explicitGeneInfo?.workspaceId,
         literatureBudget: explicitGeneInfo?.literatureBudget,
         fullTextBudget: explicitGeneInfo?.fullTextBudget,
         supplementalQueries,
@@ -845,7 +849,7 @@ class DeepResearch {
           .filter((source: any) => String(source?.database || '').toLowerCase() === 'pubmed')
           .filter((source: any) => {
             const relevance = source?.structuredData?.targetRelevance;
-            return relevance?.accepted === true;
+            return source.structuredData?.retracted !== true && relevance?.accepted === true;
           })
           .map((source: any) => String(
             source?.structuredData?.literatureReferences?.[0]?.pmid
@@ -886,6 +890,7 @@ class DeepResearch {
         retainedFromLiteratureReview?: boolean;
         structuredData?: Record<string, any>;
       }) => {
+        if (source.structuredData?.retracted === true) return false;
         if (source.targetMatch === true && source.authoritative === true) return true;
         if (source.retainedFromLiteratureReview === true) return true;
         const retainedRelevance = source.structuredData?.targetRelevance;
@@ -989,10 +994,11 @@ class DeepResearch {
       const researchResult = {
         title: result.report.title,
         finalReport,
-        ...(explicitGeneInfo?.target && synthesizedReport ? { exploratoryNarrative: synthesizedReport } : {}),
+        ...(explicitGeneInfo?.target && synthesizedReport ? { exploratoryNarrative: synthesizedReport, exploratoryNarrativeStatus: "unverified" as const } : {}),
         annotationNote,
         researchSummary,
         evidenceRecords: (result as any)?.evidenceRecords ?? null,
+        reviewEvidence: buildReviewEvidence(sources),
         learnings: [
           ...llmLearnings,
           ...result.sources.flatMap((source: any) =>
@@ -1085,7 +1091,7 @@ class DeepResearch {
         `User research question: ${researchQuestion}`,
       ].filter(Boolean).join("\n");
       const { text, usage, providerMetadata } = await generateText({
-        maxTokens: 4096,
+        ...reserveModelCall(4096),
         model: await this.getThinkingModel(),
         system: getGeneResearchSystemPrompt(),
         prompt: [generateGeneSerpQueriesPrompt(plan), this.getResponseLanguagePrompt()].join("\n\n"),
@@ -1114,7 +1120,7 @@ class DeepResearch {
       return tasks.slice(0, 8);
     } catch (error) {
       if (signal?.aborted) throw error;
-      console.warn("Gene supplemental query generation failed; template queries stand alone:", error);
+      console.warn("Gene supplemental query generation failed; template queries stand alone:", error instanceof Error ? error.name : "UnknownError");
       this.onMessage("progress", {
         step: "gene-llm-queries",
         status: "end",
@@ -1167,7 +1173,7 @@ class DeepResearch {
           .filter(source => source.url && source.content);
         if (sources.length === 0) continue;
         const { text, usage, providerMetadata } = await generateText({
-          maxTokens: 4096,
+          ...reserveModelCall(4096),
           model: await this.getTaskModel(),
           system: getGeneResearchSystemPrompt(),
           prompt: [processGeneSearchResultPrompt(query, researchGoal, sources, true), this.getResponseLanguagePrompt()].join("\n\n"),
@@ -1185,7 +1191,7 @@ class DeepResearch {
       return learnings;
     } catch (error) {
       if (signal?.aborted) throw error;
-      console.warn("Gene literature summarization failed; template evidence stands alone:", error);
+      console.warn("Gene literature summarization failed; template evidence stands alone:", error instanceof Error ? error.name : "UnknownError");
       this.onMessage("progress", {
         step: "gene-llm-learnings",
         status: "end",
@@ -1234,7 +1240,7 @@ class DeepResearch {
         `Verified structured evidence compiled by the deterministic pipeline (treat as authoritative; reconcile conflicts and weigh uncertainty explicitly):\n\n${templateReport.slice(0, 20_000)}`,
       ].filter(Boolean).join("\n\n");
       const result = streamText({
-        maxTokens: 8192,
+        ...reserveModelCall(8192),
         model: await this.getThinkingModel(),
         system: [getGeneResearchSystemPrompt(), outputGuidelinesPrompt].join("\n\n"),
         prompt: [
@@ -1294,7 +1300,7 @@ class DeepResearch {
       return content;
     } catch (error) {
       if (signal?.aborted) throw error;
-      console.warn("Gene report synthesis failed; keeping the template report:", error);
+      console.warn("Gene report synthesis failed; keeping the template report:", error instanceof Error ? error.name : "UnknownError");
       this.onMessage("progress", { step: "gene-llm-report", status: "end", data: { fallback: true } });
       return null;
     }

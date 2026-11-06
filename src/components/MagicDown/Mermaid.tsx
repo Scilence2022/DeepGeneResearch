@@ -22,12 +22,17 @@ type Props = {
 const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyz", 8);
 
 async function loadMermaid(element: HTMLElement, code: string) {
+  // Diagram content cannot supply its own rendering configuration.
+  if (code.includes('%%{') || /^\s*---(?:\r?\n|$)/.test(code)) return;
   const { default: mermaid } = await import("mermaid");
   mermaid.initialize({ startOnLoad: false, securityLevel: "strict", htmlLabels: false });
   const canParse = await mermaid.parse(code, { suppressErrors: true });
   if (canParse) {
     await mermaid.render(nanoid(), code).then(({ svg }) => {
-      element.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+      element.innerHTML = DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+        FORBID_TAGS: ["a", "image", "foreignObject"],
+      });
     });
   }
 }
@@ -60,7 +65,7 @@ function Mermaid({ children }: Props) {
     const target = mermaidContainerRef.current;
     if (target) {
       setContent(target.innerText);
-      loadMermaid(target, target.innerText);
+      void loadMermaid(target, target.innerText).catch(() => undefined);
     }
   }, [children]);
 

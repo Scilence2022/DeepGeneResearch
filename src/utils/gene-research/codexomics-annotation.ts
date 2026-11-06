@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { assertAnnotationChangeSetProposalIntegrity } from '@/contracts/annotation-change-set';
 import { isPathwayIdentifier } from '@/contracts/annotation-identifiers';
-import { compareWorkIdentity, workIdentifiers } from '@/utils/full-text/work-identity';
+import { compareSourceWorkIdentity } from '@/utils/full-text/work-identity';
 import type {
   AnnotationChangeSetProposal,
   AnnotationOperation,
@@ -496,6 +496,7 @@ function extractEvidenceFromSources(sources: SourceLike[]): CodeXomicsEvidenceDe
       continue;
     }
 
+    if (source.fullText?.origin === 'user_upload' || source.database === 'user_document') continue;
     const literatureReference = source.structuredData?.literatureReferences?.[0];
     const pmidValue = source.pmid || literatureReference?.pmid || source.provenance?.provider === 'pubmed' && source.provenance?.recordId;
     const doiValue = source.doi || literatureReference?.doi;
@@ -1283,7 +1284,8 @@ function buildFullTextSourceBinding(
   if (
     fullText?.schema !== 'dgr.full-text-document.v1'
     || fullText.origin === 'snippet'
-    || compareWorkIdentity(workIdentifiers(source), fullText.identifiers || {}) === 'conflict'
+    || fullText.origin === 'user_upload'
+    || compareSourceWorkIdentity(source, fullText.identifiers || {}) !== 'match'
     || fullText.canonicalization !== FULL_TEXT_CANONICALIZATION
     || typeof fullText.text !== 'string'
     || fullText.text.length < 200
@@ -1457,7 +1459,8 @@ export interface CurationSummaryBundle {
  */
 export function buildAnnotationCurationSummary(input: BuildProposalInput): CurationSummaryBundle {
   const finalReport = input.finalReport || '';
-  const sources = input.sources || [];
+  const sources = (input.sources || []).filter(source =>
+    !source || typeof source === 'string' || source.structuredData?.retracted !== true);
   // Prioritize authoritative structured records so a long literature list
   // cannot crowd the exact UniProt/KEGG identity record out of the bounded
   // annotation manifest.
@@ -1631,9 +1634,10 @@ export function buildCodeXomicsAnnotationProposal(input: BuildProposalInput): Co
       ...input.prebuiltResearchSummary.literature,
     ].every(item => (item?.evidenceIds || []).every(id => prebuiltRecordIds.has(String(id))))
     && input.prebuiltResearchSummary.facts.every(fact => fact.literatureBasis?.kind !== 'full_text_span'
-      || fact.literatureBasis.sourceOrigin !== 'snippet')
-    && !sources.some(source => typeof source === 'object' && source?.fullText
-      && compareWorkIdentity(workIdentifiers(source), source.fullText.identifiers || {}) === 'conflict')
+      || !['snippet', 'user_upload'].includes(fact.literatureBasis.sourceOrigin))
+    && !sources.some(source => typeof source === 'object' && source
+      && (source.structuredData?.retracted === true || (source.fullText
+        && source.fullText.origin !== 'user_upload' && compareSourceWorkIdentity(source, source.fullText.identifiers || {}) !== 'match')))
     && (input.prebuiltCurationNote === undefined
       || input.prebuiltCurationNote === null
       || (input.prebuiltCurationNote.evidenceIds || []).every(id => prebuiltRecordIds.has(String(id))));

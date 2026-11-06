@@ -35,7 +35,7 @@ function cleanToolMarkers(content: string): string {
     .replace(/<\/TOOL_CALL>/gi, '');
 }
 
-function MarkdownBlock({ children: content, ...rest }: Options) {
+function MarkdownBlock({ children: content, allowImages = true, ...rest }: Options & { allowImages?: boolean }) {
   const remarkPlugins = useMemo(
     () => rest.remarkPlugins ?? [],
     [rest.remarkPlugins]
@@ -150,6 +150,7 @@ function MarkdownBlock({ children: content, ...rest }: Options) {
           );
         },
         img: (props) => {
+          if (!allowImages || typeof props.src !== "string" || !props.src) return null;
           const { className, src, alt, ...rest } = props;
           return (
             <picture

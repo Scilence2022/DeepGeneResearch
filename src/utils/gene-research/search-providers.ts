@@ -1,3 +1,5 @@
+import { readProviderText } from '@/utils/full-text/http';
+import { fetchResearchProvider, ResearchBudgetExceededError } from '@/services/research-run-budget';
 // Gene-specific search providers and database integrations
 // Specialized search capabilities for molecular biology databases
 
@@ -131,8 +133,8 @@ export interface GeneTargetRelevance {
 
 async function requireOk(response: Response, provider: string): Promise<Response> {
   if (response.ok) return response;
-  const body = (await response.text()).replace(/\s+/g, ' ').slice(0, 300);
-  throw new Error(`${provider} returned HTTP ${response.status}${body ? `: ${body}` : ''}`);
+  void response.body?.cancel().catch(() => undefined);
+  throw new Error(`${provider} returned HTTP ${response.status}`);
 }
 
 const NCBI_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -157,10 +159,10 @@ function abortableDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
 function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;
   const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 10_000);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
   const date = Date.parse(value);
   if (!Number.isFinite(date)) return null;
-  return Math.min(Math.max(0, date - Date.now()), 10_000);
+  return Math.max(0, date - Date.now());
 }
 
 async function waitForNcbiRequestSlot(apiKey?: string, signal?: AbortSignal): Promise<void> {
@@ -206,10 +208,10 @@ async function fetchNcbi(
     await waitForNcbiRequestSlot(apiKey, signal);
     let response: Response;
     try {
-      response = await fetch(url, { ...init, signal: createFetchSignal(signal) });
+      response = await fetchResearchProvider(url, { ...init, signal: createFetchSignal(signal) }, provider, attempt);
     } catch (error) {
       signal?.throwIfAborted();
-      if (attempt === maxAttempts) throw error;
+      if (error instanceof ResearchBudgetExceededError || attempt === maxAttempts) throw error;
       await abortableDelay(Math.min(2_000, 250 * (2 ** (attempt - 1))), signal);
       continue;
     }
@@ -219,6 +221,8 @@ async function fetchNcbi(
       return requireOk(response, provider);
     }
     const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+    if (retryAfterMs !== null && retryAfterMs > 10_000) return requireOk(response, provider);
+    void response.body?.cancel().catch(() => undefined);
     const backoffMs = retryAfterMs ?? Math.min(2_000, 250 * (2 ** (attempt - 1)));
     await abortableDelay(backoffMs, signal);
   }
@@ -547,7 +551,7 @@ export async function fetchPubMedIdsForGene(
     // NCBI occasionally emits literal control characters in JSON ELink
     // responses. XML lets us extract the numeric links without parsing those
     // unrelated text nodes, so one malformed field cannot erase a bibliography.
-    const xml = await response.text();
+    const xml = await readProviderText(response);
     const ids = splitXmlBlocks(xml, 'LinkSetDb')
       .filter(linkSet => extractTag(linkSet, 'DbTo').toLowerCase() === 'pubmed')
       .flatMap(linkSet => splitXmlBlocks(linkSet, 'Link').map(link => extractTag(link, 'Id')))
@@ -570,7 +574,7 @@ export async function fetchPubMedIdsForGene(
     `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?${geneParams.toString()}`,
     { apiKey: options.apiKey, signal: options.signal, provider: 'NCBI Gene record PubMed fallback' },
   );
-  const geneXml = await geneResponse.text();
+  const geneXml = await readProviderText(geneResponse);
   const fallbackIds = extractAllTags(geneXml, 'PubMedId').filter(id => /^\d+$/.test(id));
   return Array.from(new Set(fallbackIds)).slice(0, limit);
 }
@@ -597,7 +601,7 @@ export async function fetchGeneIdsForProteinAccession(
     `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?${searchParams.toString()}`,
     { apiKey: options.apiKey, signal: options.signal, provider: 'NCBI Protein accession esearch' },
   );
-  const searchData = await searchResponse.json();
+  const searchData = JSON.parse(await readProviderText(searchResponse));
   const proteinUids = Array.from(new Set(
     (searchData.esearchresult?.idlist || []).map(String).filter((id: string) => /^\d+$/.test(id)),
   )).slice(0, limit) as string[];
@@ -613,7 +617,7 @@ export async function fetchGeneIdsForProteinAccession(
     `${GENE_DATABASE_URLS.NCBI_EUTILS}elink.fcgi?${linkParams.toString()}`,
     { apiKey: options.apiKey, signal: options.signal, provider: 'NCBI Protein-Gene elink' },
   );
-  const linkData = await linkResponse.json();
+  const linkData = JSON.parse(await readProviderText(linkResponse));
   const geneIds = (linkData.linksets || [])
     .flatMap((linkset: any) => linkset.linksetdbs || [])
     .filter((linkset: any) => linkset.dbto === 'gene')
@@ -707,7 +711,7 @@ export async function searchPubMed({
             `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?${queryParams.toString()}`,
             { apiKey, signal, init: { headers }, provider: 'PubMed esearch' },
           );
-          const searchData = await searchResponse.json();
+          const searchData = JSON.parse(await readProviderText(searchResponse));
           const matchCount = Number(searchData.esearchresult?.count);
           if (Number.isFinite(matchCount)) totalMatchCount = Math.max(totalMatchCount ?? 0, matchCount);
           const page = (searchData.esearchresult?.idlist || []).map(String);
@@ -761,7 +765,7 @@ export async function searchPubMed({
             `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?${detailParams.toString()}`,
             { apiKey, signal, init: { headers }, provider: 'PubMed efetch' },
           );
-          const xmlData = await detailResponse.text();
+          const xmlData = await readProviderText(detailResponse);
           parsedSources.push(...parsePubMedResults(xmlData, {
             geneSymbol,
             organism,
@@ -885,11 +889,11 @@ export async function searchUniProt({
     for (const searchQuery of searchQueries) {
       attempts.push(searchQuery);
       try {
-        const response = await requireOk(await fetch(
+        const response = await requireOk(await fetchResearchProvider(
           `${GENE_DATABASE_URLS.UNIPROT_API}uniprotkb/search?query=${encodeURIComponent(searchQuery)}&format=json&size=${maxResult}`,
           { headers, signal: createFetchSignal(signal) }
         ), 'UniProt search');
-        const data = await response.json();
+        const data = JSON.parse(await readProviderText(response));
         for (const entry of data.results || []) {
           resultsByAccession.set(String(entry.primaryAccession || entry.uniProtkbId), entry);
         }
@@ -987,7 +991,7 @@ export async function searchNCBIGene({
         `${GENE_DATABASE_URLS.NCBI_EUTILS}esearch.fcgi?db=gene&term=${encodeURIComponent(searchQuery)}&retmax=${maxResult}&retmode=json`,
         { apiKey, signal, init: { headers }, provider: 'NCBI Gene esearch' },
       );
-      const data = await response.json();
+      const data = JSON.parse(await readProviderText(response));
       geneIds = (data.esearchresult?.idlist || []).map(String);
     }
 
@@ -1000,7 +1004,7 @@ export async function searchNCBIGene({
       `${GENE_DATABASE_URLS.NCBI_EUTILS}efetch.fcgi?db=gene&id=${geneIds.join(',')}&retmode=xml`,
       { apiKey, signal, init: { headers }, provider: 'NCBI Gene efetch' },
     );
-    const xmlData = await detailResponse.text();
+    const xmlData = await readProviderText(detailResponse);
 
     const parsedSources = parseNCBIGeneResults(
       xmlData,
@@ -1056,7 +1060,7 @@ export async function searchGEO({
       { apiKey, signal, init: { headers }, provider: 'GEO esearch' },
     );
 
-    const data = await response.json();
+    const data = JSON.parse(await readProviderText(response));
     const gdsIds = data.esearchresult?.idlist || [];
 
     if (gdsIds.length === 0) {
@@ -1068,7 +1072,7 @@ export async function searchGEO({
       `${GENE_DATABASE_URLS.GEO_API}efetch.fcgi?db=gds&id=${gdsIds.join(',')}&retmode=xml`,
       { apiKey, signal, init: { headers }, provider: 'GEO efetch' },
     );
-    const xmlData = await detailResponse.text();
+    const xmlData = await readProviderText(detailResponse);
 
     const sources = parseGEOResults(xmlData, geneSymbol, organism);
 
@@ -1110,12 +1114,12 @@ export async function searchPDB({
       ? `${geneSymbol} AND ${query}`
       : query;
 
-    const response = await fetch(
+    const response = await fetchResearchProvider(
       `${GENE_DATABASE_URLS.PDB_API}search?q=${encodeURIComponent(searchQuery)}&rows=${maxResult}&format=json`,
       { headers, signal: createFetchSignal(signal) }
     );
 
-    const data = await response.json();
+    const data = JSON.parse(await readProviderText(response));
     const sources = parsePDBResults(data.result?.docs || [], geneSymbol, organism);
 
     return {
@@ -1164,14 +1168,14 @@ export async function searchKEGG({
     const exactEntry = organismCode && locusTag ? `${organismCode}:${locusTag}` : null;
     const searchQuery = geneSymbol ? `${geneSymbol} ${organism || ''}`.trim() : query;
 
-    const response = await requireOk(await fetch(
+    const response = await requireOk(await fetchResearchProvider(
       exactEntry
         ? `${GENE_DATABASE_URLS.KEGG_API}list/${encodeURIComponent(exactEntry)}`
         : `${GENE_DATABASE_URLS.KEGG_API}find/genes/${encodeURIComponent(searchQuery)}`,
       { headers, signal: createFetchSignal(signal) }
     ), 'KEGG search');
 
-    const data = await response.text();
+    const data = await readProviderText(response);
     const sources = parseKEGGResults(data, geneSymbol, organism, locusTag, organismCode);
 
     return {
@@ -1212,12 +1216,12 @@ export async function searchSTRING({
       ? `${geneSymbol} AND ${query}`
       : query;
 
-    const response = await fetch(
+    const response = await fetchResearchProvider(
       `${GENE_DATABASE_URLS.STRING_API}tsv/network?identifiers=${encodeURIComponent(searchQuery)}&species=${organism || '9606'}&limit=${maxResult}`,
       { headers, signal: createFetchSignal(signal) }
     );
 
-    const data = await response.text();
+    const data = await readProviderText(response);
     const sources = parseSTRINGResults(data, geneSymbol, organism);
 
     return {
@@ -1258,12 +1262,12 @@ export async function searchOMIM({
       ? `${geneSymbol} AND ${query}`
       : query;
 
-    const response = await fetch(
+    const response = await fetchResearchProvider(
       `${GENE_DATABASE_URLS.OMIM_API}entry/search?search=${encodeURIComponent(searchQuery)}&limit=${maxResult}&format=json`,
       { headers, signal: createFetchSignal(signal) }
     );
 
-    const data = await response.json();
+    const data = JSON.parse(await readProviderText(response));
     const sources = parseOMIMResults(data, geneSymbol, organism);
 
     return {
@@ -1303,12 +1307,12 @@ export async function searchEnsembl({
       ? `${geneSymbol} AND ${query}`
       : query;
 
-    const response = await fetch(
+    const response = await fetchResearchProvider(
       `${GENE_DATABASE_URLS.ENSEMBL_API}lookup/symbol/homo_sapiens/${encodeURIComponent(searchQuery)}?expand=1`,
       { headers, signal: createFetchSignal(signal) }
     );
 
-    const data = await response.json();
+    const data = JSON.parse(await readProviderText(response));
     const sources = parseEnsemblResults(data, geneSymbol, organism);
 
     return {
@@ -1348,12 +1352,12 @@ export async function searchReactome({
       ? `${geneSymbol} AND ${query}`
       : query;
 
-    const response = await fetch(
+    const response = await fetchResearchProvider(
       `${GENE_DATABASE_URLS.REACTOME_API}search/query?query=${encodeURIComponent(searchQuery)}&species=${organism || 'Homo sapiens'}`,
       { headers, signal: createFetchSignal(signal) }
     );
 
-    const data = await response.json();
+    const data = JSON.parse(await readProviderText(response));
     const sources = parseReactomeResults(data, geneSymbol, organism);
 
     return {

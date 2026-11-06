@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/Internal/Button";
 import { ArrowLeft, FileText, FileSpreadsheet } from "lucide-react";
+import { useSettingStore } from "@/store/setting";
 import { useHistoryStore } from "@/store/history";
 import { downloadFile } from "@/utils/file";
 import { markdownToDoc } from "@/utils/markdown";
@@ -13,22 +14,21 @@ const MagicDown = dynamic(() => import("@/components/MagicDown"));
 
 export default function ReportView({ reportId }: { reportId: string }) {
   const router = useRouter();
+  const allowImages = useSettingStore(state => state.citationImage === "enable");
   const [report, setReport] = useState<TaskStore | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadReport = async () => {
-      const { load } = useHistoryStore.getState();
-      const loadedReport = load(reportId);
-
-      if (loadedReport) {
-        setReport(loadedReport);
-      }
-
+    const loadReport = () => {
+      setReport(useHistoryStore.getState().load(reportId) || null);
       setLoading(false);
     };
-
-    loadReport();
+    const persistence = useHistoryStore.persist;
+    if (persistence.hasHydrated()) {
+      loadReport();
+      return;
+    }
+    return persistence.onFinishHydration(loadReport);
   }, [reportId]);
 
   const getReportContent = () => {
@@ -157,6 +157,7 @@ export default function ReportView({ reportId }: { reportId: string }) {
               value={report.finalReport}
               onChange={() => {}}
               hideTools={true}
+              allowImages={allowImages}
             />
           )}
 

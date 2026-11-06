@@ -71,6 +71,7 @@ export type ResearchParameters = GeneResearchParameters | GeneralResearchParamet
 
 // 任务模型
 export interface GeneResearchTask {
+  workspaceId?: string;
   id: string;
   status: TaskStatus;
   progress: number;

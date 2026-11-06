@@ -75,8 +75,9 @@ function validateTasks(tasks) {
     }
     const key = task.parameters.idempotencyKey;
     if (key) {
-      if (idempotencyKeys.has(key)) throw new Error(`Task ledger contains duplicate idempotency key ${key}`);
-      idempotencyKeys.add(key);
+      const scopedKey = JSON.stringify([task.workspaceId, key]);
+      if (idempotencyKeys.has(scopedKey)) throw new Error(`Task ledger contains duplicate idempotency key ${key}`);
+      idempotencyKeys.add(scopedKey);
     }
   }
 }

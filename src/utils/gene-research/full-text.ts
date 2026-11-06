@@ -94,9 +94,9 @@ function decodeXmlEntities(value: string): string {
   });
 }
 
-export async function parseUserResearchPdf(documentId: string, signal?: AbortSignal): Promise<FullTextDocument> {
+export async function parseUserResearchPdf(documentId: string, signal?: AbortSignal, workspaceId?: string): Promise<FullTextDocument> {
   signal?.throwIfAborted();
-  const { descriptor, bytes } = await loadResearchDocument(documentId);
+  const { descriptor, bytes } = await loadResearchDocument(documentId, workspaceId);
   const { segmentPdfDocument } = await import('@/utils/full-text/segment/pdf');
   return segmentPdfDocument({
     bytes: new Uint8Array(bytes),

@@ -39,6 +39,9 @@ export const config = {
   matcher: ["/api/ai/:path*", "/api/search/:path*"],
 };
 
+let proxyWindowEnds = 0;
+let proxyRequests = 0;
+
 const ERRORS = {
   NO_PERMISSIONS: {
     code: 403,
@@ -73,6 +76,28 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
   }
 
+  const now = Date.now();
+  if (now >= proxyWindowEnds) {
+    proxyWindowEnds = now + 60_000;
+    proxyRequests = 0;
+  }
+  if (++proxyRequests > 120) {
+    return NextResponse.json({ error: "Provider proxy rate limit reached" }, {
+      status: 429, headers: { "Retry-After": String(Math.ceil((proxyWindowEnds - now) / 1000)) },
+    });
+  }
+
+  let requestModel = "";
+  if (request.body) {
+    try {
+      const body = await readBoundedJson(request.clone(), 2 * 1024 * 1024) as { model?: unknown } | null;
+      if (typeof body?.model === "string") requestModel = body.model;
+    } catch (error) {
+      const status = error && typeof error === "object" && "status" in error && error.status === 413 ? 413 : 400;
+      return NextResponse.json({ error: "Invalid or oversized provider request body" }, { status });
+    }
+  }
+
   const disabledAIProviders =
     DISABLED_AI_PROVIDER.length > 0 ? DISABLED_AI_PROVIDER.split(",") : [];
   const disabledSearchProviders =
@@ -94,28 +119,21 @@ export async function middleware(request: NextRequest) {
       request.nextUrl.pathname.includes(`models/${disabledModel}:`)
     );
   };
-  const hasDisabledAIModel = async () => {
+  const hasDisabledAIModel = () => {
     if (request.method.toUpperCase() === "GET") return false;
-    let model = "";
-    try {
-      const body = await readBoundedJson(request.clone(), 2 * 1024 * 1024) as { model?: unknown } | null;
-      if (typeof body?.model === "string") model = body.model;
-    } catch {
-      return true;
-    }
     const { availableModelList, disabledModelList } = getCustomModelList(
       MODEL_LIST.length > 0 ? MODEL_LIST.split(",") : []
     );
     const isAvailableModel = availableModelList.some(
-      (availableModel) => availableModel === model
+      (availableModel) => availableModel === requestModel
     );
     if (isAvailableModel) return false;
     if (disabledModelList.includes("all")) return true;
-    return disabledModelList.some((disabledModel) => disabledModel === model);
+    return disabledModelList.some((disabledModel) => disabledModel === requestModel);
   };
 
   if (isAI && provider === "siliconflow") {
-    if (disabledAIProviders.includes(provider) || await hasDisabledAIModel()) {
+    if (disabledAIProviders.includes(provider) || hasDisabledAIModel()) {
       return NextResponse.json({ error: ERRORS.NO_PERMISSIONS }, { status: 403 });
     }
     const apiKey = multiApiKeyPolling(SILICONFLOW_API_KEY);
@@ -165,7 +183,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "openrouter") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("openrouter") ||
       isDisabledModel
@@ -199,7 +217,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "openaicompatible") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("openaicompatible") ||
       isDisabledModel
@@ -233,7 +251,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "openai") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("openai") ||
       isDisabledModel
@@ -267,7 +285,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "anthropic") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("anthropic") ||
       isDisabledModel
@@ -305,7 +323,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "deepseek") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("deepseek") ||
       isDisabledModel
@@ -339,7 +357,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "xai") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("xai") ||
       isDisabledModel
@@ -373,7 +391,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "mistral") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("mistral") ||
       isDisabledModel
@@ -407,7 +425,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "azure") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("azure") ||
       isDisabledModel
@@ -441,7 +459,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   if (isAI && provider === "google-vertex") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("google-vertex") ||
       isDisabledModel
@@ -481,7 +499,7 @@ export async function middleware(request: NextRequest) {
   }
   // The pollinations model only verifies access to the backend API
   if (isAI && provider === "pollinations") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("pollinations") ||
       isDisabledModel
@@ -505,7 +523,7 @@ export async function middleware(request: NextRequest) {
   }
   // The ollama model only verifies access to the backend API
   if (isAI && provider === "ollama") {
-    const isDisabledModel = await hasDisabledAIModel();
+    const isDisabledModel = hasDisabledAIModel();
     if (
       disabledAIProviders.includes("ollama") ||
       isDisabledModel
