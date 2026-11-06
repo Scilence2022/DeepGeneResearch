@@ -12,7 +12,7 @@
     "dev": "next dev --turbopack",
     "tasks:recover": "node scripts/recover-task-store.mjs",
     "build": "next build",
-    "build:standalone": "cross-env NEXT_PUBLIC_BUILD_MODE=standalone next build",
+    "build:standalone": "cross-env NEXT_PUBLIC_BUILD_MODE=standalone next build && node scripts/stage-standalone-pdf-runtime.mjs",
     "build:export": "node scripts/build-static.mjs",
     "start": "next start",
     "lint": "eslint src scripts",

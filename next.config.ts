@@ -75,14 +75,6 @@ export default async function Config(phase: string) {
     nextConfig.eslint = { ignoreDuringBuilds: true };
   } else if (BUILD_MODE === "standalone") {
     nextConfig.output = "standalone";
-    // PDF.js is resolved from the parser worker, outside the server bundle.
-    nextConfig.outputFileTracingIncludes = {
-      "/api/mcp/**/*": [
-        "./node_modules/pdfjs-dist/**/*",
-        "./node_modules/.pnpm/pdfjs-dist@*/node_modules/pdfjs-dist/**/*",
-      ],
-      "/api/research/**/*": ["./node_modules/pdfjs-dist/**/*"],
-    };
   } else {
     nextConfig.rewrites = async () => {
       return [
