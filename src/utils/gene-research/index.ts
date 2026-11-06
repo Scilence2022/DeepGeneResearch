@@ -2019,8 +2019,9 @@ export class GeneResearchEngine {
     const fullTextFindingLines = fullTextFindingCount > 0
       ? fullTextSources.flatMap(source => {
           const reference = source.structuredData?.literatureReferences?.[0] || {};
-          const pmid = source.pmid || reference.pmid || source.fullText?.identifiers?.pmid;
-          const doi = source.doi || reference.doi || source.fullText?.identifiers?.doi;
+          const privateUpload = source.fullText?.origin === 'user_upload';
+          const pmid = privateUpload ? undefined : source.pmid || reference.pmid || source.fullText?.identifiers?.pmid;
+          const doi = privateUpload ? undefined : source.doi || reference.doi || source.fullText?.identifiers?.doi;
           const citation = pmid
             ? `[PMID:${pmid}](https://pubmed.ncbi.nlm.nih.gov/${pmid}/)`
             : doi
@@ -2028,7 +2029,8 @@ export class GeneResearchEngine {
               : `user PDF \`${escapeMarkdown(source.fullText?.name || source.title)}\``;
           return (source.fullTextEvidence || []).map((finding: any) => {
             const locator = finding.pageNumber ? `, PDF page ${finding.pageNumber}` : '';
-            return `- **${finding.category}**: ${escapeMarkdown(finding.excerpt)} — ${citation}${locator}; UTF-16 chars ${finding.excerptStart}-${finding.excerptEnd}; excerpt SHA-256 \`${finding.excerptSha256}\``;
+            const reviewOnly = pmid ? '' : ' (review only)';
+            return `- **${finding.category}**${reviewOnly}: ${escapeMarkdown(finding.excerpt)} — ${citation}${locator}; UTF-16 chars ${finding.excerptStart}-${finding.excerptEnd}; excerpt SHA-256 \`${finding.excerptSha256}\``;
           });
         }).join('\n')
       : '- No exact-target statement was verified against parsed full text.';
@@ -2046,7 +2048,7 @@ export class GeneResearchEngine {
           const pageCoverage = document.pageCount
             ? `${document.parsedPageCount}/${document.pageCount} pages parsed`
             : 'structured XML fully parsed';
-          const identifiers = [
+          const identifiers = document.origin === 'user_upload' ? '' : [
             document.identifiers?.pmid ? `PMID:${document.identifiers.pmid}` : '',
             document.identifiers?.pmcid || '',
             document.identifiers?.doi ? `DOI:${document.identifiers.doi}` : '',
@@ -2131,7 +2133,7 @@ export class GeneResearchEngine {
       },
       {
         id: 'evidence', title: 'Evidence', priority: 'high', required: true,
-        content: `## Retained Literature (${retainedLiteratureTotal})\n\nDirect target: ${relevantLiterature.length}, gene-linked context: ${geneLinkedContext.length}, preprints: ${preprintSources.length}, user documents: ${userDocumentSources.length}.\n\n## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Full-Text Sources (${fullTextSources.length})\n\n${fullTextSourceLines}\n\n## Citation-Bound Full-Text Findings (${fullTextFindingCount})\n\n${fullTextFindingLines}\n\n## Citation-Bound Abstract Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their retained evidence may be abstract-only or lack sufficiently direct target wording. They are included for bibliography coverage and are not used to generate unsupported annotation operations.\n\n${linkedContextLines}`,
+        content: `## Retained Literature (${retainedLiteratureTotal})\n\nDirect target: ${relevantLiterature.length}, gene-linked context: ${geneLinkedContext.length}, preprints: ${preprintSources.length}, user documents: ${userDocumentSources.length}.\n\n## Authoritative Database Evidence\n\n${authoritativeCitationLines}\n\n## Full-Text Sources (${fullTextSources.length})\n\n${fullTextSourceLines}\n\n## Full-Text Findings (${fullTextFindingCount})\n\n${fullTextFindingLines}\n\n## Citation-Bound Abstract Findings (${literatureFindings.length})\n\n${findingLines}\n\n## Direct Target Literature (${relevantLiterature.length})\n\n${referenceLines}\n\n## Exact NCBI Gene-Linked Context (${geneLinkedContext.length})\n\nThese records are linked to the resolved NCBI Gene ID, but their retained evidence may be abstract-only or lack sufficiently direct target wording. They are included for bibliography coverage and are not used to generate unsupported annotation operations.\n\n${linkedContextLines}`,
         visualizations: [],
       },
       {

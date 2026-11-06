@@ -1476,8 +1476,10 @@ export function buildAnnotationCurationSummary(input: BuildProposalInput): Curat
     return rank(right) - rank(left);
   });
   const evidenceDetails = extractEvidenceFromSources(orderedSources);
-  for (const detail of extractEvidenceFromText(finalReport)) {
-    addEvidenceDetail(evidenceDetails, detail);
+  if (!input.target) {
+    for (const detail of extractEvidenceFromText(finalReport)) {
+      addEvidenceDetail(evidenceDetails, detail);
+    }
   }
   evidenceDetails.splice(100);
 

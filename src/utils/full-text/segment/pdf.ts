@@ -109,7 +109,8 @@ export async function segmentPdfDocument(input: PdfSegmentInput): Promise<FullTe
     parsedPageCount,
     parseCoverage: pageCount > 0 ? parsedPageCount / pageCount : 0,
     pages,
-    identifiers: input.identifiers ?? extractPdfIdentifiers(text.slice(0, 30_000)),
+    // A token found in a private PDF can refer to a cited work.
+    identifiers: input.origin === 'user_upload' ? {} : (input.identifiers ?? extractPdfIdentifiers(text.slice(0, 30_000))),
     ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
     retrievedAt: input.retrievedAt ?? new Date().toISOString(),
     parser: 'pdfjs-dist',

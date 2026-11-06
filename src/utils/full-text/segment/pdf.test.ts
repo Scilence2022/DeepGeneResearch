@@ -3,7 +3,7 @@ import { researchBudget, runWithResearchBudget } from '@/services/research-run-b
 import { segmentPdfDocument } from './pdf';
 
 function fixturePdf() {
-  const pageText = 'The synthetic PDF contains a single page of extractable text.';
+  const pageText = 'The synthetic PDF contains extractable text and cites PMID: 20000002.';
   const lines = Array.from({ length: 5 }, () => `(${pageText}) Tj T*`).join(' ');
   const stream = `BT /F1 10 Tf 14 TL 30 500 Td ${lines} ET`;
   const objects = [
@@ -32,6 +32,7 @@ describe('PDF worker', () => {
       const result = await segmentPdfDocument({ bytes: fixturePdf(), name: 'synthetic.pdf', origin: 'user_upload' });
       expect(result.text).toContain('The synthetic PDF contains');
       expect(result.pages).toHaveLength(1);
+      expect(result.identifiers).toEqual({});
       expect(researchBudget()?.snapshot().used.parsedPages).toBe(1);
     });
   });

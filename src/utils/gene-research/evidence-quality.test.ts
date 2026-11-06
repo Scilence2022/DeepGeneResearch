@@ -66,4 +66,16 @@ describe('evidence benchmark v1 (synthetic reference labels)', () => {
     expect(review.excerpts.map(item => [item.excerpt, item.locator.scheme, item.pageNumber]))
       .toEqual(reviewOnly ? [[excerpt, kind === 'private' ? 'sha256' : 'doi', 1]] : []);
   });
+  it('keeps a PMID mentioned in a private PDF out of an exact-target evidence manifest', () => {
+    const input = source('private');
+    const bundle = buildAnnotationCurationSummary({
+      ...target,
+      target,
+      sources: [input],
+      finalReport: 'Private PDF excerpt mentions PMID:20000002.',
+    });
+    expect(bundle.sourceRecords).toHaveLength(0);
+    expect(bundle.evidenceDetails).toHaveLength(0);
+  });
+
 });
